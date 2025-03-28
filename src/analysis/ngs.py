@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
 from scipy import stats
 from typing import Tuple
 
@@ -22,31 +24,39 @@ RESULTSPATH, _ = os.path.split(RESULTSPATH)
 ######## LOG NGS STATS ########
 ###############################
 
-def create_norm_ngs_read_count_abs_histogram(dfname: str, df: pd.DataFrame):
+def create_norm_ngs_read_count_abs_histogram(dfname: str, df: pd.DataFrame, degree: int = 4):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
 
-    if df.empty:
-        print(f"empty df")
-        return
-
-    num_rows = df.shape[0]
-
-    if 'norm_log_NGS_read_count' not in df.columns:
-        print(f"'norm_log_NGS_read_count' column not found in the DataFrame.")
-        return
-    
+    num_rows = df.shape[0] 
     max_value = 1.0
-    bins = np.linspace(0, max_value, 21)
-
+    bins = np.linspace(0, max_value, 101)
     hist, bin_edges = np.histogram(df['norm_log_NGS_read_count'], bins=bins)
+    
+    # hist = hist / num_rows * 100 if num_rows > 0 else hist
 
-    ax.bar(bin_edges[:-1], hist, width=0.03, color='royalblue', edgecolor='black')
+    ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
 
     ax.set_title(f"dataset: {dfname}")
-    ax.set_xlabel("normalized NGS Read Count")
+    ax.set_xlabel("normalized NGS read count")
     ax.set_ylabel("number of DVGs (-)")
-    ax.set_xticks(bin_edges)
-    ax.set_xticklabels([f"{b:.2f}" for b in bin_edges])
+    
+    tick_indices = np.arange(0, len(bin_edges), 5)
+    ax.set_xticks(bin_edges[tick_indices])
+    ax.set_xticklabels([f"{bin_edges[i]:.2f}" for i in tick_indices])
+
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    bin_centers = bin_centers.reshape(-1, 1)
+
+    polynomial_features = PolynomialFeatures(degree=degree)
+    bin_centers_poly = polynomial_features.fit_transform(bin_centers)
+
+    model = LinearRegression()
+    model.fit(bin_centers_poly, hist)
+
+    y_pred = model.predict(bin_centers_poly)
+
+    ax.plot(bin_centers, y_pred, color='red', linewidth=2, label=f'polynomial regression (degree {degree})')
+    ax.legend()
 
     save_path = os.path.join(RESULTSPATH, f"ngs/{dfname}")
     os.makedirs(save_path, exist_ok=True)
@@ -55,33 +65,39 @@ def create_norm_ngs_read_count_abs_histogram(dfname: str, df: pd.DataFrame):
     plt.savefig(save_path, dpi=300)
     plt.close()
 
-def create_norm_ngs_read_count_histogram(dfname: str, df: pd.DataFrame):
+def create_norm_ngs_read_count_histogram(dfname: str, df: pd.DataFrame, degree: int = 4):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
 
-    if df.empty:
-        print(f"empty df")
-        return
-
-    num_rows = df.shape[0]
-
-    if 'norm_log_NGS_read_count' not in df.columns:
-        print(f"'norm_log_NGS_read_count' column not found in the DataFrame.")
-        return
-    
+    num_rows = df.shape[0] 
     max_value = 1.0
-    bins = np.linspace(0, max_value, 21)
-
+    bins = np.linspace(0, max_value, 101)
     hist, bin_edges = np.histogram(df['norm_log_NGS_read_count'], bins=bins)
-
+    
     hist = hist / num_rows * 100 if num_rows > 0 else hist
 
-    ax.bar(bin_edges[:-1], hist, width=0.03, color='royalblue', edgecolor='black')
+    ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
 
     ax.set_title(f"dataset: {dfname}")
-    ax.set_xlabel("normalized NGS Read Count")
+    ax.set_xlabel("normalized NGS read count")
     ax.set_ylabel("distribution of DVGs (%)")
-    ax.set_xticks(bin_edges)
-    ax.set_xticklabels([f"{b:.2f}" for b in bin_edges])
+    
+    tick_indices = np.arange(0, len(bin_edges), 5)
+    ax.set_xticks(bin_edges[tick_indices])
+    ax.set_xticklabels([f"{bin_edges[i]:.2f}" for i in tick_indices])
+
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    bin_centers = bin_centers.reshape(-1, 1)
+
+    polynomial_features = PolynomialFeatures(degree=degree)
+    bin_centers_poly = polynomial_features.fit_transform(bin_centers)
+
+    model = LinearRegression()
+    model.fit(bin_centers_poly, hist)
+
+    y_pred = model.predict(bin_centers_poly)
+
+    ax.plot(bin_centers, y_pred, color='red', linewidth=2, label=f'polynomial regression (degree {degree})')
+    ax.legend()
 
     save_path = os.path.join(RESULTSPATH, f"ngs/{dfname}")
     os.makedirs(save_path, exist_ok=True)

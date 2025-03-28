@@ -19,6 +19,7 @@ from ngs import add_log_ngs_read_count
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 
+
 ###################################
 ####### NGS ENRICHMENT RATIO ######
 ###################################
