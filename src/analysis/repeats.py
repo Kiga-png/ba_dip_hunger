@@ -12,13 +12,12 @@ from scipy import stats
 from typing import Tuple
 
 sys.path.insert(0, "..")
-from utils import load_dataset, get_dataset_names, join_data, preprocess, generate_expected_data, get_seq_len
-from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS, load_all, get_sequence, calculate_direct_repeat, count_direct_repeats_overall
-
-from ngs import add_log_ngs_read_count
-from spot_repeats import cap_direct_repeat_len, add_direct_repeat_len, count_direct_repeats
+from utils import get_seq_len, load_all, get_sequence
+from utils import add_direct_repeat_len, count_direct_repeats_segment
+from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
+
 
 ###############################
 ####### NGS FOR DVG (DR) ######
@@ -137,9 +136,9 @@ def ngs_repeat_ratio(df: pd.DataFrame):
     df['NGS_read_count_ratio'] /= ngs_read_count_sum
     return df
 
-#################################
-####### REPEAT POSITIONS ########
-#################################
+##############################################
+### nucleotide positions of direct repeats ###
+##############################################
 
 def create_repeats_nucleotide_position_histogram(dfname: str, strain: str, segments: list, dfs: list, p_segments: list, p_dfs: list):
     for segment in SEGMENTS:
@@ -149,14 +148,6 @@ def create_repeats_nucleotide_position_histogram(dfname: str, strain: str, segme
 
 def create_repeats_nucleotide_position_histogram_segment(dfname: str, strain: str, segment: str, df: pd.DataFrame, p_df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
-    
-    if df.empty:
-        print(f"{segment}: empty df")
-        return
-    
-    if p_df.empty:
-        print(f"{segment}: empty p_df")
-        return
     
     total_hits = df['hits'].sum()
     if total_hits == 0:
@@ -189,7 +180,6 @@ def create_repeats_nucleotide_position_histogram_segment(dfname: str, strain: st
         ax.bar(positions - width/2, binned_hits['normalized_hits'], width=width, color='firebrick', edgecolor='black', label='observed')
 
     ax.bar(positions + width/2, p_binned_hits['normalized_hits'], width=width, color='royalblue', edgecolor='black', label='possible')
-
     ax.set_xticks(positions)
     ax.set_xticklabels(p_binned_hits['nucleotide-position'].astype(str))
 
@@ -206,7 +196,7 @@ def create_repeats_nucleotide_position_histogram_segment(dfname: str, strain: st
     ax.set_xticks(selected_positions)
     ax.set_xticklabels(selected_ticks)
 
-    save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}/histo")
+    save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}/repeat_hit_ratio")
     os.makedirs(save_path, exist_ok=True)
     fname = f"{segment}.png"
     save_path = os.path.join(save_path, fname)
@@ -271,6 +261,83 @@ def find_direct_repeats_nucleotide_positions_segment(strain: str, segment: str, 
             positions_df.loc[positions_df['nucleotide-position'] == end - i, 'hits'] += 1
     return positions_df
 
+######################################
+### hit ratio of potential repeats ###
+######################################
+
+def create_repeats_ratio_plot(dfname: str, df: pd.DataFrame):
+    fig, ax = plt.subplots(figsize=(5, 3), tight_layout=True)
+
+    segments = df['Segment'].unique()
+    heights = []
+    
+    for segment in segments:
+        segment_data = df[df['Segment'] == segment]
+        if segment_data.empty:
+            continue
+        heights.append(segment_data['hits_repeat_ratio'].sum())
+
+    ax.bar(segments, heights, color='royalblue', edgecolor='black', width=0.8)
+    ax.set_title(f"dataset: {dfname}")
+    ax.set_xlabel("segment")
+    ax.set_ylabel("relative hits of possible repeats (%)")
+    ax.set_xticks(segments)
+    ax.set_xticklabels(segments)
+
+    save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}/repeat_hit_ratio")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"repeat_hit_ratio_{dfname}.png"
+    save_path = os.path.join(save_path, fname)
+    plt.savefig(save_path, dpi=300)
+    plt.close()
+
+def calculate_repeats_ratio(dfname: str, df: pd.DataFrame):
+    stats_df = pd.DataFrame(columns=['Segment', 'possible_repeats', 'hits_count', 'hits_repeat_ratio'])
+    strain = DATASET_STRAIN_DICT[dfname]
+    data_path = os.path.join(DATAPATH, f"repeats/{strain}")
+    for segment in SEGMENTS:
+        segment_path = os.path.join(data_path, f"{segment}.csv")
+        repeats = pd.read_csv(segment_path, index_col=0)
+        total_rows = repeats.shape[0]
+        dic = count_direct_repeats_segment(df, segment)
+        hits_count = dic[5]
+        if total_rows > 0:
+            ratio = hits_count / total_rows
+        else:
+            ratio = 0
+        new_row = pd.DataFrame({
+            'Segment': [segment],
+            'possible_repeats': [total_rows],
+            'hits_count': [hits_count],
+            'hits_repeat_ratio': [ratio]
+        })    
+        stats_df = pd.concat([stats_df, new_row], ignore_index=True)
+    return stats_df
+
+def mark_repeats(dfname: str, df: pd.DataFrame):
+    strain = DATASET_STRAIN_DICT[dfname]
+    data_path = os.path.join(DATAPATH, f"repeats/{strain}")
+    save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}/stats")
+    os.makedirs(save_path, exist_ok=True)
+    for segment in SEGMENTS:
+        segment_path = os.path.join(data_path, f"{segment}.csv")
+        repeats = pd.read_csv(segment_path, index_col=0)
+        repeats['hits'] = 0
+        repeats['NGS_read_count'] = 0
+        segment_df = df[df["Segment"] == segment]
+        for _, df_row in segment_df.iterrows():
+            start = df_row["Start"]
+            end = df_row["End"]
+            for _, repeats_row in repeats.iterrows():
+                s = start == repeats_row["end_ref"]
+                e = end - 1 == repeats_row["end_rep"]
+                if s and e:
+                    repeats_row['hits'] = repeats_row['hits'] + 1
+                    repeats_row['NGS_read_count'] = repeats_row['NGS_read_count'] + df_row['NGS_read_count']
+        fname = f"{segment}.csv"
+        repeats.to_csv(os.path.join(save_path, fname))
+
+
 
 if __name__ == "__main__":
     '''
@@ -284,49 +351,12 @@ if __name__ == "__main__":
     ######### SINGLE USAGE ########
     ###############################
 
-    dfnames = ["Berry2021_B_Yam"]
-    dfs, _ = load_all(dfnames)
-    dfname = dfnames[0]
-
-    df = ngs_for_dvg_repeat_ratio_concat(dfs)
-    create_ngs_for_dvg_repeat_ratio_plot(dfname, df)
-    
-    #################################
-    ####### REPEAT POSITIONS ########
-    ########## SINGLE USAGE #########
-    #################################
-
     # dfnames = ["Berry2021_B_Yam"]
     # dfs, _ = load_all(dfnames)
-
     # dfname = dfnames[0]
-    # df = dfs[0]
-    # strain = DATASET_STRAIN_DICT[dfname]
 
-    # add_df = add_direct_repeat_len(df)
-    # repeats_dfs, segments = find_direct_repeats_nucleotide_positions(strain, add_df)
-    # possible_dfs, p_segments = find_possible_repeats_nucleotide_positions(strain)
-
-    # create_repeats_nucleotide_position_histogram(dfname, strain, segments, repeats_dfs, p_segments, possible_dfs)
-
-    ################################# same strain
-    ####### REPEAT POSITIONS ######## same strain
-    ########## MULTI USAGE ########## same strain
-    ################################# same strain
-
-    # dfnames = ["Berry2021_B_Yam"]
-    # dfs, _ = load_all(dfnames)
-
-    # dfname = dfnames[0]
-    # concat_pseudo_df = pd.concat(dfs, ignore_index=True)
-    # strain = DATASET_STRAIN_DICT[dfname]
-    # dfname = strain
-
-    # add_df = add_direct_repeat_len(df)
-    # repeats_dfs, segments = find_direct_repeats_nucleotide_positions(strain, add_df)
-    # possible_dfs, p_segments = find_possible_repeats_nucleotide_positions(strain)
-
-    # create_repeats_nucleotide_position_histogram(dfname, strain, segments, repeats_dfs, p_segments, possible_dfs)
+    # df = ngs_for_dvg_repeat_ratio_concat(dfs)
+    # create_ngs_for_dvg_repeat_ratio_plot(dfname, df)
 
     ###############################
     ####### NGS REPEAT RATIO ######
@@ -352,3 +382,33 @@ if __name__ == "__main__":
 
     # df = ngs_repeat_ratio_concat(dfs)
     # create_ngs_repeat_ratio_plot(dfname, df)
+    
+    ##############################################
+    ### nucleotide positions of direct repeats ###
+    ##############################################
+
+    # dfnames = ["Berry2021_B_Yam"]
+    # dfs, _ = load_all(dfnames)
+
+    # dfname = dfnames[0]
+    # df = dfs[0]
+    # strain = DATASET_STRAIN_DICT[dfname]
+
+    # add_df = add_direct_repeat_len(df)
+    # repeats_dfs, segments = find_direct_repeats_nucleotide_positions(strain, add_df)
+    # possible_dfs, p_segments = find_possible_repeats_nucleotide_positions(strain)
+
+    # create_repeats_nucleotide_position_histogram(dfname, strain, segments, repeats_dfs, p_segments, possible_dfs)
+
+    ######################################
+    ### hit ratio of potential repeats ###
+    ######################################
+
+    # dfnames = ["Berry2021_B_Yam"]
+    # dfs, _ = load_all(dfnames)
+
+    # dfname = dfnames[0]
+    # df = dfs[0]
+
+    # ratio_df = calculate_repeats_ratio(dfname, df)
+    # create_repeats_ratio_plot(dfname, ratio_df)

@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, "..")
 from utils import RESULTSPATH, SEGMENTS, DATASET_STRAIN_DICT
-from utils import load_all, get_sequence, get_dataset_names, count_direct_repeats_overall
+from utils import get_sequence, get_dataset_names, count_direct_repeats_overall
 
 from pseudo import pseudo_load_all
 
@@ -133,9 +133,7 @@ if __name__ == "__main__":
     plt.style.use("seaborn")
     plt.rc("font", size=12)
 
-    ##############################
-    ######## SINGLE USAGE ########
-    ##############################
+    ### single ###
 
     # pseudo_dfname = "Alnaji2021"
     # dfnames = ["Berry2021_B_Yam"]
@@ -148,18 +146,16 @@ if __name__ == "__main__":
 
     # create_direct_repeats_plot(df, dfname, pseudo_df, pseudo_dfname, exp_df)
 
-    ##############################
-    ######## MULTI USAGE #########
-    ##############################
+    ### multi ###
 
-    pseudo_dfname = "Alnaji2021"
-    coordinates = "IBV"
-    dfname = coordinates
-    dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    dfs, pseudo_dfs, exp_dfs = pseudo_load_all(dfnames, pseudo_dfname, True)
+    # pseudo_dfname = "Alnaji2021"
+    # coordinates = "IBV"
+    # dfname = coordinates
+    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    # dfs, pseudo_dfs, exp_dfs = pseudo_load_all(dfnames, pseudo_dfname, True)
 
-    df = pd.concat(dfs, ignore_index=True)
-    pseudo_df = pd.concat(pseudo_dfs, ignore_index=True)
-    exp_df = pd.concat(exp_dfs, ignore_index=True)
+    # df = pd.concat(dfs, ignore_index=True)
+    # pseudo_df = pd.concat(pseudo_dfs, ignore_index=True)
+    # exp_df = pd.concat(exp_dfs, ignore_index=True)
 
-    create_direct_repeats_plot(df, dfname, pseudo_df, pseudo_dfname, exp_df)
+    # create_direct_repeats_plot(df, dfname, pseudo_df, pseudo_dfname, exp_df)

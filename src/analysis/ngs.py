@@ -15,30 +15,28 @@ from scipy import stats
 from typing import Tuple
 
 sys.path.insert(0, "..")
-from utils import load_dataset, get_dataset_names, join_data, preprocess, generate_expected_data, get_seq_len
-from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS, load_all, get_sequence, calculate_direct_repeat, count_direct_repeats_overall
+from utils import load_all, get_dataset_names
+from utils import add_norm_log_ngs_read_count
+from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 
-###############################
-######## LOG NGS STATS ########
-###############################
 
-def create_norm_ngs_read_count_abs_histogram(dfname: str, df: pd.DataFrame, degree: int = 4):
+#####################
+### log ngs stats ###
+#####################
+
+def create_norm_ngs_read_count_abs_histo(dfname: str, df: pd.DataFrame, degree: int = 4):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
 
-    num_rows = df.shape[0] 
     max_value = 1.0
     bins = np.linspace(0, max_value, 101)
     hist, bin_edges = np.histogram(df['norm_log_NGS_read_count'], bins=bins)
-    
-    # hist = hist / num_rows * 100 if num_rows > 0 else hist
 
     ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
-
     ax.set_title(f"dataset: {dfname}")
     ax.set_xlabel("normalized NGS read count")
-    ax.set_ylabel("number of DVGs (-)")
+    ax.set_ylabel("numberof DVGs (-)")
     
     tick_indices = np.arange(0, len(bin_edges), 5)
     ax.set_xticks(bin_edges[tick_indices])
@@ -49,10 +47,8 @@ def create_norm_ngs_read_count_abs_histogram(dfname: str, df: pd.DataFrame, degr
 
     polynomial_features = PolynomialFeatures(degree=degree)
     bin_centers_poly = polynomial_features.fit_transform(bin_centers)
-
     model = LinearRegression()
     model.fit(bin_centers_poly, hist)
-
     y_pred = model.predict(bin_centers_poly)
 
     ax.plot(bin_centers, y_pred, color='red', linewidth=2, label=f'polynomial regression (degree {degree})')
@@ -65,18 +61,16 @@ def create_norm_ngs_read_count_abs_histogram(dfname: str, df: pd.DataFrame, degr
     plt.savefig(save_path, dpi=300)
     plt.close()
 
-def create_norm_ngs_read_count_histogram(dfname: str, df: pd.DataFrame, degree: int = 4):
+def create_norm_ngs_read_count_histo(dfname: str, df: pd.DataFrame, degree: int = 4):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
 
     num_rows = df.shape[0] 
     max_value = 1.0
     bins = np.linspace(0, max_value, 101)
     hist, bin_edges = np.histogram(df['norm_log_NGS_read_count'], bins=bins)
-    
-    hist = hist / num_rows * 100 if num_rows > 0 else hist
+    hist = hist / num_rows * 100
 
     ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
-
     ax.set_title(f"dataset: {dfname}")
     ax.set_xlabel("normalized NGS read count")
     ax.set_ylabel("distribution of DVGs (%)")
@@ -90,10 +84,8 @@ def create_norm_ngs_read_count_histogram(dfname: str, df: pd.DataFrame, degree: 
 
     polynomial_features = PolynomialFeatures(degree=degree)
     bin_centers_poly = polynomial_features.fit_transform(bin_centers)
-
     model = LinearRegression()
     model.fit(bin_centers_poly, hist)
-
     y_pred = model.predict(bin_centers_poly)
 
     ax.plot(bin_centers, y_pred, color='red', linewidth=2, label=f'polynomial regression (degree {degree})')
@@ -106,36 +98,26 @@ def create_norm_ngs_read_count_histogram(dfname: str, df: pd.DataFrame, degree: 
     plt.savefig(save_path, dpi=300)
     plt.close()
 
-###############################
-########## NGS STATS ##########
-###############################
+##################
+### ngs stats ####
+##################
 
-def create_ngs_read_count_abs_histogram(dfname: str, df: pd.DataFrame):
+def create_ngs_read_count_abs_histo(dfname: str, df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
-
-    if df.empty:
-        print(f"empty df")
-        return
-
-    total_reads = df['NGS_read_count'].sum()
-    if total_reads == 0:
-        print(f"total NGS read count is 0")
-        return
-
-    max_read_count = df['NGS_read_count'].max()
-    max_read_count = 400
-    upper_limit = (max_read_count // 100 + 1) * 100
-
-    bins = range(0, upper_limit + 20, 20)
+    
+    upper_limit = 1000
+    bins = range(0, upper_limit + 10, 10)
     hist, bin_edges = np.histogram(df['NGS_read_count'], bins=bins)
 
     ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
-
     ax.set_title(f"dataset: {dfname}")
-    ax.set_xlabel(f"NGS read count")
+    ax.set_xlabel(f"NGS read count (capped: 1010)")
     ax.set_ylabel("number of DVGs (-)")
-    ax.set_xticks(bin_edges)
-    ax.set_xticklabels([str(b) for b in bin_edges])
+    
+    selected_ticks = bin_edges[::5]
+    ax.set_xticks(selected_ticks)
+    selected_labels = [str(b) for b in selected_ticks]
+    ax.set_xticklabels(selected_labels)
 
     save_path = os.path.join(RESULTSPATH, f"ngs/{dfname}")
     os.makedirs(save_path, exist_ok=True)
@@ -144,36 +126,24 @@ def create_ngs_read_count_abs_histogram(dfname: str, df: pd.DataFrame):
     plt.savefig(save_path, dpi=300)
     plt.close()
 
-def create_ngs_read_count_histogram(dfname: str, df: pd.DataFrame):
+def create_ngs_read_count_histo(dfname: str, df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
-
-    if df.empty:
-        print(f"empty df")
-        return
-
-    total_reads = df['NGS_read_count'].sum()
-    if total_reads == 0:
-        print(f"total NGS read count is 0")
-        return
     
     num_rows = df.shape[0]
-
-    max_read_count = df['NGS_read_count'].max()
-    max_read_count = 400
-    upper_limit = (max_read_count // 100 + 1) * 100
-
-    bins = range(0, upper_limit + 20, 20)
+    upper_limit = 1000
+    bins = range(0, upper_limit + 10, 10)
     hist, bin_edges = np.histogram(df['NGS_read_count'], bins=bins)
-
     hist = hist / num_rows * 100
 
     ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
-
     ax.set_title(f"dataset: {dfname}")
-    ax.set_xlabel(f"NGS read count")
+    ax.set_xlabel(f"NGS read count (capped: 1010)")
     ax.set_ylabel("distribution of DVGs (%)")
-    ax.set_xticks(bin_edges)
-    ax.set_xticklabels([str(b) for b in bin_edges])
+    
+    selected_ticks = bin_edges[::5]
+    ax.set_xticks(selected_ticks)
+    selected_labels = [str(b) for b in selected_ticks]
+    ax.set_xticklabels(selected_labels)
 
     save_path = os.path.join(RESULTSPATH, f"ngs/{dfname}")
     os.makedirs(save_path, exist_ok=True)
@@ -182,70 +152,6 @@ def create_ngs_read_count_histogram(dfname: str, df: pd.DataFrame):
     plt.savefig(save_path, dpi=300)
     plt.close()
 
-###############################
-
-def calculate_ngs_mean_std(df):
-    mean = df['NGS_read_count'].mean()
-    mean = np.round(mean, 2)
-    std_dev = df['NGS_read_count'].std()
-    std_dev = np.round(std_dev, 2)
-    return mean, std_dev
-
-def add_dist_ngs_read_count(df: pd.DataFrame):
-    sum = df['NGS_read_count'].sum()
-    df['dist_NGS_read_count'] = df['NGS_read_count'] / sum
-    return df
-
-###############################
-###### NGS LOG-TRANSFORM ######
-###############################
-
-def add_norm_log_ngs_read_count(df: pd.DataFrame):
-    df = add_log_ngs_read_count(df)
-    max_log = df['log_NGS_read_count'].max()
-    min_log = df['log_NGS_read_count'].min()
-    df['norm_log_NGS_read_count'] = (df['log_NGS_read_count'] - min_log) / (max_log - min_log)
-    return df
-
-def add_log_ngs_read_count(df: pd.DataFrame):
-    df['log_NGS_read_count'] = np.log10(df['NGS_read_count'])
-    return df
-
-###############################
-
-def perform_t_test_log(df: pd.DataFrame):
-    df = add_norm_log_d_ngs_read_count(df)
-    log_d_counts = df['norm_log_d_NGS_read_count']
-    df = add_norm_log_n_ngs_read_count(df)
-    log_n_counts = df['norm_log_n_NGS_read_count']
-    t_stat, p_value = stats.ttest_ind(log_n_counts, log_d_counts)
-    return p_value
-
-###############################
-
-def add_norm_log_d_ngs_read_count(df: pd.DataFrame):
-    df = add_log_d_ngs_read_count(df)
-    max_log_d = df['log_d_NGS_read_count'].max()
-    min_log_d = df['log_d_NGS_read_count'].min()
-    df['norm_log_d_NGS_read_count'] = (df['log_d_NGS_read_count'] - min_log_d) / (max_log_d - min_log_d)
-    return df
-
-def add_log_d_ngs_read_count(df: pd.DataFrame):
-    df['log_d_NGS_read_count'] = np.log10(df['NGS_read_count'])
-    return df
-
-###############################
-
-def add_norm_log_n_ngs_read_count(df: pd.DataFrame):
-    df = add_log_n_ngs_read_count(df)
-    max_log_n = df['log_n_NGS_read_count'].max()
-    min_log_n = df['log_n_NGS_read_count'].min()
-    df['norm_log_n_NGS_read_count'] = (df['log_n_NGS_read_count'] - min_log_n) / (max_log_n - min_log_n)
-    return df
-
-def add_log_n_ngs_read_count(df: pd.DataFrame):
-    df['log_n_NGS_read_count'] = np.log(df['NGS_read_count'])
-    return df
 
 if __name__ == "__main__":
     '''
@@ -254,42 +160,58 @@ if __name__ == "__main__":
     plt.style.use("seaborn")
     plt.rc("font", size=12)
 
-    ###############################
-    ######## LOG NGS STATS ########
-    ###############################
 
-    dfnames = ["Berry2021_B_Yam"]
-    dfs, _ = load_all(dfnames)
-    dfname = dfnames[0]
+    #####################
+    ### log ngs stats ###
+    #####################
 
-    df = pd.concat(dfs, axis=0)
-    df = add_norm_log_ngs_read_count(df)
-    create_norm_ngs_read_count_histogram(dfname, df)
-    create_norm_ngs_read_count_abs_histogram(dfname, df)
+    ### single ###
 
-    ###############################
-    ########## NGS STATS ##########
-    ###############################
+    # dfnames = ["Berry2021_B_Yam"]
+    # dfs, _ = load_all(dfnames)
+    # dfname = dfnames[0]
+
+    # dfs = add_norm_log_ngs_read_count(dfs)
+    # df = pd.concat(dfs, axis=0)
+    # create_norm_ngs_read_count_histo(dfname, df)
+    # create_norm_ngs_read_count_abs_histo(dfname, df)
+
+    ### multi ###
+
+    # coordinates = "IBV"
+    # dfname = coordinates
+    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    # dfs, _ = load_all(dfnames)
+
+    # dfs = add_norm_log_ngs_read_count(dfs)
+    # df = pd.concat(dfs, axis=0)
+    # create_norm_ngs_read_count_histo(dfname, df)
+    # create_norm_ngs_read_count_abs_histo(dfname, df)
+
+    ##################
+    ### ngs stats ####
+    ##################
+
+    ### single ###
 
     # dfnames = ["Berry2021_B_Yam"]
     # dfs, _ = load_all(dfnames)
     # dfname = dfnames[0]
 
     # df = pd.concat(dfs, axis=0)
-    # create_ngs_read_count_abs_histogram(dfname, df)
-    # create_ngs_read_count_histogram(dfname, df)
+    # create_ngs_read_count_abs_histo(dfname, df)
+    # create_ngs_read_count_histo(dfname, df)
 
-    ###############################
-    ###### NGS LOG-TRANSFORM ######
-    ###############################
+    ### multi ###
 
-    # dfnames = ["Berry2021_B_Yam"]
+    # coordinates = "IBV"
+    # dfname = coordinates
+    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
     # dfs, _ = load_all(dfnames)
-    # dfname = dfnames[0]
 
     # df = pd.concat(dfs, axis=0)
-    # p_value = perform_t_test_log(df)
-    # print(p_value)
+    # create_ngs_read_count_histo(dfname, df)
+    # create_ngs_read_count_abs_histo(dfname, df)
 
 
 

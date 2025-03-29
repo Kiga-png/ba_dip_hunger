@@ -1,5 +1,5 @@
 '''
-    General functions and global parameters, that are used in different scripts
+    general functions and global parameters, that are used in different scripts
 '''
 import os
 
@@ -689,6 +689,7 @@ SEGMENT_DICTS = dict({
 
 
 ### FUNCTIONS ###
+
 def get_dataset_names(cutoff: int=0, selection: str="")-> list:
     '''
         Allows to select dataset names based on their cultivation type.
@@ -920,8 +921,9 @@ def calc_cliffs_d(d1: list, d2: list)-> float:
     return cliffs_d
 
 ######################
-### DIRECT REPEATS ###
+### direct repeats ###
 ######################
+
 def calculate_direct_repeat(seq: str, s: int, e: int, w_len: int)-> Tuple[int, str]:
     '''
         Counts the number of overlapping nucleotides directly before start and
@@ -986,8 +988,9 @@ def count_direct_repeats_overall(df: pd.DataFrame, seq: str)-> Tuple[dict, dict]
     return nuc_overlap_dict, overlap_seq_dict
 
 #############################
-### NUCLEOTIDE ENRICHMENT ###
+### nucleotide enrichment ###
 #############################
+
 def count_nucleotide_occurrence(seq: str, p: int)-> dict:
     '''
         Counts the number of nucleotides next to a given point.
@@ -1034,6 +1037,7 @@ def count_nucleotide_occurrence_overall(df: pd.DataFrame, seq: str)-> Tuple[dict
 #####################
 ### expected data ###
 #####################
+
 def generate_expected_data(strain: str, df: pd.DataFrame)-> pd.DataFrame:
     '''
         Randomly samples deletion sites for a given dataset which can be used
@@ -1118,8 +1122,9 @@ def create_sampling_space(seq: str, s: Tuple[int, int], e: Tuple[int, int])-> pd
     return df_no_duplicates
 
 #######################
-### Data processing ###
+### data processing ###
 #######################
+
 def create_nucleotide_ratio_matrix(df: pd.DataFrame, col: str)-> pd.DataFrame:
     '''
         Counts nucleotides around the deletion site. Used to create heatmaps.
@@ -1245,3 +1250,131 @@ def get_dip_sequence(delvg_id: str, strain: str)-> Tuple[str, str, str]:
     seq_foot = fl_seq[int(end)-1:]
     del_length = int(end)-int(start)
     return seq_head + "*"*del_length + seq_foot, seq_head, seq_foot
+
+#####################
+### NEW FUNCTIONS ###
+#####################
+
+
+#################
+### general ###
+#################
+
+def add_dfname(dfnames: list, dfs: list) -> list:
+    mod_dfs = []
+    for dfname, df in zip(dfnames, dfs):
+        mod_dfs.append(add_dfname_single(dfname, df))
+    return mod_dfs
+
+def add_dfname_single(dfname: str, df: pd.DataFrame) -> pd.DataFrame:
+    df['dfname'] = dfname
+    cols = df.columns.tolist()
+    key_index = cols.index('key')
+    cols.insert(key_index + 1, cols.pop())
+    df = df[cols]
+    return df
+
+######################
+### ngs read count ###
+######################
+
+def add_dist_ngs_read_count_single(df: pd.DataFrame):
+    sum = df['NGS_read_count'].sum()
+    df['dist_NGS_read_count'] = df['NGS_read_count'] / sum
+    return df
+
+######################
+
+def add_norm_log_ngs_read_count(dfs: list):
+    mod_dfs = []
+    for df in dfs:
+        mod_dfs.append(add_norm_log_ngs_read_count_single(df))
+    return mod_dfs
+
+def add_norm_log_ngs_read_count_single(df: pd.DataFrame):
+    df = add_log_ngs_read_count_single(df)
+    max_log = df['log_NGS_read_count'].max()
+    min_log = df['log_NGS_read_count'].min()
+    df['norm_log_NGS_read_count'] = (df['log_NGS_read_count'] - min_log) / (max_log - min_log)
+    return df
+
+def add_log_ngs_read_count_single(df: pd.DataFrame):
+    df['log_NGS_read_count'] = np.log10(df['NGS_read_count'])
+    return df
+
+######################
+
+def perform_t_test_log(df: pd.DataFrame):
+    df = add_norm_log_d_ngs_read_count_single(df)
+    log_d_counts = df['norm_log_d_NGS_read_count']
+    df = add_norm_log_n_ngs_read_count_single(df)
+    log_n_counts = df['norm_log_n_NGS_read_count']
+    t_stat, p_value = stats.ttest_ind(log_n_counts, log_d_counts)
+    return p_value
+
+def add_norm_log_d_ngs_read_count_single(df: pd.DataFrame):
+    df = add_log_d_ngs_read_count_single(df)
+    max_log_d = df['log_d_NGS_read_count'].max()
+    min_log_d = df['log_d_NGS_read_count'].min()
+    df['norm_log_d_NGS_read_count'] = (df['log_d_NGS_read_count'] - min_log_d) / (max_log_d - min_log_d)
+    return df
+
+def add_log_d_ngs_read_count_single(df: pd.DataFrame):
+    df['log_d_NGS_read_count'] = np.log10(df['NGS_read_count'])
+    return df
+
+def add_norm_log_n_ngs_read_count_single(df: pd.DataFrame):
+    df = add_log_n_ngs_read_count_single(df)
+    max_log_n = df['log_n_NGS_read_count'].max()
+    min_log_n = df['log_n_NGS_read_count'].min()
+    df['norm_log_n_NGS_read_count'] = (df['log_n_NGS_read_count'] - min_log_n) / (max_log_n - min_log_n)
+    return df
+
+def add_log_n_ngs_read_count_single(df: pd.DataFrame):
+    df['log_n_NGS_read_count'] = np.log(df['NGS_read_count'])
+    return df
+
+######################
+### direct repeats ###
+######################
+
+def count_direct_repeats(df: pd.DataFrame):
+    df = add_direct_repeat_len(df)
+    df = cap_direct_repeat_len(df)
+    nuc_overlap_dict = dict({i: 0 for i in range(0, 6)})
+    for index, row in df.iterrows():
+        i = row["direct_repeat_len"]
+        nuc_overlap_dict[i] = nuc_overlap_dict[i] + 1
+    return nuc_overlap_dict
+
+def count_direct_repeats_segment(df: pd.DataFrame, segment: str):
+    df = add_direct_repeat_len(df)
+    df = cap_direct_repeat_len(df)
+    nuc_overlap_dict = dict({i: 0 for i in range(0, 6)})
+    segment_df = df[df["Segment"] == segment]
+    for index, row in segment_df.iterrows():
+        i = row["direct_repeat_len"]
+        nuc_overlap_dict[i] = nuc_overlap_dict[i] + 1
+    return nuc_overlap_dict
+
+######################
+
+def cap_direct_repeat_len(df: pd.DataFrame, cap: int = 5):
+    for index, row in df.iterrows():
+        direct_repeat_len = row["direct_repeat_len"]
+        if direct_repeat_len > cap:
+            df.loc[index, "direct_repeat_len"] = cap
+    return df
+
+def add_direct_repeat_len(df: pd.DataFrame):
+    for index, row in df.iterrows():
+        seq = row["full_seq"]
+        start = row["Start"]
+        end = row["End"] - 1
+        direct_repeat_len = 0
+        while start > 0 and seq[start - 1] == seq[end - 1]:
+            direct_repeat_len = direct_repeat_len + 1
+            start = start - 1
+            end = end - 1
+        df.loc[index, "direct_repeat_len"] = int(direct_repeat_len)
+    return df

@@ -4,10 +4,8 @@
 import os
 import sys
 
-import numpy as np
 import pandas as pd
 
-from scipy import stats
 from typing import Tuple
 
 sys.path.insert(0, "..")
@@ -102,9 +100,7 @@ if __name__ == "__main__":
         IBV: ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018", "Berry2021_B_Yam", "Southgate2019", "Valesano2020_Yam"]
     '''
 
-    ##############################
-    ######## SINGLE USAGE ########
-    ##############################
+    ### single ###
 
     pseudo_dfname = "Alnaji2021"
     dfnames = ["Berry2021_B_Yam"]
@@ -117,9 +113,7 @@ if __name__ == "__main__":
     new_name = f"st_{pseudo_strain}_co_{dfnames[0]}"
     resave([new_name], [pseudo_df], "pseudo")    
 
-    ##############################
-    ######## MULTI USAGE #########
-    ##############################
+    ### multi ###
 
     pseudo_dfname = "Alnaji2021"
     coordinates = "IBV"
