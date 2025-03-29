@@ -17,7 +17,7 @@ from pseudo import pseudo_load_all
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 
 
-def create_nucleotide_enrichment_plot(df, dfname, pseudo_df, pseudo_name, exp_df):
+def create_nucleotide_enrichment_plot(df, dfname, pseudo_df, pseudo_dfname, exp_df):
     '''
 
     '''
