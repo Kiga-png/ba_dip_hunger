@@ -1260,13 +1260,13 @@ def get_dip_sequence(delvg_id: str, strain: str)-> Tuple[str, str, str]:
 ### general ###
 #################
 
-def add_dfname(dfnames: list, dfs: list) -> list:
+def add_dfname_list(dfnames: list, dfs: list) -> list:
     mod_dfs = []
     for dfname, df in zip(dfnames, dfs):
-        mod_dfs.append(add_dfname_single(dfname, df))
+        mod_dfs.append(add_dfname(dfname, df))
     return mod_dfs
 
-def add_dfname_single(dfname: str, df: pd.DataFrame) -> pd.DataFrame:
+def add_dfname(dfname: str, df: pd.DataFrame) -> pd.DataFrame:
     df['dfname'] = dfname
     cols = df.columns.tolist()
     key_index = cols.index('key')
@@ -1278,59 +1278,59 @@ def add_dfname_single(dfname: str, df: pd.DataFrame) -> pd.DataFrame:
 ### ngs read count ###
 ######################
 
-def add_dist_ngs_read_count_single(df: pd.DataFrame):
+def add_dist_ngs_read_count(df: pd.DataFrame):
     sum = df['NGS_read_count'].sum()
     df['dist_NGS_read_count'] = df['NGS_read_count'] / sum
     return df
 
 ######################
 
-def add_norm_log_ngs_read_count(dfs: list):
+def add_norm_log_ngs_read_count_list(dfs: list):
     mod_dfs = []
     for df in dfs:
-        mod_dfs.append(add_norm_log_ngs_read_count_single(df))
+        mod_dfs.append(add_norm_log_ngs_read_count(df))
     return mod_dfs
 
-def add_norm_log_ngs_read_count_single(df: pd.DataFrame):
-    df = add_log_ngs_read_count_single(df)
+def add_norm_log_ngs_read_count(df: pd.DataFrame):
+    df = add_log_ngs_read_count(df)
     max_log = df['log_NGS_read_count'].max()
     min_log = df['log_NGS_read_count'].min()
     df['norm_log_NGS_read_count'] = (df['log_NGS_read_count'] - min_log) / (max_log - min_log)
     return df
 
-def add_log_ngs_read_count_single(df: pd.DataFrame):
+def add_log_ngs_read_count(df: pd.DataFrame):
     df['log_NGS_read_count'] = np.log10(df['NGS_read_count'])
     return df
 
 ######################
 
 def perform_t_test_log(df: pd.DataFrame):
-    df = add_norm_log_d_ngs_read_count_single(df)
+    df = add_norm_log_d_ngs_read_count(df)
     log_d_counts = df['norm_log_d_NGS_read_count']
-    df = add_norm_log_n_ngs_read_count_single(df)
+    df = add_norm_log_n_ngs_read_count(df)
     log_n_counts = df['norm_log_n_NGS_read_count']
     t_stat, p_value = stats.ttest_ind(log_n_counts, log_d_counts)
     return p_value
 
-def add_norm_log_d_ngs_read_count_single(df: pd.DataFrame):
-    df = add_log_d_ngs_read_count_single(df)
+def add_norm_log_d_ngs_read_count(df: pd.DataFrame):
+    df = add_log_d_ngs_read_count(df)
     max_log_d = df['log_d_NGS_read_count'].max()
     min_log_d = df['log_d_NGS_read_count'].min()
     df['norm_log_d_NGS_read_count'] = (df['log_d_NGS_read_count'] - min_log_d) / (max_log_d - min_log_d)
     return df
 
-def add_log_d_ngs_read_count_single(df: pd.DataFrame):
+def add_log_d_ngs_read_count(df: pd.DataFrame):
     df['log_d_NGS_read_count'] = np.log10(df['NGS_read_count'])
     return df
 
-def add_norm_log_n_ngs_read_count_single(df: pd.DataFrame):
-    df = add_log_n_ngs_read_count_single(df)
+def add_norm_log_n_ngs_read_count(df: pd.DataFrame):
+    df = add_log_n_ngs_read_count(df)
     max_log_n = df['log_n_NGS_read_count'].max()
     min_log_n = df['log_n_NGS_read_count'].min()
     df['norm_log_n_NGS_read_count'] = (df['log_n_NGS_read_count'] - min_log_n) / (max_log_n - min_log_n)
     return df
 
-def add_log_n_ngs_read_count_single(df: pd.DataFrame):
+def add_log_n_ngs_read_count(df: pd.DataFrame):
     df['log_n_NGS_read_count'] = np.log(df['NGS_read_count'])
     return df
 
@@ -1341,21 +1341,21 @@ def add_log_n_ngs_read_count_single(df: pd.DataFrame):
 def count_direct_repeats(df: pd.DataFrame):
     df = add_direct_repeat_len(df)
     df = cap_direct_repeat_len(df)
-    nuc_overlap_dict = dict({i: 0 for i in range(0, 6)})
+    dr_length_dict = dict({i: 0 for i in range(0, 6)})
     for index, row in df.iterrows():
         i = row["direct_repeat_len"]
-        nuc_overlap_dict[i] = nuc_overlap_dict[i] + 1
-    return nuc_overlap_dict
+        dr_length_dict[i] = dr_length_dict[i] + 1
+    return dr_length_dict
 
 def count_direct_repeats_segment(df: pd.DataFrame, segment: str):
     df = add_direct_repeat_len(df)
     df = cap_direct_repeat_len(df)
-    nuc_overlap_dict = dict({i: 0 for i in range(0, 6)})
+    dr_length_dict = dict({i: 0 for i in range(0, 6)})
     segment_df = df[df["Segment"] == segment]
     for index, row in segment_df.iterrows():
         i = row["direct_repeat_len"]
-        nuc_overlap_dict[i] = nuc_overlap_dict[i] + 1
-    return nuc_overlap_dict
+        dr_length_dict[i] = dr_length_dict[i] + 1
+    return dr_length_dict
 
 ######################
 

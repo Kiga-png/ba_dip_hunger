@@ -12,31 +12,30 @@ from scipy import stats
 from typing import Tuple
 
 sys.path.insert(0, "..")
-from utils import get_seq_len, load_all, get_sequence
-from utils import add_direct_repeat_len, count_direct_repeats_segment
+from utils import get_seq_len, get_dataset_names, load_all, get_sequence
+from utils import add_direct_repeat_len, cap_direct_repeat_len, count_direct_repeats, count_direct_repeats_segment, add_norm_log_ngs_read_count
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 
 
-###############################
-####### NGS FOR DVG (DR) ######
-###############################
+################################
+### ngs dr ratio per dvg bar ###
+################################
 
-def create_ngs_for_dvg_repeat_ratio_plot(dfname: str, df: pd.DataFrame):
+
+
+############################
+### ngs dr ratio per dvg ###
+############################
+
+def create_ngs_repeat_ratio_dvg_plot(dfname: str, df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(5, 3), tight_layout=True)
-    if df.empty:
-        print("empty df")
-        return
     
-    total_count = df['NGS_read_count_for_dvg'].sum()
-    if total_count == 0:
-        print("ratio_sum is 0")
-        return
-
-    df['normalized_ratio'] = df['NGS_read_count_for_dvg']
+    total_count = df['NGS_read_count_ratio_dvg'].sum()
+    df['dist_ratio'] = df['NGS_read_count_ratio_dvg']
     unique_lengths = df['direct_repeat_len'].unique()
-    ax.bar(unique_lengths, df['normalized_ratio'], color='royalblue', edgecolor='black')
+    ax.bar(unique_lengths, df['dist_ratio'], color='royalblue', edgecolor='black')
 
     ax.set_title(f"dataset: {dfname}")
     ax.set_xlabel("direct repeat length (nucleotides)")
@@ -46,57 +45,53 @@ def create_ngs_for_dvg_repeat_ratio_plot(dfname: str, df: pd.DataFrame):
 
     save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}")
     os.makedirs(save_path, exist_ok=True)
-    fname = f"ngs_dvg_dr_ratio_{dfname}.png"
+    fname = f"ngs_dr_ratio_dvg_{dfname}.png"
     save_path = os.path.join(save_path, fname)
     plt.savefig(save_path, dpi = 300)
     plt.close()
 
-def ngs_for_dvg_repeat_ratio_concat(dfs: list):
+def ngs_repeat_ratio_dvg_list(dfs: list):
     ext_dfs = []
     concat_df = pd.DataFrame
     for df in dfs:
-        ext_df = ngs_for_dvg_repeat_ratio(df)
+        ext_df = ngs_repeat_ratio_dvg(df)
         ext_dfs.append(ext_df)
     concat_df = pd.concat(ext_dfs, axis=0)
-    agg_df = concat_df.groupby('direct_repeat_len', as_index=False)['NGS_read_count_for_dvg'].sum()
-    agg_df['NGS_read_count_for_dvg'] = agg_df['NGS_read_count_for_dvg'] / len(dfs)
+    agg_df = concat_df.groupby('direct_repeat_len', as_index=False)['NGS_read_count_ratio_dvg'].sum()
+    agg_df['NGS_read_count_ratio_dvg'] = agg_df['NGS_read_count_ratio_dvg'] / len(dfs)
     return agg_df
 
-def ngs_for_dvg_repeat_ratio(df: pd.DataFrame):
+def ngs_repeat_ratio_dvg(df: pd.DataFrame):
     df = add_direct_repeat_len(df)
-    df = cap_direct_repeat_len(df, 5)
+    df = cap_direct_repeat_len(df)
+    df = add_norm_log_ngs_read_count(df)
     ngs_read_count_sum = 0
     ngs_dvg_dict = dict({i: 0 for i in range(0, 6)})
     for index, row in df.iterrows():
-        ngs_read_count = row["NGS_read_count"]
+        ngs_read_count = row['norm_log_NGS_read_count']
         ngs_read_count_sum = ngs_read_count_sum + ngs_read_count
         i = row["direct_repeat_len"]
         ngs_dvg_dict[i] = ngs_dvg_dict[i] + ngs_read_count
-    nuc_overlap_dict = count_direct_repeats(df)
+    dr_length_dict = count_direct_repeats(df)
     for i in range(0, 6):
-        ngs_dvg_dict[i] = ngs_dvg_dict[i] / nuc_overlap_dict[i]
-        ngs_dvg_dict[i] = round(ngs_dvg_dict[i])
-    df = pd.DataFrame(list(ngs_dvg_dict.items()), columns=['direct_repeat_len', 'NGS_read_count_for_dvg'])
+        if dr_length_dict[i] == 0:
+            ngs_dvg_dict[i] = 0
+        else:
+            ngs_dvg_dict[i] = ngs_dvg_dict[i] / dr_length_dict[i]
+    df = pd.DataFrame(list(ngs_dvg_dict.items()), columns=['direct_repeat_len', 'NGS_read_count_ratio_dvg'])
     return df
 
-###############################
-####### NGS REPEAT RATIO ######
-###############################
+####################
+### ngs dr ratio ###
+####################
 
 def create_ngs_repeat_ratio_plot(dfname: str, df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(5, 3), tight_layout=True)
-    if df.empty:
-        print("empty df")
-        return
-    
-    total_count = df['NGS_read_count_ratio'].sum()
-    if total_count == 0:
-        print("ratio_sum is 0")
-        return
 
-    df['normalized_ratio'] = df['NGS_read_count_ratio'] / total_count * 100
+    total_count = df['NGS_read_count_ratio'].sum()
+    df['dist_ratio'] = df['NGS_read_count_ratio'] / total_count * 100
     unique_lengths = df['direct_repeat_len'].unique()
-    ax.bar(unique_lengths, df['normalized_ratio'], color='royalblue', edgecolor='black')
+    ax.bar(unique_lengths, df['dist_ratio'], color='royalblue', edgecolor='black')
 
     ax.set_title(f"dataset: {dfname}")
     ax.set_xlabel("direct repeat length (nucleotides)")
@@ -111,7 +106,7 @@ def create_ngs_repeat_ratio_plot(dfname: str, df: pd.DataFrame):
     plt.savefig(save_path, dpi = 300)
     plt.close()
 
-def ngs_repeat_ratio_concat(dfs: list):
+def ngs_repeat_ratio_list(dfs: list):
     ext_dfs = []
     concat_df = pd.DataFrame
     for df in dfs:
@@ -124,11 +119,12 @@ def ngs_repeat_ratio_concat(dfs: list):
 
 def ngs_repeat_ratio(df: pd.DataFrame):
     df = add_direct_repeat_len(df)
-    df = cap_direct_repeat_len(df, 5)
+    df = cap_direct_repeat_len(df)
+    df = add_norm_log_ngs_read_count(df)
     ngs_read_count_sum = 0
     ngs_ratio_dict = dict({i: 0 for i in range(0, 6)})
     for index, row in df.iterrows():
-        ngs_read_count = row["NGS_read_count"]
+        ngs_read_count = row['norm_log_NGS_read_count']
         ngs_read_count_sum = ngs_read_count_sum + ngs_read_count
         i = row["direct_repeat_len"]
         ngs_ratio_dict[i] = ngs_ratio_dict[i] + ngs_read_count
@@ -346,41 +342,50 @@ if __name__ == "__main__":
     plt.style.use("seaborn")
     plt.rc("font", size=12)
 
-    ###############################
-    ####### NGS FOR DVG (DR) ######
-    ######### SINGLE USAGE ########
-    ###############################
+    ############################
+    ### ngs dr ratio per dvg ###
+    ############################
+
+    ### single ###
 
     # dfnames = ["Berry2021_B_Yam"]
     # dfs, _ = load_all(dfnames)
     # dfname = dfnames[0]
 
-    # df = ngs_for_dvg_repeat_ratio_concat(dfs)
-    # create_ngs_for_dvg_repeat_ratio_plot(dfname, df)
+    # df = ngs_repeat_ratio_dvg_list(dfs)
+    # create_ngs_repeat_ratio_dvg_plot(dfname, df)
 
-    ###############################
-    ####### NGS REPEAT RATIO ######
-    ######### SINGLE USAGE ########
-    ###############################
-
-    # dfnames = ["Alnaji2021"]
-    # dfs, _ = load_all(dfnames)
-    # dfname = dfnames[0]
-
-    # df = ngs_repeat_ratio_concat(dfs)
-    # create_ngs_repeat_ratio_plot(dfname, df)
-
-    ###############################
-    ####### NGS REPEAT RATIO ######
-    ######### MULTI USAGE #########
-    ###############################
+    ### multi ###
 
     # coordinates = "IBV"
     # dfname = coordinates
     # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
     # dfs, _ = load_all(dfnames, False)
 
-    # df = ngs_repeat_ratio_concat(dfs)
+    # df = ngs_repeat_ratio_dvg_list(dfs)
+    # create_ngs_repeat_ratio_dvg_plot(dfname, df)
+
+    ####################
+    ### ngs dr ratio ###
+    ####################
+
+    ### single ###
+
+    # dfnames = ["Berry2021_B_Yam"]
+    # dfs, _ = load_all(dfnames)
+    # dfname = dfnames[0]
+
+    # df = ngs_repeat_ratio_list(dfs)
+    # create_ngs_repeat_ratio_plot(dfname, df)
+
+    ### multi ###
+
+    # coordinates = "IBV"
+    # dfname = coordinates
+    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    # dfs, _ = load_all(dfnames, False)
+
+    # df = ngs_repeat_ratio_list(dfs)
     # create_ngs_repeat_ratio_plot(dfname, df)
     
     ##############################################

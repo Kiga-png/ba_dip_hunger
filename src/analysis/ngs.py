@@ -16,15 +16,15 @@ from typing import Tuple
 
 sys.path.insert(0, "..")
 from utils import load_all, get_dataset_names
-from utils import add_norm_log_ngs_read_count
+from utils import add_norm_log_ngs_read_count_list
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 
 
-#####################
-### log ngs stats ###
-#####################
+#################
+### ngs histo ###
+#################
 
 def create_norm_ngs_read_count_abs_histo(dfname: str, df: pd.DataFrame, degree: int = 4):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
@@ -35,7 +35,7 @@ def create_norm_ngs_read_count_abs_histo(dfname: str, df: pd.DataFrame, degree: 
 
     ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
     ax.set_title(f"dataset: {dfname}")
-    ax.set_xlabel("normalized NGS read count")
+    ax.set_xlabel("NGS read count")
     ax.set_ylabel("numberof DVGs (-)")
     
     tick_indices = np.arange(0, len(bin_edges), 5)
@@ -72,7 +72,7 @@ def create_norm_ngs_read_count_histo(dfname: str, df: pd.DataFrame, degree: int 
 
     ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
     ax.set_title(f"dataset: {dfname}")
-    ax.set_xlabel("normalized NGS read count")
+    ax.set_xlabel("NGS read count")
     ax.set_ylabel("distribution of DVGs (%)")
     
     tick_indices = np.arange(0, len(bin_edges), 5)
@@ -98,9 +98,9 @@ def create_norm_ngs_read_count_histo(dfname: str, df: pd.DataFrame, degree: int 
     plt.savefig(save_path, dpi=300)
     plt.close()
 
-##################
-### ngs stats ####
-##################
+######################
+### raw ngs histo ####
+######################
 
 def create_ngs_read_count_abs_histo(dfname: str, df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
@@ -111,7 +111,7 @@ def create_ngs_read_count_abs_histo(dfname: str, df: pd.DataFrame):
 
     ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
     ax.set_title(f"dataset: {dfname}")
-    ax.set_xlabel(f"NGS read count (capped: 1010)")
+    ax.set_xlabel(f"raw NGS read count (capped: 1010)")
     ax.set_ylabel("number of DVGs (-)")
     
     selected_ticks = bin_edges[::5]
@@ -137,7 +137,7 @@ def create_ngs_read_count_histo(dfname: str, df: pd.DataFrame):
 
     ax.bar(bin_edges[:-1], hist, width=np.diff(bin_edges), color='royalblue', edgecolor='black')
     ax.set_title(f"dataset: {dfname}")
-    ax.set_xlabel(f"NGS read count (capped: 1010)")
+    ax.set_xlabel(f"raw NGS read count (capped: 1010)")
     ax.set_ylabel("distribution of DVGs (%)")
     
     selected_ticks = bin_edges[::5]
@@ -161,57 +161,57 @@ if __name__ == "__main__":
     plt.rc("font", size=12)
 
 
-    #####################
-    ### log ngs stats ###
-    #####################
+    #################
+    ### ngs histo ###
+    #################
 
     ### single ###
 
-    # dfnames = ["Berry2021_B_Yam"]
-    # dfs, _ = load_all(dfnames)
-    # dfname = dfnames[0]
+    dfnames = ["Berry2021_B_Yam"]
+    dfs, _ = load_all(dfnames)
+    dfname = dfnames[0]
 
-    # dfs = add_norm_log_ngs_read_count(dfs)
-    # df = pd.concat(dfs, axis=0)
-    # create_norm_ngs_read_count_histo(dfname, df)
-    # create_norm_ngs_read_count_abs_histo(dfname, df)
+    dfs = add_norm_log_ngs_read_count_list(dfs)
+    df = pd.concat(dfs, axis=0)
+    create_norm_ngs_read_count_histo(dfname, df)
+    create_norm_ngs_read_count_abs_histo(dfname, df)
 
     ### multi ###
 
-    # coordinates = "IBV"
-    # dfname = coordinates
-    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    # dfs, _ = load_all(dfnames)
+    coordinates = "IBV"
+    dfname = coordinates
+    dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    dfs, _ = load_all(dfnames)
 
-    # dfs = add_norm_log_ngs_read_count(dfs)
-    # df = pd.concat(dfs, axis=0)
-    # create_norm_ngs_read_count_histo(dfname, df)
-    # create_norm_ngs_read_count_abs_histo(dfname, df)
+    dfs = add_norm_log_ngs_read_count_list(dfs)
+    df = pd.concat(dfs, axis=0)
+    create_norm_ngs_read_count_histo(dfname, df)
+    create_norm_ngs_read_count_abs_histo(dfname, df)
 
-    ##################
-    ### ngs stats ####
-    ##################
+    ######################
+    ### raw ngs histo ####
+    ######################
 
     ### single ###
 
-    # dfnames = ["Berry2021_B_Yam"]
-    # dfs, _ = load_all(dfnames)
-    # dfname = dfnames[0]
+    dfnames = ["Berry2021_B_Yam"]
+    dfs, _ = load_all(dfnames)
+    dfname = dfnames[0]
 
-    # df = pd.concat(dfs, axis=0)
-    # create_ngs_read_count_abs_histo(dfname, df)
-    # create_ngs_read_count_histo(dfname, df)
+    df = pd.concat(dfs, axis=0)
+    create_ngs_read_count_abs_histo(dfname, df)
+    create_ngs_read_count_histo(dfname, df)
 
     ### multi ###
 
-    # coordinates = "IBV"
-    # dfname = coordinates
-    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    # dfs, _ = load_all(dfnames)
+    coordinates = "IBV"
+    dfname = coordinates
+    dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    dfs, _ = load_all(dfnames)
 
-    # df = pd.concat(dfs, axis=0)
-    # create_ngs_read_count_histo(dfname, df)
-    # create_ngs_read_count_abs_histo(dfname, df)
+    df = pd.concat(dfs, axis=0)
+    create_ngs_read_count_histo(dfname, df)
+    create_ngs_read_count_abs_histo(dfname, df)
 
 
 
