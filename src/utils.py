@@ -1268,10 +1268,6 @@ def add_dfname_list(dfnames: list, dfs: list) -> list:
 
 def add_dfname(dfname: str, df: pd.DataFrame) -> pd.DataFrame:
     df['dfname'] = dfname
-    cols = df.columns.tolist()
-    key_index = cols.index('key')
-    cols.insert(key_index + 1, cols.pop())
-    df = df[cols]
     return df
 
 ######################
