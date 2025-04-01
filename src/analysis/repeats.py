@@ -8,7 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 from scipy import stats
@@ -24,6 +23,72 @@ RESULTSPATH, _ = os.path.split(RESULTSPATH)
 ################################
 ### ngs dr ratio per dvg reg ###
 ################################
+
+def create_ngs_repeat_reg_st_plot(dfname: str, df: pd.DataFrame):
+    for dr_length in range(0, 6):
+        create_ngs_repeat_length_reg_st_plot(dfname, df, dr_length)
+
+def create_ngs_repeat_length_reg_st_plot(dfname: str, df: pd.DataFrame, dr_length: int, degree: int = 4):
+    fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
+
+    df_filtered = df[df['direct_repeat_len'] == dr_length]
+
+    max_value = 1.0
+    bins = np.linspace(0, max_value, 101)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_centers_reshaped = bin_centers.reshape(-1, 1)
+
+    def fit_regression(y_values):
+        poly = PolynomialFeatures(degree=degree)
+        x_poly = poly.fit_transform(bin_centers_reshaped)
+        model = LinearRegression()
+        model.fit(x_poly, y_values)
+        return model.predict(x_poly)
+
+    all_hists = []
+
+    for idx, (i_dfname, group) in enumerate(df_filtered.groupby('dfname')):
+        hist, _ = np.histogram(group['norm_log_NGS_read_count'], bins=bins)
+        hist = hist / group.shape[0] * 100
+        all_hists.append(hist)
+        y_pred = fit_regression(hist)
+        label = 'datasets' if idx == 0 else None
+        ax.plot(bin_centers, y_pred, linewidth=1.5, label=label, color='lightgray', zorder=1)
+
+    all_hists = np.array(all_hists)
+    mean_hist = np.mean(all_hists, axis=0)
+    std_hist = np.std(all_hists, axis=0)
+
+    y_pred_mean = fit_regression(mean_hist)
+    ax.plot(bin_centers, y_pred_mean, color='royalblue', linewidth=1.5, label='mean', zorder=5)
+
+    y_pred_std_upper = fit_regression(mean_hist + std_hist)
+    y_pred_std_lower = fit_regression(np.maximum(mean_hist - std_hist, 0))  # kein negativer Bereich
+
+    ax.fill_between(bin_centers, y_pred_std_lower, y_pred_std_upper,
+                    color='royalblue', alpha=0.2, label='±1 STD', zorder=4)
+
+    if dr_length == 5:
+        ax.set_title(f"dataset: {dfname}     direct repeat length: >4")
+    else:
+        ax.set_title(f"dataset: {dfname}     direct repeat length: {dr_length}")
+
+    ax.set_xlabel("NGS read count")
+    ax.set_ylabel("distribution of DVGs (%)")
+
+    tick_indices = np.arange(0, len(bins), 5)
+    ax.set_xticks(bins[tick_indices])
+    ax.set_xticklabels([f"{bins[i]:.2f}" for i in tick_indices])
+
+    ax.legend(loc='best', fontsize='small', ncol=2)
+
+    ax.set_ylim(-2, 15)
+
+    save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}/dr_length")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"ngs_dr_length_{dr_length}_reg_st_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
 
 def create_ngs_repeat_reg_plot(dfname: str, df: pd.DataFrame):
     for dr_length in range(0, 6):
@@ -49,7 +114,7 @@ def create_ngs_repeat_length_reg_plot(dfname: str, df: pd.DataFrame, dr_length: 
     hist_all, _ = np.histogram(df_filtered['norm_log_NGS_read_count'], bins=bins)
     hist_all = hist_all / df_filtered.shape[0] * 100
     y_pred_all = fit_regression(hist_all)
-    ax.plot(bin_centers, y_pred_all, color='gray', linewidth=2, label='all datasets')
+    ax.plot(bin_centers, y_pred_all, color='gray', linewidth=1.5, label='all datasets', zorder=5)
 
     custom_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
                           "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#393b79", "#ff9896",
@@ -62,7 +127,7 @@ def create_ngs_repeat_length_reg_plot(dfname: str, df: pd.DataFrame, dr_length: 
         hist = hist / group.shape[0] * 100
         y_pred = fit_regression(hist)
         color = custom_colors[idx % len(custom_colors)]
-        ax.plot(bin_centers, y_pred, linewidth=2, label=i_dfname, color=color)
+        ax.plot(bin_centers, y_pred, linewidth=1.5, label=i_dfname, color=color, zorder=1)
 
     if dr_length == 5:
         ax.set_title(f"dataset: {dfname}     direct repeat length: >4")
@@ -78,12 +143,13 @@ def create_ngs_repeat_length_reg_plot(dfname: str, df: pd.DataFrame, dr_length: 
 
     ax.legend(loc='best', fontsize='small', ncol=2)
 
+    ax.set_ylim(-2, 15)
+
     save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}/dr_length")
     os.makedirs(save_path, exist_ok=True)
     fname = f"ngs_dr_length_{dr_length}_reg_{dfname}.png"
     plt.savefig(os.path.join(save_path, fname), dpi=300)
     plt.close()
-
 
 def ngs_repeat_length_list_reg(dfnames: list, dfs: list):
     ext_dfs = []
@@ -126,6 +192,8 @@ def create_ngs_repeat_ratio_dvg_bar_plot(dfname: str, df: pd.DataFrame):
     ax.set_xticks(unique_lengths)
     ax.set_xticklabels(["0", "1", "2", "3", "4", ">4"])
 
+    ax.set_ylim(0, 0.6)
+
     save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}")
     os.makedirs(save_path, exist_ok=True)
     fname = f"ngs_dr_ratio_dvg_bar_{dfname}.png"
@@ -162,6 +230,8 @@ def create_ngs_repeat_ratio_dvg_plot(dfname: str, df: pd.DataFrame):
     ax.set_ylabel("average NGS read count per DVG (-)")
     ax.set_xticks(unique_lengths)
     ax.set_xticklabels(["0", "1", "2", "3", "4", ">4"]) 
+
+    ax.set_ylim(0, 0.6)
 
     save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}")
     os.makedirs(save_path, exist_ok=True)
@@ -454,7 +524,6 @@ def mark_repeats(dfname: str, df: pd.DataFrame):
         repeats.to_csv(os.path.join(save_path, fname))
 
 
-
 if __name__ == "__main__":
     '''
 
@@ -462,30 +531,41 @@ if __name__ == "__main__":
     plt.style.use("seaborn")
     plt.rc("font", size=12)
 
+    #################
+    ### SELECTION ###
+    #################
+
+    ### SINGLE ###
+
+    dfnames = ["Berry2021_B_Yam"]
+    dfs, _ = load_all(dfnames)
+    dfname = dfnames[0]
+
+    df = dfs[0]
+    strain = DATASET_STRAIN_DICT[dfname]
+
+    ### MULTI ###
+
+    # coordinates = "IBV"
+    # dfname = coordinates
+    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    # dfs, _ = load_all(dfnames, False)
+
     ################################
     ### ngs dr ratio per dvg reg ###
     ################################
 
     ### multi ###
 
-    coordinates = "IBV"
-    dfname = coordinates
-    dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    dfs, _ = load_all(dfnames, False)
-
-    df = ngs_repeat_length_list_reg(dfnames, dfs)
-    create_ngs_repeat_reg_plot(dfname, df)
+    # df = ngs_repeat_length_list_reg(dfnames, dfs)
+    # create_ngs_repeat_reg_plot(dfname, df)
+    # create_ngs_repeat_reg_st_plot(dfname, df)
 
     ################################
     ### ngs dr ratio per dvg bar ###
     ################################
 
     ### multi ###
-
-    # coordinates = "IBV"
-    # dfname = coordinates
-    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    # dfs, _ = load_all(dfnames, False)
 
     # df = ngs_repeat_ratio_dvg_list_bar(dfnames, dfs)
     # create_ngs_repeat_ratio_dvg_bar_plot(dfname, df)
@@ -496,19 +576,10 @@ if __name__ == "__main__":
 
     ### single ###
 
-    # dfnames = ["Berry2021_B_Yam"]
-    # dfs, _ = load_all(dfnames)
-    # dfname = dfnames[0]
-
-    # df = ngs_repeat_ratio_dvg_list(dfs)
-    # create_ngs_repeat_ratio_dvg_plot(dfname, df)
+    df = ngs_repeat_ratio_dvg_list(dfs)
+    create_ngs_repeat_ratio_dvg_plot(dfname, df)
 
     ### multi ###
-
-    # coordinates = "IBV"
-    # dfname = coordinates
-    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    # dfs, _ = load_all(dfnames, False)
 
     # df = ngs_repeat_ratio_dvg_list(dfs)
     # create_ngs_repeat_ratio_dvg_plot(dfname, df)
@@ -519,19 +590,10 @@ if __name__ == "__main__":
 
     ### single ###
 
-    # dfnames = ["Berry2021_B_Yam"]
-    # dfs, _ = load_all(dfnames)
-    # dfname = dfnames[0]
-
     # df = ngs_repeat_ratio_list(dfs)
     # create_ngs_repeat_ratio_plot(dfname, df)
 
     ### multi ###
-
-    # coordinates = "IBV"
-    # dfname = coordinates
-    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    # dfs, _ = load_all(dfnames, False)
 
     # df = ngs_repeat_ratio_list(dfs)
     # create_ngs_repeat_ratio_plot(dfname, df)
@@ -539,13 +601,6 @@ if __name__ == "__main__":
     ##############################################
     ### nucleotide positions of direct repeats ###
     ##############################################
-
-    # dfnames = ["Berry2021_B_Yam"]
-    # dfs, _ = load_all(dfnames)
-
-    # dfname = dfnames[0]
-    # df = dfs[0]
-    # strain = DATASET_STRAIN_DICT[dfname]
 
     # add_df = add_direct_repeat_len(df)
     # repeats_dfs, segments = find_direct_repeats_nucleotide_positions(strain, add_df)
@@ -556,12 +611,6 @@ if __name__ == "__main__":
     ######################################
     ### hit ratio of potential repeats ###
     ######################################
-
-    # dfnames = ["Berry2021_B_Yam"]
-    # dfs, _ = load_all(dfnames)
-
-    # dfname = dfnames[0]
-    # df = dfs[0]
 
     # ratio_df = calculate_repeats_ratio(dfname, df)
     # create_repeats_ratio_plot(dfname, ratio_df)

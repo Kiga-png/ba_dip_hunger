@@ -91,6 +91,8 @@ def create_norm_ngs_read_count_histo(dfname: str, df: pd.DataFrame, degree: int 
     ax.plot(bin_centers, y_pred, color='red', linewidth=2, label=f'polynomial regression (degree {degree})')
     ax.legend()
 
+    ax.set_ylim(0, 15)
+
     save_path = os.path.join(RESULTSPATH, f"ngs/{dfname}")
     os.makedirs(save_path, exist_ok=True)
     fname = f"norm_ngs_read_count_{dfname}.png"
@@ -160,6 +162,22 @@ if __name__ == "__main__":
     plt.style.use("seaborn")
     plt.rc("font", size=12)
 
+    #################
+    ### SELECTION ###
+    #################
+
+    ### SINGLE ###
+
+    dfnames = ["Berry2021_B_Yam"]
+    dfs, _ = load_all(dfnames)
+    dfname = dfnames[0]
+
+    ### MULTI ###
+
+    # coordinates = "IBV"
+    # dfname = coordinates
+    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    # dfs, _ = load_all(dfnames, False)
 
     #################
     ### ngs histo ###
@@ -167,26 +185,15 @@ if __name__ == "__main__":
 
     ### single ###
 
-    dfnames = ["Berry2021_B_Yam"]
-    dfs, _ = load_all(dfnames)
-    dfname = dfnames[0]
-
     dfs = add_norm_log_ngs_read_count_list(dfs)
     df = pd.concat(dfs, axis=0)
     create_norm_ngs_read_count_histo(dfname, df)
-    create_norm_ngs_read_count_abs_histo(dfname, df)
 
     ### multi ###
 
-    coordinates = "IBV"
-    dfname = coordinates
-    dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    dfs, _ = load_all(dfnames)
-
-    dfs = add_norm_log_ngs_read_count_list(dfs)
-    df = pd.concat(dfs, axis=0)
-    create_norm_ngs_read_count_histo(dfname, df)
-    create_norm_ngs_read_count_abs_histo(dfname, df)
+    # dfs = add_norm_log_ngs_read_count_list(dfs)
+    # df = pd.concat(dfs, axis=0)
+    # create_norm_ngs_read_count_histo(dfname, df)
 
     ######################
     ### raw ngs histo ####
@@ -194,24 +201,13 @@ if __name__ == "__main__":
 
     ### single ###
 
-    dfnames = ["Berry2021_B_Yam"]
-    dfs, _ = load_all(dfnames)
-    dfname = dfnames[0]
-
-    df = pd.concat(dfs, axis=0)
-    create_ngs_read_count_abs_histo(dfname, df)
-    create_ngs_read_count_histo(dfname, df)
+    # df = pd.concat(dfs, axis=0)
+    # create_ngs_read_count_histo(dfname, df)
 
     ### multi ###
 
-    coordinates = "IBV"
-    dfname = coordinates
-    dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    dfs, _ = load_all(dfnames)
-
-    df = pd.concat(dfs, axis=0)
-    create_ngs_read_count_histo(dfname, df)
-    create_ngs_read_count_abs_histo(dfname, df)
+    # df = pd.concat(dfs, axis=0)
+    # create_ngs_read_count_histo(dfname, df)
 
 
 
