@@ -20,6 +20,153 @@ from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 
+
+#################################
+### ngs dr ratio per dvg dist ###
+#################################
+
+def create_ngs_repeat_dist_st_plot(dfname: str, df: pd.DataFrame):
+    for dr_length in range(0, 6):
+        create_ngs_repeat_length_dist_st_plot(dfname, df, dr_length)
+
+def create_ngs_repeat_length_dist_st_plot(dfname: str, df: pd.DataFrame, dr_length: int):
+    fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
+
+    df_filtered = df[df['direct_repeat_len'] == dr_length]
+    n_rows = df_filtered.shape[0]
+
+    max_value = 1.0
+    bins = np.linspace(0, max_value, 101)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_width = bins[1] - bins[0]
+
+    data_all = df_filtered['norm_log_NGS_read_count'].dropna()
+    density_all = stats.gaussian_kde(data_all)
+    x_vals = np.linspace(0, 1, 500)
+    y_vals_all = density_all(x_vals) * 100 * bin_width
+
+    mean = data_all.mean()
+    variance = data_all.var()
+    skewness = data_all.skew()
+    kurtosis = data_all.kurtosis()
+
+    stats_text = f"mean: {mean:.3f}\nvariance: {variance:.3f}\nskewness: {skewness:.3f}\nkurtosis: {kurtosis:.3f}"
+    ax.text(1.02, 0.95, stats_text, transform=ax.transAxes, fontsize=10,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.6))
+
+    all_y_vals = []
+    first_curve = True
+
+    for _, group in df_filtered.groupby('dfname'):
+        group_data = group['norm_log_NGS_read_count'].dropna()
+        if len(group_data) < 2:
+            continue
+        density = stats.gaussian_kde(group_data)
+        y_vals = density(x_vals) * 100 * bin_width
+        all_y_vals.append(y_vals)
+
+        label = 'datasets' if first_curve else None
+        first_curve = False
+
+        ax.plot(x_vals, y_vals, linewidth=1.5, color='lightgray', alpha=0.8, label=label, zorder=1)
+
+    if all_y_vals:
+        all_y_vals = np.array(all_y_vals)
+        mean_vals = np.mean(all_y_vals, axis=0)
+        std_vals = np.std(all_y_vals, axis=0)
+
+        ax.plot(x_vals, mean_vals, color='royalblue', linewidth=1.5, label='mean', zorder=5)
+        ax.fill_between(x_vals, np.maximum(mean_vals - std_vals, 0), mean_vals + std_vals,
+                        color='royalblue', alpha=0.2, label='±1 STD', zorder=4)
+
+    if dr_length == 5:
+        ax.set_title(f"dataset: {dfname}     direct repeat length: >4     number of DVGs: {n_rows}")
+    else:
+        ax.set_title(f"dataset: {dfname}     direct repeat length: {dr_length}     number of DVGs: {n_rows}")
+
+    ax.set_xlabel("NGS read count")
+    ax.set_ylabel("distribution of DVGs (%)")
+
+    tick_indices = np.arange(0, len(bins), 5)
+    ax.set_xticks(bins[tick_indices])
+    ax.set_xticklabels([f"{bins[i]:.2f}" for i in tick_indices])
+
+    ax.legend(loc='best', fontsize='small', ncol=2)
+    ax.set_ylim(-2, 15)
+
+    save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}/dr_length")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"ngs_dr_length_{dr_length}_dist_st_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+def create_ngs_repeat_dist_plot(dfname: str, df: pd.DataFrame):
+    for dr_length in range(0, 6):
+        create_ngs_repeat_length_dist_plot(dfname, df, dr_length)
+
+def create_ngs_repeat_length_dist_plot(dfname: str, df: pd.DataFrame, dr_length: int):
+    fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
+
+    df_filtered = df[df['direct_repeat_len'] == dr_length]
+    n_rows = df_filtered.shape[0]
+
+    max_value = 1.0
+    bins = np.linspace(0, max_value, 101)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_width = bins[1] - bins[0]
+
+    data_all = df_filtered['norm_log_NGS_read_count'].dropna()
+    density_all = stats.gaussian_kde(data_all)
+    x_vals = np.linspace(0, 1, 500)
+    y_vals_all = density_all(x_vals) * 100 * bin_width
+    ax.plot(x_vals, y_vals_all, color='gray', linewidth=1.5, label='all datasets', zorder=5)
+
+    mean = data_all.mean()
+    variance = data_all.var()
+    skewness = data_all.skew()
+    kurtosis = data_all.kurtosis()
+
+    stats_text = f"mean: {mean:.3f}\nvariance: {variance:.3f}\nskewness: {skewness:.3f}\nkurtosis: {kurtosis:.3f}"
+    ax.text(1.02, 0.95, stats_text, transform=ax.transAxes, fontsize=10,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.6))
+
+    custom_colors = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
+        "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#393b79", "#ff9896",
+        "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
+        "#ffbb78", "#aec7e8"
+    ]
+
+    for idx, (i_dfname, group) in enumerate(df_filtered.groupby('dfname')):
+        group_data = group['norm_log_NGS_read_count'].dropna()
+        if len(group_data) < 2:
+            continue
+        density = stats.gaussian_kde(group_data)
+        y_vals = density(x_vals) * 100 * bin_width
+        color = custom_colors[idx % len(custom_colors)]
+        ax.plot(x_vals, y_vals, linewidth=1.5, label=i_dfname, color=color, zorder=1)
+
+    if dr_length == 5:
+        ax.set_title(f"dataset: {dfname}     direct repeat length: >4     number of DVGs: {n_rows}")
+    else:
+        ax.set_title(f"dataset: {dfname}     direct repeat length: {dr_length}     number of DVGs: {n_rows}")
+
+    ax.set_xlabel("NGS read count")
+    ax.set_ylabel("distribution of DVGs (%)")
+
+    tick_indices = np.arange(0, len(bins), 5)
+    ax.set_xticks(bins[tick_indices])
+    ax.set_xticklabels([f"{bins[i]:.2f}" for i in tick_indices])
+
+    ax.legend(loc='best', fontsize='small', ncol=2)
+    ax.set_ylim(-2, 15)
+
+    save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}/dr_length")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"ngs_dr_length_{dr_length}_dist_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
 ################################
 ### ngs dr ratio per dvg reg ###
 ################################
@@ -32,6 +179,7 @@ def create_ngs_repeat_length_reg_st_plot(dfname: str, df: pd.DataFrame, dr_lengt
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
 
     df_filtered = df[df['direct_repeat_len'] == dr_length]
+    n_rows = df_filtered.shape[0]
 
     max_value = 1.0
     bins = np.linspace(0, max_value, 101)
@@ -69,9 +217,9 @@ def create_ngs_repeat_length_reg_st_plot(dfname: str, df: pd.DataFrame, dr_lengt
                     color='royalblue', alpha=0.2, label='±1 STD', zorder=4)
 
     if dr_length == 5:
-        ax.set_title(f"dataset: {dfname}     direct repeat length: >4")
+        ax.set_title(f"dataset: {dfname}     direct repeat length: >4     number of DVGs: {n_rows}")
     else:
-        ax.set_title(f"dataset: {dfname}     direct repeat length: {dr_length}")
+        ax.set_title(f"dataset: {dfname}     direct repeat length: {dr_length}     number of DVGs: {n_rows}")
 
     ax.set_xlabel("NGS read count")
     ax.set_ylabel("distribution of DVGs (%)")
@@ -98,6 +246,7 @@ def create_ngs_repeat_length_reg_plot(dfname: str, df: pd.DataFrame, dr_length: 
     fig, ax = plt.subplots(figsize=(10, 3), tight_layout=True)
 
     df_filtered = df[df['direct_repeat_len'] == dr_length]
+    n_rows = df_filtered.shape[0]
 
     max_value = 1.0
     bins = np.linspace(0, max_value, 101)
@@ -130,9 +279,9 @@ def create_ngs_repeat_length_reg_plot(dfname: str, df: pd.DataFrame, dr_length: 
         ax.plot(bin_centers, y_pred, linewidth=1.5, label=i_dfname, color=color, zorder=1)
 
     if dr_length == 5:
-        ax.set_title(f"dataset: {dfname}     direct repeat length: >4")
+        ax.set_title(f"dataset: {dfname}     direct repeat length: >4     number of DVGs: {n_rows}")
     else:
-        ax.set_title(f"dataset: {dfname}     direct repeat length: {dr_length}")
+        ax.set_title(f"dataset: {dfname}     direct repeat length: {dr_length}     number of DVGs: {n_rows}")
 
     ax.set_xlabel("NGS read count")
     ax.set_ylabel("distribution of DVGs (%)")
@@ -151,7 +300,7 @@ def create_ngs_repeat_length_reg_plot(dfname: str, df: pd.DataFrame, dr_length: 
     plt.savefig(os.path.join(save_path, fname), dpi=300)
     plt.close()
 
-def ngs_repeat_length_list_reg(dfnames: list, dfs: list):
+def ngs_repeat_length_list_stats(dfnames: list, dfs: list):
     ext_dfs = []
     concat_df = pd.DataFrame
     for dfname, df in zip(dfnames, dfs):
@@ -537,19 +686,19 @@ if __name__ == "__main__":
 
     ### SINGLE ###
 
-    dfnames = ["Berry2021_B_Yam"]
-    dfs, _ = load_all(dfnames)
-    dfname = dfnames[0]
+    # dfnames = ["Berry2021_B_Yam"]
+    # dfs, _ = load_all(dfnames)
+    # dfname = dfnames[0]
 
-    df = dfs[0]
-    strain = DATASET_STRAIN_DICT[dfname]
+    # df = dfs[0]
+    # strain = DATASET_STRAIN_DICT[dfname]
 
     ### MULTI ###
 
-    # coordinates = "IBV"
-    # dfname = coordinates
-    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    # dfs, _ = load_all(dfnames, False)
+    coordinates = "IBV"
+    dfname = coordinates
+    dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    dfs, _ = load_all(dfnames, False)
 
     ################################
     ### ngs dr ratio per dvg reg ###
@@ -557,9 +706,19 @@ if __name__ == "__main__":
 
     ### multi ###
 
-    # df = ngs_repeat_length_list_reg(dfnames, dfs)
-    # create_ngs_repeat_reg_plot(dfname, df)
-    # create_ngs_repeat_reg_st_plot(dfname, df)
+    df = ngs_repeat_length_list_stats(dfnames, dfs)
+    create_ngs_repeat_dist_plot(dfname, df)
+    create_ngs_repeat_dist_st_plot(dfname, df)
+
+    ################################
+    ### ngs dr ratio per dvg reg ###
+    ################################
+
+    ### multi ###
+
+    df = ngs_repeat_length_list_stats(dfnames, dfs)
+    create_ngs_repeat_reg_plot(dfname, df)
+    create_ngs_repeat_reg_st_plot(dfname, df)
 
     ################################
     ### ngs dr ratio per dvg bar ###
@@ -576,8 +735,8 @@ if __name__ == "__main__":
 
     ### single ###
 
-    df = ngs_repeat_ratio_dvg_list(dfs)
-    create_ngs_repeat_ratio_dvg_plot(dfname, df)
+    # df = ngs_repeat_ratio_dvg_list(dfs)
+    # create_ngs_repeat_ratio_dvg_plot(dfname, df)
 
     ### multi ###
 
