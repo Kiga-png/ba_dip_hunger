@@ -6,15 +6,17 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 from scipy import stats
+from scipy.stats import f_oneway, kruskal
 from typing import Tuple
 
 sys.path.insert(0, "..")
-from utils import get_seq_len, get_dataset_names, load_all, get_sequence
+from utils import get_seq_len, get_dataset_names, load_all, get_sequence, get_p_value_symbol
 from utils import add_direct_repeat_len, cap_direct_repeat_len, count_direct_repeats, count_direct_repeats_segment, add_norm_log_ngs_read_count, add_dfname
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
@@ -119,7 +121,8 @@ def create_ngs_repeat_length_dist_plot(dfname: str, df: pd.DataFrame, dr_length:
     density_all = stats.gaussian_kde(data_all)
     x_vals = np.linspace(0, 1, 500)
     y_vals_all = density_all(x_vals) * 100 * bin_width
-    ax.plot(x_vals, y_vals_all, color='gray', linewidth=1.5, label='all datasets', zorder=5)
+    label_all = f"all datasets ({len(data_all)})"
+    ax.plot(x_vals, y_vals_all, color='gray', linewidth=1.5, label=label_all, zorder=5)
 
     mean = data_all.mean()
     variance = data_all.var()
@@ -144,7 +147,8 @@ def create_ngs_repeat_length_dist_plot(dfname: str, df: pd.DataFrame, dr_length:
         density = stats.gaussian_kde(group_data)
         y_vals = density(x_vals) * 100 * bin_width
         color = custom_colors[idx % len(custom_colors)]
-        ax.plot(x_vals, y_vals, linewidth=1.5, label=i_dfname, color=color, zorder=1)
+        label = f"{i_dfname} ({len(group_data)})"
+        ax.plot(x_vals, y_vals, linewidth=1.5, label=label, color=color, zorder=1)
 
     if dr_length == 5:
         ax.set_title(f"dataset: {dfname}     direct repeat length: >4     number of DVGs: {n_rows}")
@@ -263,20 +267,21 @@ def create_ngs_repeat_length_reg_plot(dfname: str, df: pd.DataFrame, dr_length: 
     hist_all, _ = np.histogram(df_filtered['norm_log_NGS_read_count'], bins=bins)
     hist_all = hist_all / df_filtered.shape[0] * 100
     y_pred_all = fit_regression(hist_all)
-    ax.plot(bin_centers, y_pred_all, color='gray', linewidth=1.5, label='all datasets', zorder=5)
+    label_all = f"all datasets ({df_filtered.shape[0]})"
+    ax.plot(bin_centers, y_pred_all, color='gray', linewidth=1.5, label=label_all, zorder=5)
 
     custom_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
                           "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#393b79", "#ff9896",
                           "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
-                          "#ffbb78", "#aec7e8"
-                    ]
+                          "#ffbb78", "#aec7e8"]
 
     for idx, (i_dfname, group) in enumerate(df_filtered.groupby('dfname')):
         hist, _ = np.histogram(group['norm_log_NGS_read_count'], bins=bins)
         hist = hist / group.shape[0] * 100
         y_pred = fit_regression(hist)
         color = custom_colors[idx % len(custom_colors)]
-        ax.plot(bin_centers, y_pred, linewidth=1.5, label=i_dfname, color=color, zorder=1)
+        label = f"{i_dfname} ({group.shape[0]})"
+        ax.plot(bin_centers, y_pred, linewidth=1.5, label=label, color=color, zorder=1)
 
     if dr_length == 5:
         ax.set_title(f"dataset: {dfname}     direct repeat length: >4     number of DVGs: {n_rows}")
@@ -313,18 +318,74 @@ def ngs_repeat_length_list_stats(dfnames: list, dfs: list):
     return concat_df
 
 ################################
+### ngs dr ratio per dvg sig ###
+################################
+
+def test_significance_ngs_repeat_ratio_dvg(dfname: str, df: pd.DataFrame):
+    grouped_data = [
+        group['NGS_read_count_ratio_dvg'].dropna().values
+        for _, group in df.groupby('direct_repeat_len')
+    ]
+
+    f_stat, p_anova = f_oneway(*grouped_data)
+    h_stat, p_kruskal = kruskal(*grouped_data)
+
+    print(f"dataset:        {dfname}")
+    print(f"ANOVA:          F = {f_stat:.4f}, p = {p_anova:.10f}, level = {get_p_value_symbol(p_anova)}")
+    print(f"Kruskal-Wallis: H = {h_stat:.4f}, p = {p_kruskal:.10f}, level = {get_p_value_symbol(p_kruskal)}")
+
+    return {
+        'dataset': {dfname},
+        'anova': {'F': f_stat, 'p': p_anova},
+        'kruskal': {'H': h_stat, 'p': p_kruskal}
+    }
+
+################################
+### ngs dr ratio per dvg vio ###
+################################
+
+def create_ngs_repeat_ratio_dvg_vio_plot(dfname: str, df: pd.DataFrame):
+    fig, ax = plt.subplots(figsize=(6, 4), tight_layout=True)
+
+    sns.violinplot(
+        data=df,
+        x='direct_repeat_len',
+        y='NGS_read_count_ratio_dvg',
+        inner='box',  # zeigt Median + IQR im Violinplot
+        palette='Blues',
+        linewidth=1,
+        ax=ax
+    )
+
+    ax.set_title(f"dataset: {dfname}")
+    ax.set_xlabel("direct repeat length (nucleotides)")
+    ax.set_ylabel("NGS read count per DVG (%)")
+
+    ax.set_xticklabels(["0", "1", "2", "3", "4", ">4"])
+
+    ax.set_ylim(0, 0.6)
+
+    save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"ngs_dr_ratio_dvg_vio_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+################################
 ### ngs dr ratio per dvg bar ###
 ################################
 
 def create_ngs_repeat_ratio_dvg_bar_plot(dfname: str, df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(5, 3), tight_layout=True)
 
+    # Gruppierung und Statistik
     grouped = df.groupby('direct_repeat_len')['NGS_read_count_ratio_dvg']
     means = grouped.mean()
     stds = grouped.std().fillna(0)
 
     unique_lengths = sorted(means.index)
 
+    # Balkendiagramm
     ax.bar(
         unique_lengths,
         means,
@@ -332,17 +393,32 @@ def create_ngs_repeat_ratio_dvg_bar_plot(dfname: str, df: pd.DataFrame):
         color='royalblue',
         edgecolor='black',
         capsize=5,
-        error_kw={'elinewidth': 1, 'capthick': 1}
+        error_kw={'elinewidth': 1, 'capthick': 1},
+        zorder=1
     )
 
+    # Einzelne Datenpunkte als Stripplot
+    sns.stripplot(
+        data=df,
+        x='direct_repeat_len',
+        y='NGS_read_count_ratio_dvg',
+        ax=ax,
+        color='black',
+        size=3,
+        jitter=True,
+        zorder=2,
+        alpha=0.6
+    )
+
+    # Achsen und Titel
     ax.set_title(f"dataset: {dfname}")
     ax.set_xlabel("direct repeat length (nucleotides)")
     ax.set_ylabel("average NGS read count per DVG (%)")
     ax.set_xticks(unique_lengths)
     ax.set_xticklabels(["0", "1", "2", "3", "4", ">4"])
-
     ax.set_ylim(0, 0.6)
 
+    # Speichern
     save_path = os.path.join(RESULTSPATH, f"repeats/{dfname}")
     os.makedirs(save_path, exist_ok=True)
     fname = f"ngs_dr_ratio_dvg_bar_{dfname}.png"
@@ -700,25 +776,43 @@ if __name__ == "__main__":
     dfnames = get_dataset_names(cutoff=40, selection=coordinates)
     dfs, _ = load_all(dfnames, False)
 
+    #################################
+    ### ngs dr ratio per dvg dist ###
+    #################################
+
+    ### multi ###
+
+    # df = ngs_repeat_length_list_stats(dfnames, dfs)
+    # create_ngs_repeat_dist_plot(dfname, df)
+    # create_ngs_repeat_dist_st_plot(dfname, df)
+
     ################################
     ### ngs dr ratio per dvg reg ###
     ################################
 
     ### multi ###
 
-    df = ngs_repeat_length_list_stats(dfnames, dfs)
-    create_ngs_repeat_dist_plot(dfname, df)
-    create_ngs_repeat_dist_st_plot(dfname, df)
+    # df = ngs_repeat_length_list_stats(dfnames, dfs)
+    # create_ngs_repeat_reg_plot(dfname, df)
+    # create_ngs_repeat_reg_st_plot(dfname, df)
 
     ################################
-    ### ngs dr ratio per dvg reg ###
+    ### ngs dr ratio per dvg sig ###
     ################################
 
     ### multi ###
 
-    df = ngs_repeat_length_list_stats(dfnames, dfs)
-    create_ngs_repeat_reg_plot(dfname, df)
-    create_ngs_repeat_reg_st_plot(dfname, df)
+    # df = ngs_repeat_ratio_dvg_list_bar(dfnames, dfs)
+    # test_significance_ngs_repeat_ratio_dvg(dfname, df)
+
+    ################################
+    ### ngs dr ratio per dvg vio ###
+    ################################
+
+    ### multi ###
+
+    df = ngs_repeat_ratio_dvg_list_bar(dfnames, dfs)
+    create_ngs_repeat_ratio_dvg_vio_plot(dfname, df)
 
     ################################
     ### ngs dr ratio per dvg bar ###
@@ -726,8 +820,8 @@ if __name__ == "__main__":
 
     ### multi ###
 
-    # df = ngs_repeat_ratio_dvg_list_bar(dfnames, dfs)
-    # create_ngs_repeat_ratio_dvg_bar_plot(dfname, df)
+    df = ngs_repeat_ratio_dvg_list_bar(dfnames, dfs)
+    create_ngs_repeat_ratio_dvg_bar_plot(dfname, df)
 
     ############################
     ### ngs dr ratio per dvg ###
