@@ -2,6 +2,7 @@
     general functions and global parameters, that are used in different scripts
 '''
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -1373,4 +1374,36 @@ def add_direct_repeat_len(df: pd.DataFrame):
             start = start - 1
             end = end - 1
         df.loc[index, "direct_repeat_len"] = int(direct_repeat_len)
+    return df
+
+########################
+### motif enrichment ###
+########################
+
+def add_motif_count(df: pd.DataFrame, motif: str):
+    """
+
+    """
+    pattern = f'(?={re.escape(motif)})'
+
+    start_counts = []
+    end_counts = []
+
+    for seq in df['seq_around_deletion_junction']:
+        if len(seq) != 20:
+            start_counts.append(0)
+            end_counts.append(0)
+            continue
+
+        seq1 = seq[:10]
+        seq2 = seq[10:]
+        start_match_count = len(list(re.finditer(pattern, seq1)))
+        end_match_count = len(list(re.finditer(pattern, seq2)))
+        start_counts.append(start_match_count)
+        end_counts.append(end_match_count)
+
+    df = df.copy()
+    df["start_motif_counter"] = start_counts
+    df["end_motif_counter"] = end_counts
+
     return df

@@ -312,8 +312,8 @@ def ngs_repeat_length_list_stats(dfnames: list, dfs: list):
         df = add_direct_repeat_len(df)
         df = cap_direct_repeat_len(df)
         df = add_norm_log_ngs_read_count(df)
-        ext_df = add_dfname(dfname, df)
-        ext_dfs.append(ext_df)
+        df = add_dfname(dfname, df)
+        ext_dfs.append(df)
     concat_df = pd.concat(ext_dfs, axis=0)
     return concat_df
 

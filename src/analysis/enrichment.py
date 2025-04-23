@@ -6,23 +6,239 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 
 from scipy import stats
 from typing import Tuple
+from collections import Counter
 
 sys.path.insert(0, "..")
-from utils import load_dataset, get_dataset_names, join_data, preprocess, generate_expected_data, get_seq_len
-from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS, load_all, get_sequence, calculate_direct_repeat, count_direct_repeats_overall
-
-from ngs import add_log_ngs_read_count
+from utils import load_dataset, get_dataset_names, load_all, get_seq_len
+from utils import add_motif_count, add_norm_log_ngs_read_count, add_dfname
+from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 
 
-###################################
-####### NGS ENRICHMENT RATIO ######
-###################################
+############################
+### motif enrichment dis ###
+############################
+
+def create_ngs_motif_dist_st_plot(dfname: str, df: pd.DataFrame, motif: str):
+    fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
+
+    df_filtered = df[(df["start_motif_counter"] != 0) | (df["end_motif_counter"] != 0)]
+    n_rows = df_filtered.shape[0]
+
+    max_value = 1.0
+    bins = np.linspace(0, max_value, 101)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_width = bins[1] - bins[0]
+
+    data_all = df_filtered['norm_log_NGS_read_count'].dropna()
+    density_all = stats.gaussian_kde(data_all)
+    x_vals = np.linspace(0, 1, 500)
+    y_vals_all = density_all(x_vals) * 100 * bin_width
+
+    mean = data_all.mean()
+    variance = data_all.var()
+    skewness = data_all.skew()
+    kurtosis = data_all.kurtosis()
+
+    stats_text = f"mean: {mean:.3f}\nvariance: {variance:.3f}\nskewness: {skewness:.3f}\nkurtosis: {kurtosis:.3f}"
+    ax.text(1.02, 0.95, stats_text, transform=ax.transAxes, fontsize=10,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.6))
+
+    all_y_vals = []
+    first_curve = True
+
+    for _, group in df_filtered.groupby('dfname'):
+        group_data = group['norm_log_NGS_read_count'].dropna()
+        if len(group_data) < 2:
+            continue
+        density = stats.gaussian_kde(group_data)
+        y_vals = density(x_vals) * 100 * bin_width
+        all_y_vals.append(y_vals)
+
+        label = 'datasets' if first_curve else None
+        first_curve = False
+
+        ax.plot(x_vals, y_vals, linewidth=1.5, color='lightgray', alpha=0.8, label=label, zorder=1)
+
+    if all_y_vals:
+        all_y_vals = np.array(all_y_vals)
+        mean_vals = np.mean(all_y_vals, axis=0)
+        std_vals = np.std(all_y_vals, axis=0)
+
+        ax.plot(x_vals, mean_vals, color='royalblue', linewidth=1.5, label='mean', zorder=5)
+        ax.fill_between(x_vals, np.maximum(mean_vals - std_vals, 0), mean_vals + std_vals,
+                        color='royalblue', alpha=0.2, label='±1 STD', zorder=4)
+
+    ax.set_title(f"dataset: {dfname}     motif: {motif}     number of DVGs: {n_rows}")
+
+    ax.set_xlabel("NGS read count")
+    ax.set_ylabel("distribution of DVGs (%)")
+
+    tick_indices = np.arange(0, len(bins), 5)
+    ax.set_xticks(bins[tick_indices])
+    ax.set_xticklabels([f"{bins[i]:.2f}" for i in tick_indices])
+
+    ax.legend(loc='best', fontsize='small', ncol=2)
+    ax.set_ylim(-2, 15)
+
+    save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}/motif")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"ngs_motif_{motif}_dist_st_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+def create_ngs_motif_dist_plot(dfname: str, df: pd.DataFrame, motif: str):
+    fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
+
+    df_filtered = df[(df["start_motif_counter"] != 0) | (df["end_motif_counter"] != 0)]
+    n_rows = df_filtered.shape[0]
+
+    max_value = 1.0
+    bins = np.linspace(0, max_value, 101)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_width = bins[1] - bins[0]
+
+    data_all = df_filtered['norm_log_NGS_read_count'].dropna()
+    density_all = stats.gaussian_kde(data_all)
+    x_vals = np.linspace(0, 1, 500)
+    y_vals_all = density_all(x_vals) * 100 * bin_width
+    label_all = f"all datasets ({len(data_all)})"
+    ax.plot(x_vals, y_vals_all, color='gray', linewidth=1.5, label=label_all, zorder=5)
+
+    mean = data_all.mean()
+    variance = data_all.var()
+    skewness = data_all.skew()
+    kurtosis = data_all.kurtosis()
+
+    stats_text = f"mean: {mean:.3f}\nvariance: {variance:.3f}\nskewness: {skewness:.3f}\nkurtosis: {kurtosis:.3f}"
+    ax.text(1.02, 0.95, stats_text, transform=ax.transAxes, fontsize=10,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.6))
+
+    custom_colors = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
+        "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#393b79", "#ff9896",
+        "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
+        "#ffbb78", "#aec7e8"
+    ]
+
+    for idx, (i_dfname, group) in enumerate(df_filtered.groupby('dfname')):
+        group_data = group['norm_log_NGS_read_count'].dropna()
+        if len(group_data) < 2:
+            continue
+        density = stats.gaussian_kde(group_data)
+        y_vals = density(x_vals) * 100 * bin_width
+        color = custom_colors[idx % len(custom_colors)]
+        label = f"{i_dfname} ({len(group_data)})"
+        ax.plot(x_vals, y_vals, linewidth=1.5, label=label, color=color, zorder=1)
+
+    ax.set_title(f"dataset: {dfname}     motif: {motif}     number of DVGs: {n_rows}")
+
+    ax.set_xlabel("NGS read count")
+    ax.set_ylabel("distribution of DVGs (%)")
+
+    tick_indices = np.arange(0, len(bins), 5)
+    ax.set_xticks(bins[tick_indices])
+    ax.set_xticklabels([f"{bins[i]:.2f}" for i in tick_indices])
+
+    ax.legend(loc='best', fontsize='small', ncol=2)
+    ax.set_ylim(-2, 15)
+
+    save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}/motif")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"ngs_motif_{motif}_dist_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+def ngs_motif_count_list_stats(dfnames: list, dfs: list, motif: str):
+    ext_dfs = []
+    concat_df = pd.DataFrame
+    for dfname, df in zip(dfnames, dfs):
+        df = add_motif_count(df, motif)
+        df = add_norm_log_ngs_read_count(df)
+        df = add_dfname(dfname, df)
+        ext_dfs.append(df)
+    concat_df = pd.concat(ext_dfs, axis=0)
+    return concat_df
+
+############################
+### motif enrichment his ###
+############################
+
+def create_motif_histogram_plot(dfname: str, start_df: pd.DataFrame, end_df: pd.DataFrame,  motif_length: int, top_n: int = 50):
+    """
+
+    """
+    start_total = start_df["count"].sum()
+    end_total = end_df["count"].sum()
+
+    start_df = start_df.copy()
+    end_df = end_df.copy()
+    start_df["rel_freq"] = start_df["count"] / start_total * 100
+    end_df["rel_freq"] = end_df["count"] / end_total * 100
+
+    merged = pd.merge(start_df, end_df, on="motif", how="outer", suffixes=("_start", "_end")).fillna(0)
+    merged["total"] = merged["count_start"] + merged["count_end"]
+    top_motifs = merged.nlargest(top_n, "total")["motif"]
+
+    start_df = start_df[start_df["motif"].isin(top_motifs)].set_index("motif")
+    end_df = end_df[end_df["motif"].isin(top_motifs)].set_index("motif")
+
+    plot_df = pd.DataFrame({
+        "start_seq": start_df["rel_freq"],
+        "end_seq": end_df["rel_freq"]
+    }).fillna(0)
+
+    plot_df = plot_df.sort_values(by="start_seq", ascending=False)
+
+    fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
+    plot_df.plot(kind="bar", ax=ax, edgecolor="black", width=0.8)
+
+    ax.set_title(f"dataset: {dfname}     motif length: {motif_length}")
+    ax.set_xlabel("motif")
+    ax.set_ylabel("relative frequency (%)")
+    ax.legend(title="sequence part")
+    ax.tick_params(axis='x', labelrotation=90)
+
+    ax.set_ylim(0, 10)
+
+    save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"motif_{motif_length}_his_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+def motif_search(df: pd.DataFrame, motif_length: int):
+    """
+
+    """
+    seq1_motifs = []
+    seq2_motifs = []
+
+    for seq in df['seq_around_deletion_junction']:
+        if len(seq) != 20:
+            continue
+        seq1 = seq[:10]
+        seq2 = seq[10:]
+        seq1_motifs += [seq1[i: i + motif_length] for i in range(len(seq1) - motif_length + 1)]
+        seq2_motifs += [seq2[i: i + motif_length] for i in range(len(seq2) - motif_length + 1)]
+
+    seq1_counts = Counter(seq1_motifs)
+    seq2_counts = Counter(seq2_motifs)
+
+    df_seq1 = pd.DataFrame(seq1_counts.items(), columns=["motif", "count"])
+    df_seq2 = pd.DataFrame(seq2_counts.items(), columns=["motif", "count"])
+
+    return df_seq1, df_seq2
+
+############################
+### ngs enrichment ratio ### old
+############################
 
 def create_ngs_enrichment_ratio_plot(dfname: str, df: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(5, 3), tight_layout=True)
@@ -81,9 +297,9 @@ def ngs_enrichment_ratio(df: pd.DataFrame):
     ngs_df['NGS_read_count_ratio'] /= ngs_read_count_sum
     return ngs_df
 
-#####################################
-####### ENRICHMENT POSITIONS ########
-#####################################
+############################
+### enrichment positions ### old
+############################
 
 def create_enrichment_nucleotide_position_histogram(dfname: str, strain: str, segments: list, dfs: list, p_segments: list, p_dfs: list):
     for segment in SEGMENTS:
@@ -212,63 +428,83 @@ if __name__ == "__main__":
     plt.style.use("seaborn")
     plt.rc("font", size=12)
 
-    #####################################
-    ####### ENRICHMENT POSITIONS ########
-    ############ SINGLE USAGE ###########
-    #####################################
+    #################
+    ### SELECTION ###
+    #################
+
+    ### SINGLE ###
 
     # dfnames = ["Berry2021_B_Yam"]
     # dfs, _ = load_all(dfnames)
-
     # dfname = dfnames[0]
-    # df = dfs[0]
 
+    # df = dfs[0]
     # strain = DATASET_STRAIN_DICT[dfname]
+
+    ### MULTI ###
+
+    coordinates = "IBV"
+    dfname = coordinates
+    dfnames = get_dataset_names(cutoff=40, selection=coordinates)
+    dfs, _ = load_all(dfnames, False)
+
+    ############################
+    ### motif enrichment dis ###
+    ############################
+
+    ### multi ###
+
+    motif = "GAA"
+    df = ngs_motif_count_list_stats(dfnames, dfs, motif)
+    create_ngs_motif_dist_plot(dfname, df, motif)
+    create_ngs_motif_dist_st_plot(dfname, df, motif)
+
+    ############################
+    ### motif enrichment his ###
+    ############################
+
+    ### single ###
+
+    # motif_length = 3
+    # start_df, end_df = motif_search(df, motif_length)
+    # create_motif_histogram_plot(dfname, start_df, end_df, motif_length)
+
+    ### multi ###
+
+    # df = pd.concat(dfs, ignore_index=True)
+    # motif_length = 3
+    # start_df, end_df = motif_search(df, motif_length)
+    # create_motif_histogram_plot(dfname, start_df, end_df, motif_length)
+
+    ############################
+    ### enrichment positions ###
+    ############################
+
+    ### single ###
 
     # breakpoint_dfs, segments = find_breakpoint_positions(strain, df)
     # possible_dfs, p_segments = find_enrichment_positions(strain)
-
     # create_enrichment_nucleotide_position_histogram(dfname, strain, segments, breakpoint_dfs, p_segments, possible_dfs)
 
-    ##################################### same strain
-    ####### ENRICHMENT POSITIONS ######## same strain
-    ############ MULTI USAGE ############ same strain
-    ##################################### same strain
+    ### single concat ### same strain
 
-    # dfnames = ["Berry2021_B_Yam"]
-    # dfs, _ = load_all(dfnames)
-
-    # dfname = dfnames[0]
     # concat_pseudo_df = pd.concat(dfs, ignore_index=True)
-    # strain = DATASET_STRAIN_DICT[dfname]
     # dfname = strain
 
     # breakpoint_dfs, segments = find_breakpoint_positions(strain, df)
     # possible_dfs, p_segments = find_enrichment_positions(strain)
-
     # create_enrichment_nucleotide_position_histogram(dfname, strain, segments, breakpoint_dfs, p_segments, possible_dfs)
 
-    ###################################
-    ####### NGS ENRICHMENT RATIO ######
-    ########### SINGLE USAGE ##########
-    ###################################
+    ############################
+    ### ngs enrichment ratio ###
+    ############################
 
-    dfnames = ["Alnaji2021"]
-    dfs, _ = load_all(dfnames)
-    dfname = dfnames[0]
+    ### single ###
 
-    df = ngs_enrichment_ratio_concat(dfs)
-    create_ngs_enrichment_ratio_plot(dfname, df)
+    # df = ngs_enrichment_ratio_concat(dfs)
+    # create_ngs_enrichment_ratio_plot(dfname, df)
 
-    ###################################
-    ####### NGS ENRICHMENT RATIO ######
-    ########### MULTI USAGE ###########
-    ###################################
-
-    # coordinates = "IBV"
-    # dfname = coordinates
-    # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
-    # dfs, _ = load_all(dfnames, False)
+    ### multi ###
 
     # df = ngs_enrichment_ratio_concat(dfs)
     # create_ngs_enrichment_ratio_plot(dfname, df)
