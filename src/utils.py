@@ -1407,3 +1407,15 @@ def add_motif_count(df: pd.DataFrame, motif: str):
     df["end_motif_counter"] = end_counts
 
     return df
+
+######################
+### one hot encode ###
+######################
+
+def one_hot_encode(seq, max_len=200):
+    base_map = {'A': [1,0,0,0], 'U': [0,1,0,0], 'C': [0,0,1,0], 'G': [0,0,0,1]}
+    seq = seq.upper().replace('T', 'U')[:max_len]
+    encoded = [base_map.get(b, [0,0,0,0]) for b in seq]
+    while len(encoded) < max_len:
+        encoded.append([0,0,0,0])
+    return encoded
