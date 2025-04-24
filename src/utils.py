@@ -1257,9 +1257,19 @@ def get_dip_sequence(delvg_id: str, strain: str)-> Tuple[str, str, str]:
 #####################
 
 
-#################
+###############
 ### general ###
-#################
+###############
+
+def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    def compute_dvg_sequence(row):
+        full_seq = row['full_seq']
+        start = row['Start']
+        end = row['End']
+        return full_seq[:start] + full_seq[end-1:]
+
+    df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+    return df
 
 def add_dfname_list(dfnames: list, dfs: list) -> list:
     mod_dfs = []
@@ -1412,10 +1422,11 @@ def add_motif_count(df: pd.DataFrame, motif: str):
 ### one hot encode ###
 ######################
 
-def one_hot_encode(seq, max_len=200):
+def one_hot_encode(seq, max_len=3000):
     base_map = {'A': [1,0,0,0], 'U': [0,1,0,0], 'C': [0,0,1,0], 'G': [0,0,0,1]}
     seq = seq.upper().replace('T', 'U')[:max_len]
     encoded = [base_map.get(b, [0,0,0,0]) for b in seq]
     while len(encoded) < max_len:
         encoded.append([0,0,0,0])
     return encoded
+

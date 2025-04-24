@@ -18,6 +18,7 @@ from typing import List
 
 sys.path.insert(0, "..")
 from utils import load_dataset, get_dataset_names, load_all, join_data, preprocess, generate_expected_data
+from utils import add_dvg_sequence
 from utils import SEGMENTS, RESULTSPATH, DATASET_STRAIN_DICT, CMAP, NUCLEOTIDES, CUTOFF, DATAPATH
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
@@ -64,9 +65,11 @@ if __name__ == "__main__":
     '''
 
     dfnames = ["Berry2021_B_Yam"]
-    dfs, _ = load_all(dfnames, True)
-    resave(dfnames, dfs, "pre")
+    dfs, _ = load_all(dfnames)
+    dfname = dfnames[0]
+    df = dfs[0]
 
-    # dfnames = ["Alnaji2021"]
-    # dfs = tryout(dfnames)
-    # resave(dfnames, dfs, "tryout")
+    df = add_dvg_sequence(df)
+    dfs = [df]
+    resave(dfnames, dfs, "dvg")
+
