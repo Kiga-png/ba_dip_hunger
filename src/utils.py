@@ -1261,6 +1261,16 @@ def get_dip_sequence(delvg_id: str, strain: str)-> Tuple[str, str, str]:
 ### general ###
 ###############
 
+def add_slector_list(dfs: list, selectors: list) -> list:
+    mod_dfs = []
+    for df, selector in zip(dfs, selectors):
+        mod_dfs.append(add_selector(df, selector))
+    return mod_dfs
+
+def add_selector(df: pd.DataFrame, selector: str) -> pd.DataFrame:
+    df['selector'] = selector
+    return df
+
 def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     def compute_dvg_sequence(row):
         full_seq = row['full_seq']
@@ -1280,6 +1290,14 @@ def add_dfname_list(dfnames: list, dfs: list) -> list:
 def add_dfname(dfname: str, df: pd.DataFrame) -> pd.DataFrame:
     df['dfname'] = dfname
     return df
+
+def get_selctors(selector_category: str):
+    if selector_category == "virus":
+        return ["IAV", "IBV"]
+    if selector_category == "model":
+        return ["in vivo human", "in vivo mouse", "in vitro"]
+    if selector_category == "all":
+        return ["IAV", "IBV", "in vivo human", "in vivo mouse", "in vitro"]
 
 ######################
 ### ngs read count ###
@@ -1395,7 +1413,6 @@ def add_motif_count(df: pd.DataFrame, motif: str):
 
     """
     pattern = f'(?={re.escape(motif)})'
-
     start_counts = []
     end_counts = []
 
@@ -1405,8 +1422,8 @@ def add_motif_count(df: pd.DataFrame, motif: str):
             end_counts.append(0)
             continue
 
-        seq1 = seq[:10]
-        seq2 = seq[10:]
+        seq1 = seq[0:5]
+        seq2 = seq[15:20]
         start_match_count = len(list(re.finditer(pattern, seq1)))
         end_match_count = len(list(re.finditer(pattern, seq2)))
         start_counts.append(start_match_count)

@@ -217,13 +217,13 @@ if __name__ == "__main__":
 
     ### SINGLE ###
 
-    dfnames = ["Berry2021_B_Yam"]
+    dfnames = ["Alnaji2019_Cal07"]
     dfs, _ = load_all(dfnames)
     dfname = dfnames[0]
 
     ### MULTI ###
 
-    # coordinates = "IBV"
+    # coordinates = "IAV"
     # dfname = coordinates
     # dfnames = get_dataset_names(cutoff=40, selection=coordinates)
     # dfs, _ = load_all(dfnames, False)
@@ -234,9 +234,9 @@ if __name__ == "__main__":
 
     ### single ###
 
-    dfs = add_norm_log_ngs_read_count_list(dfs)
-    df = pd.concat(dfs, axis=0)
-    create_norm_ngs_read_count_dist(dfname, df)
+    # dfs = add_norm_log_ngs_read_count_list(dfs)
+    # df = pd.concat(dfs, axis=0)
+    # create_norm_ngs_read_count_dist(dfname, df)
 
     ### multi ###
 
@@ -256,9 +256,9 @@ if __name__ == "__main__":
 
     ### multi ###
 
-    # dfs = add_norm_log_ngs_read_count_list(dfs)
-    # df = pd.concat(dfs, axis=0)
-    # create_norm_ngs_read_count_reg(dfname, df)
+    dfs = add_norm_log_ngs_read_count_list(dfs)
+    df = pd.concat(dfs, axis=0)
+    create_norm_ngs_read_count_reg(dfname, df)
 
     ######################
     ### raw ngs histo ####
