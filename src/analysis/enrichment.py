@@ -15,11 +15,90 @@ from collections import Counter
 
 sys.path.insert(0, "..")
 from utils import load_dataset, get_dataset_names, load_all, get_seq_len
-from utils import add_motif_count, add_norm_log_ngs_read_count, add_dfname, add_selector, get_selctors
+from utils import add_motif_count, add_norm_log_ngs_read_count, add_dfname, add_selector, add_nucleotide_count, get_selctors
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
+from utils import CUSTOM_COLORS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 
+
+############################
+### nucleotide count dis ###
+############################
+
+def create_ngs_nucleotide_dist_plot(dfname: str, df: pd.DataFrame, nucleotide: str):
+    fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
+
+    df_filtered = df
+    n_rows = df_filtered.shape[0]
+
+    max_value = 1.0
+    bins = np.linspace(0, max_value, 101)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_width = bins[1] - bins[0]
+
+    data_all = df_filtered['norm_log_NGS_read_count'].dropna()
+    density_all = stats.gaussian_kde(data_all)
+    x_vals = np.linspace(0, 1, 500)
+    y_vals_all = density_all(x_vals) * 100 * bin_width
+    label_all = f"all datasets ({len(data_all)})"
+    ax.plot(x_vals, y_vals_all, color='gray', linewidth=1.5, label=label_all, zorder=5)
+
+    mean = data_all.mean()
+    variance = data_all.var()
+    skewness = data_all.skew()
+    kurtosis = data_all.kurtosis()
+
+    stats_text = f"mean: {mean:.3f}\nvariance: {variance:.3f}\nskewness: {skewness:.3f}\nkurtosis: {kurtosis:.3f}"
+    ax.text(1.02, 0.95, stats_text, transform=ax.transAxes, fontsize=10,
+            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.6))
+
+
+    for idx, (i_dfname, group) in enumerate(df_filtered.groupby(f'{nucleotide}_count')):
+        group_data = group['norm_log_NGS_read_count'].dropna()
+        if len(group_data) < 2:
+            continue
+        density = stats.gaussian_kde(group_data)
+        y_vals = density(x_vals) * 100 * bin_width
+        color = CUSTOM_COLORS[idx % len(CUSTOM_COLORS)]
+        label = f"{i_dfname} ({len(group_data)})"
+        ax.plot(x_vals, y_vals, linewidth=1.5, label=label, color=color, zorder=1)
+
+    ax.set_title(f"dataset: {dfname}     nucleotide: {nucleotide}     number of DVGs: {n_rows}")
+
+    ax.set_xlabel("NGS read count")
+    ax.set_ylabel("distribution of DVGs (%)")
+
+    tick_indices = np.arange(0, len(bins), 5)
+    ax.set_xticks(bins[tick_indices])
+    ax.set_xticklabels([f"{bins[i]:.2f}" for i in tick_indices])
+
+    ax.legend(loc='best', fontsize='small', ncol=2)
+    ax.set_ylim(-2, 15)
+
+    save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}/nucleotide")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"ngs_nucleotide_{nucleotide}_dist_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+##############################
+### nucleotide count stats ###
+##############################
+
+def ngs_nucleotide_count_list_stats(dfnames: list, dfs: list, selector: str, nucleotide: str):
+    ext_dfs = []
+    concat_df = pd.DataFrame
+
+    for dfname, df in zip(dfnames, dfs):
+        df = add_nucleotide_count(df, nucleotide)
+        df = add_norm_log_ngs_read_count(df)
+        df = add_dfname(dfname, df)
+        df = add_selector(df, selector)
+        ext_dfs.append(df)
+
+    concat_df = pd.concat(ext_dfs, axis=0)
+    return concat_df
 
 #################################
 ### motif enrichment dist adv ###
@@ -120,20 +199,13 @@ def create_ngs_motif_dist_adv_plot(dfname: str, df: pd.DataFrame, motif: str):
     ax.text(1.02, 0.95, stats_text, transform=ax.transAxes, fontsize=10,
             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.6))
 
-    custom_colors = [
-        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
-        "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#393b79", "#ff9896",
-        "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
-        "#ffbb78", "#aec7e8"
-    ]
-
     for idx, (i_dfname, group) in enumerate(df_filtered.groupby('selector')):
         group_data = group['norm_log_NGS_read_count'].dropna()
         if len(group_data) < 2:
             continue
         density = stats.gaussian_kde(group_data)
         y_vals = density(x_vals) * 100 * bin_width
-        color = custom_colors[idx % len(custom_colors)]
+        color = CUSTOM_COLORS[idx % len(CUSTOM_COLORS)]
         label = f"{i_dfname} ({len(group_data)})"
         ax.plot(x_vals, y_vals, linewidth=1.5, label=label, color=color, zorder=1)
 
@@ -254,20 +326,13 @@ def create_ngs_motif_dist_plot(dfname: str, df: pd.DataFrame, motif: str):
     ax.text(1.02, 0.95, stats_text, transform=ax.transAxes, fontsize=10,
             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.6))
 
-    custom_colors = [
-        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
-        "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#393b79", "#ff9896",
-        "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
-        "#ffbb78", "#aec7e8"
-    ]
-
     for idx, (i_dfname, group) in enumerate(df_filtered.groupby('dfname')):
         group_data = group['norm_log_NGS_read_count'].dropna()
         if len(group_data) < 2:
             continue
         density = stats.gaussian_kde(group_data)
         y_vals = density(x_vals) * 100 * bin_width
-        color = custom_colors[idx % len(custom_colors)]
+        color = CUSTOM_COLORS[idx % len(CUSTOM_COLORS)]
         label = f"{i_dfname} ({len(group_data)})"
         ax.plot(x_vals, y_vals, linewidth=1.5, label=label, color=color, zorder=1)
 
@@ -320,11 +385,95 @@ def ngs_motif_count_list_stats(dfnames: list, dfs: list, selector: str, motif: s
     concat_df = pd.concat(ext_dfs, axis=0)
     return concat_df
 
+################################
+### motif enrichment his adv ###
+################################
+
+def create_motif_histogram_adv_plot(dfname: str, rows: list, dfs: list[pd.DataFrame], labels: list, motif_length: int, top_n: int = 20):
+    """
+    Creates a motif frequency histogram from multiple sequence regions.
+    Motifs are ranked by sum of relative frequency across all regions.
+    Total counts are displayed above bars.
+    """
+
+    rel_freqs = []
+    n_rows = sum(rows)
+
+    for i, df in enumerate(dfs):
+        df = df.copy()
+        total = df["count"].sum()
+        df["rel_freq"] = df["count"] / total * 100
+        df["part"] = labels[i]
+        rel_freqs.append(df[["motif", "rel_freq", "part"]])
+
+    combined_df = pd.concat(rel_freqs, ignore_index=True)
+
+    slc_labels = labels
+    label_with_counts = [f"{label} ({count})" for label, count in zip(labels, rows)]
+
+    slc_df = combined_df[combined_df["part"].isin(slc_labels)]
+    total_rel_freq = slc_df.groupby("motif")["rel_freq"].sum()
+    top_motifs = total_rel_freq.nlargest(top_n).index
+
+    filtered = combined_df[combined_df["motif"].isin(top_motifs)]
+    plot_df = filtered.pivot(index="motif", columns="part", values="rel_freq").fillna(0)
+    plot_df = plot_df.loc[top_motifs]
+    plot_df = plot_df[labels]
+
+    filtered_dfs = [df[df["motif"].isin(top_motifs)] for df in dfs]
+    combined_counts = pd.concat(filtered_dfs, ignore_index=True)
+    motif_total_counts = combined_counts.groupby("motif")["count"].sum()
+    motif_total_counts = motif_total_counts.loc[top_motifs]
+
+    fig, ax = plt.subplots(figsize=(13, 5), tight_layout=True)
+    colors = ["#e41a1c", "#377eb8", "#4daf4a"]
+    plot_df.plot(kind="bar", ax=ax, edgecolor="black", width=0.8, color=colors)
+
+    for i, (motif, total_count) in enumerate(motif_total_counts.items()):
+        y_offset = plot_df.loc[motif].max() + 0.5
+        ax.text(i, y_offset, f"{int(total_count)}", ha="center", va="bottom", fontsize=10)
+
+    ax.set_title(f"dataset: {dfname}     motif length: {motif_length}     number of DVGs: {n_rows}")
+    ax.set_xlabel("motif")
+    ax.set_ylabel("relative frequency (%)")
+    ax.legend(title="sequence part", labels=label_with_counts)
+    ax.tick_params(axis='x', labelrotation=90)
+    ax.set_ylim(0, 10)
+
+    save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}/motif")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"motif_{motif_length}_his_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+def motif_search_adv(selectors: list, motif_length: int):
+    ext_dfs = []
+    rows = []
+
+    for selector in selectors:
+        dfnames = get_dataset_names(cutoff=40, selection=selector)
+        dfs, _ = load_all(dfnames, False)
+        df = pd.concat(dfs, ignore_index=True)
+        n_rows = df.shape[0]
+        seqs = motif_search(df, motif_length)
+
+        df = (
+            pd.concat([seqs[0], seqs[3]])
+            .groupby("motif", as_index=False)
+            .sum()
+            .sort_values(by="count", ascending=False)
+        )
+
+        ext_dfs.append(df)
+        rows.append(n_rows)
+        
+    return ext_dfs, rows
+
 ############################
 ### motif enrichment his ###
 ############################
 
-def create_motif_histogram_plot(dfname: str, dfs: list[pd.DataFrame], motif_length: int, top_n: int = 20):
+def create_motif_histogram_plot(dfname: str, n_rows: int, dfs: list[pd.DataFrame], motif_length: int, top_n: int = 20):
     """
     Creates a motif frequency histogram from 4 sequence regions.
     Motifs are ranked by sum of relative frequency in site_start and site_end.
@@ -337,7 +486,6 @@ def create_motif_histogram_plot(dfname: str, dfs: list[pd.DataFrame], motif_leng
     labels = ["site_start", "del_start", "del_end", "site_end"]
     rel_freqs = []
 
-    # Berechne relative Häufigkeit je Bereich
     for i, df in enumerate(dfs):
         df = df.copy()
         total = df["count"].sum()
@@ -347,45 +495,38 @@ def create_motif_histogram_plot(dfname: str, dfs: list[pd.DataFrame], motif_leng
 
     combined_df = pd.concat(rel_freqs, ignore_index=True)
 
-    # Verwende nur site_start und site_end zur Auswahl der Top-N-Motive
     slc_labels = ["site_start", "site_end"]
     slc_df = combined_df[combined_df["part"].isin(slc_labels)]
     total_rel_freq = slc_df.groupby("motif")["rel_freq"].sum()
     top_motifs = total_rel_freq.nlargest(top_n).index
 
-    # Filtere Daten für Plot
     filtered = combined_df[combined_df["motif"].isin(top_motifs)]
     plot_df = filtered.pivot(index="motif", columns="part", values="rel_freq").fillna(0)
     plot_df = plot_df.loc[top_motifs]
     plot_df = plot_df[["site_start", "del_start", "del_end", "site_end"]]
 
-    # Gesamt-Counts nur aus site_start und site_end
     site_start_df = dfs[0][dfs[0]["motif"].isin(top_motifs)]
     site_end_df = dfs[3][dfs[3]["motif"].isin(top_motifs)]
     combined_counts = pd.concat([site_start_df, site_end_df], ignore_index=True)
     motif_total_counts = combined_counts.groupby("motif")["count"].sum()
     motif_total_counts = motif_total_counts.loc[top_motifs]
 
-    # Plot
     fig, ax = plt.subplots(figsize=(13, 5), tight_layout=True)
     colors = ["#1f77b4", "#6baed6", "#74c476", "#2ca02c"]
     plot_df.plot(kind="bar", ax=ax, edgecolor="black", width=0.8, color=colors)
 
-    # Text mit Gesamt-Count anzeigen
     for i, (motif, total_count) in enumerate(motif_total_counts.items()):
         y_offset = plot_df.loc[motif].max() + 0.5
         ax.text(i, y_offset, f"{int(total_count)}", ha="center", va="bottom", fontsize=10)
 
-    # Layout
-    ax.set_title(f"dataset: {dfname}     motif length: {motif_length}")
+    ax.set_title(f"dataset: {dfname}     motif length: {motif_length}     number of DVGs: {n_rows}")
     ax.set_xlabel("motif")
     ax.set_ylabel("relative frequency (%)")
     ax.legend(title="sequence part")
     ax.tick_params(axis='x', labelrotation=90)
     ax.set_ylim(0, 10)
 
-    # Speichern
-    save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}")
+    save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}/motif")
     os.makedirs(save_path, exist_ok=True)
     fname = f"motif_{motif_length}_his_{dfname}.png"
     plt.savefig(os.path.join(save_path, fname), dpi=300)
@@ -628,10 +769,20 @@ if __name__ == "__main__":
 
     ### MULTI ###
 
-    # selector = "IAV"
+    # selector = "in vitro"
     # dfname = selector
     # dfnames = get_dataset_names(cutoff=40, selection=selector)
     # dfs, _ = load_all(dfnames, False)
+
+    ############################
+    ### nucleotide count dis ###
+    ############################
+
+    ### multi ###
+
+    # nucleotide = "A"
+    # df = ngs_nucleotide_count_list_stats(dfnames, dfs, selector, nucleotide)
+    # create_ngs_nucleotide_dist_plot(dfname, df, nucleotide)
 
     #################################
     ### motif enrichment dist adv ###
@@ -639,13 +790,13 @@ if __name__ == "__main__":
 
     ### auto ###
 
-    motif = "AAA"
-    selector_category = "virus"
-    dfname = selector_category
-    selectors = get_selctors(selector_category)
-    df = ngs_motif_count_list_stats_adv(selectors, motif)
-    create_ngs_motif_dist_adv_plot(dfname, df, motif)
-    create_ngs_motif_dist_adv_st_plot(dfname, df, motif)
+    # motif = "AAA"
+    # selector_category = "virus"
+    # dfname = selector_category
+    # selectors = get_selctors(selector_category)
+    # df = ngs_motif_count_list_stats_adv(selectors, motif)
+    # create_ngs_motif_dist_adv_plot(dfname, df, motif)
+    # create_ngs_motif_dist_adv_st_plot(dfname, df, motif)
 
     ############################
     ### motif enrichment dis ###
@@ -658,22 +809,37 @@ if __name__ == "__main__":
     # create_ngs_motif_dist_plot(dfname, df, motif)
     # create_ngs_motif_dist_st_plot(dfname, df, motif)
 
+    ################################
+    ### motif enrichment his adv ###
+    ################################
+
+    ### auto ###
+
+    motif_length = 3
+    selector_category = "model"
+    dfname = selector_category
+    selectors = get_selctors(selector_category)
+    dfs, rows = motif_search_adv(selectors, motif_length)
+    create_motif_histogram_adv_plot(dfname, rows, dfs, selectors, motif_length)
+
     ############################
     ### motif enrichment his ###
     ############################
 
     ### single ###
 
+    # n_rows = df.shape[0]
     # motif_length = 3
     # seq_dfs = motif_search(df, motif_length)
-    # create_motif_histogram_plot(dfname, seq_dfs, motif_length)
+    # create_motif_histogram_plot(dfname, n_rows, seq_dfs, motif_length)
 
     ### multi ###
 
     # df = pd.concat(dfs, ignore_index=True)
+    # n_rows = df.shape[0]
     # motif_length = 3
     # seq_dfs = motif_search(df, motif_length)
-    # create_motif_histogram_plot(dfname, seq_dfs, motif_length)
+    # create_motif_histogram_plot(dfname, n_rows, seq_dfs, motif_length)
 
     ############################
     ### enrichment positions ### old

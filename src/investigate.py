@@ -64,12 +64,19 @@ if __name__ == "__main__":
 
     '''
 
-    dfnames = ["Berry2021_B_Yam"]
-    dfs, _ = load_all(dfnames)
-    dfname = dfnames[0]
-    df = dfs[0]
+    # dfnames = ["Berry2021_B_Yam"]
+    # dfs, _ = load_all(dfnames)
+    # dfname = dfnames[0]
+    # df = dfs[0]
 
-    df = add_dvg_sequence(df)
-    dfs = [df]
-    resave(dfnames, dfs, "dvg")
+    # df = add_dvg_sequence(df)
+    # dfs = [df]
+    # resave(dfnames, dfs, "dvg")
+
+    selector = "IBV"
+    dfname = selector
+    dfnames = get_dataset_names(cutoff=40, selection=selector)
+    dfs, _ = load_all(dfnames, False)
+    df = pd.concat(dfs, ignore_index=True)
+    print(df.shape[0])
 

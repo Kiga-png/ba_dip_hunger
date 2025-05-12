@@ -897,9 +897,9 @@ def get_p_value_symbol(p: float)-> str:
 
         :return: string indicating the significance level
     '''
-    if p < 0.00001:
+    if p < 0.005:
         return "***"
-    elif p < 0.001:
+    elif p < 0.01:
         return "** "
     elif p < 0.05:
         return " * "
@@ -1252,10 +1252,16 @@ def get_dip_sequence(delvg_id: str, strain: str)-> Tuple[str, str, str]:
     del_length = int(end)-int(start)
     return seq_head + "*"*del_length + seq_foot, seq_head, seq_foot
 
-#####################
-### NEW FUNCTIONS ###
-#####################
+################
+### NEW WORK ###
+################
 
+CUSTOM_COLORS = [
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
+    "#e377c2", "#ff1493", "#bcbd22", "#17becf", "#393b79", "#ff9896",
+    "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
+    "#ffbb78", "#aec7e8"
+]
 
 ###############
 ### general ###
@@ -1306,6 +1312,22 @@ def get_selctors(selector_category: str):
 def add_dist_ngs_read_count(df: pd.DataFrame):
     sum = df['NGS_read_count'].sum()
     df['dist_NGS_read_count'] = df['NGS_read_count'] / sum
+    return df
+
+def add_ngs_percentile_rank_list(dfs: list):
+    mod_dfs = []
+    for df in dfs:
+        mod_dfs.append(add_ngs_percentile_rank(df))
+    return mod_dfs
+
+def add_ngs_percentile_rank(df: pd.DataFrame):
+    df = df.copy()
+    df['NGS_percentile_rank'] = pd.qcut(
+        df['NGS_read_count'],
+        q=10,
+        labels=False,
+        duplicates='drop'
+    )
     return df
 
 ######################
@@ -1408,30 +1430,46 @@ def add_direct_repeat_len(df: pd.DataFrame):
 ### motif enrichment ###
 ########################
 
+def add_nucleotide_count(df: pd.DataFrame, nucleotide: str):
+    """
+
+    """
+    nucleotide_counts = []
+
+    for seq in df['seq_around_deletion_junction']:
+        if len(seq) != 20:
+            nucleotide_counts.append(0)
+            continue
+
+        seq1 = seq[0:5]
+        seq2 = seq[15:20]
+        nucleotide_count = seq1.count(nucleotide) + seq2.count(nucleotide)
+        nucleotide_counts.append(nucleotide_count)
+
+    df = df.copy()
+    df[f"{nucleotide}_count"] = nucleotide_counts
+
+    return df  
+
 def add_motif_count(df: pd.DataFrame, motif: str):
     """
 
     """
     pattern = f'(?={re.escape(motif)})'
-    start_counts = []
-    end_counts = []
+    motif_counts = []
 
     for seq in df['seq_around_deletion_junction']:
         if len(seq) != 20:
-            start_counts.append(0)
-            end_counts.append(0)
+            motif_counts.append(0)
             continue
 
         seq1 = seq[0:5]
         seq2 = seq[15:20]
-        start_match_count = len(list(re.finditer(pattern, seq1)))
-        end_match_count = len(list(re.finditer(pattern, seq2)))
-        start_counts.append(start_match_count)
-        end_counts.append(end_match_count)
+        motif_count = len(list(re.finditer(pattern, seq1))) + len(list(re.finditer(pattern, seq2)))
+        motif_counts.append(motif_count)
 
     df = df.copy()
-    df["start_motif_counter"] = start_counts
-    df["end_motif_counter"] = end_counts
+    df[f"{motif}_count"] = motif_counts
 
     return df
 
@@ -1446,4 +1484,3 @@ def one_hot_encode(seq, max_len=3000):
     while len(encoded) < max_len:
         encoded.append([0,0,0,0])
     return encoded
-
