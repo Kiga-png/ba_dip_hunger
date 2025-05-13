@@ -1019,18 +1019,25 @@ if __name__ == "__main__":
     dfnames = get_dataset_names(cutoff=40, selection=selector)
     dfs, _ = load_all(dfnames, False)
 
+    dfs = add_ngs_percentile_rank_list(dfs)
+    dfs = [df[df["NGS_percentile_rank"] == 9] for df in dfs]
+
     #####################################
     ### ngs dr ratio per dvg dist adv ###
     #####################################
 
     ### auto ###
 
-    # selector_category = "model"
-    # dfname = selector_category
-    # selectors = get_selctors(selector_category)
-    # df = ngs_repeat_length_list_stats_adv(selectors)
-    # create_ngs_repeat_dist_adv_plot(dfname, df)
-    # create_ngs_repeat_dist_adv_st_plot(dfname, df)
+    selector_category = "model"
+    dfname = selector_category
+    selectors = get_selctors(selector_category)
+    df = ngs_repeat_length_list_stats_adv(selectors)
+
+    df = add_ngs_percentile_rank(df)
+    df = df[df["NGS_percentile_rank"] == 5]
+
+    create_ngs_repeat_dist_adv_plot(dfname, df, "per5_")
+    create_ngs_repeat_dist_adv_st_plot(dfname, df, "per5_")
 
     #################################
     ### ngs dr ratio per dvg dist ###
@@ -1039,8 +1046,8 @@ if __name__ == "__main__":
     ### multi ###
 
     # df = ngs_repeat_length_list_stats(dfnames, dfs, selector)
-    # create_ngs_repeat_dist_plot(dfname, df)
-    # create_ngs_repeat_dist_st_plot(dfname, df)
+    # create_ngs_repeat_dist_plot(dfname, df, "per9_")
+    # create_ngs_repeat_dist_st_plot(dfname, df, "per9_")
 
     ################################
     ### ngs dr ratio per dvg reg ###
@@ -1071,7 +1078,7 @@ if __name__ == "__main__":
     # concat_df = pd.concat(dfs, ignore_index=True)
     # n_rows = concat_df.shape[0]
     # df = ngs_repeat_ratio_dvg_list_bar(dfnames, dfs)
-    # create_ngs_repeat_ratio_dvg_vio_plot(dfname, df, n_rows)
+    # create_ngs_repeat_ratio_dvg_vio_plot(dfname, df, n_rows, "per9_")
 
     ################################
     ### ngs dr ratio per dvg bar ###
@@ -1079,13 +1086,10 @@ if __name__ == "__main__":
 
     ### multi ###
 
-    dfs = add_ngs_percentile_rank_list(dfs)
-    dfs = [df[df["NGS_percentile_rank"] == 9] for df in dfs]
-
-    concat_df = pd.concat(dfs, ignore_index=True)
-    n_rows = concat_df.shape[0]
-    df = ngs_repeat_ratio_dvg_list_bar(dfnames, dfs)
-    create_ngs_repeat_ratio_dvg_bar_plot(dfname, df, n_rows, "per_9_")
+    # concat_df = pd.concat(dfs, ignore_index=True)
+    # n_rows = concat_df.shape[0]
+    # df = ngs_repeat_ratio_dvg_list_bar(dfnames, dfs)
+    # create_ngs_repeat_ratio_dvg_bar_plot(dfname, df, n_rows, "per9_")
 
     ############################
     ### ngs dr ratio per dvg ###

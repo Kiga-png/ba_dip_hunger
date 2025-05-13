@@ -15,7 +15,7 @@ from collections import Counter
 
 sys.path.insert(0, "..")
 from utils import load_dataset, get_dataset_names, load_all, get_seq_len
-from utils import add_motif_count, add_norm_log_ngs_read_count, add_dfname, add_selector, add_nucleotide_count, get_selctors
+from utils import add_motif_count, add_norm_log_ngs_read_count, add_dfname, add_selector, add_nucleotide_count, get_selctors, add_ngs_percentile_rank, add_ngs_percentile_rank_list
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 from utils import CUSTOM_COLORS
 
@@ -107,7 +107,7 @@ def ngs_nucleotide_count_list_stats(dfnames: list, dfs: list, selector: str, nuc
 def create_ngs_motif_dist_adv_st_plot(dfname: str, df: pd.DataFrame, motif: str):
     fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
 
-    df_filtered = df[(df["start_motif_counter"] != 0) | (df["end_motif_counter"] != 0)]
+    df_filtered = df[df[f"{motif}_count"] != 0]
     n_rows = df_filtered.shape[0]
 
     max_value = 1.0
@@ -175,7 +175,7 @@ def create_ngs_motif_dist_adv_st_plot(dfname: str, df: pd.DataFrame, motif: str)
 def create_ngs_motif_dist_adv_plot(dfname: str, df: pd.DataFrame, motif: str):
     fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
 
-    df_filtered = df[(df["start_motif_counter"] != 0) | (df["end_motif_counter"] != 0)]
+    df_filtered = df[df[f"{motif}_count"] != 0]
     n_rows = df_filtered.shape[0]
 
     max_value = 1.0
@@ -234,7 +234,7 @@ def create_ngs_motif_dist_adv_plot(dfname: str, df: pd.DataFrame, motif: str):
 def create_ngs_motif_dist_st_plot(dfname: str, df: pd.DataFrame, motif: str):
     fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
 
-    df_filtered = df[(df["start_motif_counter"] != 0) | (df["end_motif_counter"] != 0)]
+    df_filtered = df[df[f"{motif}_count"] != 0]
     n_rows = df_filtered.shape[0]
 
     max_value = 1.0
@@ -302,7 +302,7 @@ def create_ngs_motif_dist_st_plot(dfname: str, df: pd.DataFrame, motif: str):
 def create_ngs_motif_dist_plot(dfname: str, df: pd.DataFrame, motif: str):
     fig, ax = plt.subplots(figsize=(11, 3), tight_layout=True)
 
-    df_filtered = df[(df["start_motif_counter"] != 0) | (df["end_motif_counter"] != 0)]
+    df_filtered = df[df[f"{motif}_count"] != 0]
     n_rows = df_filtered.shape[0]
 
     max_value = 1.0
@@ -769,10 +769,13 @@ if __name__ == "__main__":
 
     ### MULTI ###
 
-    # selector = "in vitro"
-    # dfname = selector
-    # dfnames = get_dataset_names(cutoff=40, selection=selector)
-    # dfs, _ = load_all(dfnames, False)
+    selector = "IBV"
+    dfname = selector
+    dfnames = get_dataset_names(cutoff=40, selection=selector)
+    dfs, _ = load_all(dfnames, False)
+
+    # dfs = add_ngs_percentile_rank_list(dfs)
+    # dfs = [df[df["NGS_percentile_rank"] == 9] for df in dfs]
 
     ############################
     ### nucleotide count dis ###
@@ -815,12 +818,12 @@ if __name__ == "__main__":
 
     ### auto ###
 
-    motif_length = 3
-    selector_category = "model"
-    dfname = selector_category
-    selectors = get_selctors(selector_category)
-    dfs, rows = motif_search_adv(selectors, motif_length)
-    create_motif_histogram_adv_plot(dfname, rows, dfs, selectors, motif_length)
+    # motif_length = 5
+    # selector_category = "virus"
+    # dfname = selector_category
+    # selectors = get_selctors(selector_category)
+    # dfs, rows = motif_search_adv(selectors, motif_length)
+    # create_motif_histogram_adv_plot(dfname, rows, dfs, selectors, motif_length)
 
     ############################
     ### motif enrichment his ###
