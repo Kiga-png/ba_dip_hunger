@@ -10,12 +10,14 @@ import seaborn as sns
 import pandas as pd
 
 from scipy import stats
+from scipy.stats import ttest_ind, mannwhitneyu
+from itertools import combinations
 from typing import Tuple
 from collections import Counter
 
 sys.path.insert(0, "..")
-from utils import load_dataset, get_dataset_names, load_all, get_seq_len
-from utils import add_motif_count, add_norm_log_ngs_read_count, add_dfname, add_selector, add_nucleotide_count, get_selctors, add_ngs_percentile_rank, add_ngs_percentile_rank_list
+from utils import load_dataset, get_dataset_names, load_all, get_seq_len, get_p_value_symbol
+from utils import add_motif_count, add_norm_log_ngs_read_count, add_dfname, add_selector, add_nucleotide_count, get_selctors, add_dvg_sequence, add_ngs_percentile_rank, add_ngs_percentile_rank_list
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 from utils import CUSTOM_COLORS
 
@@ -389,13 +391,15 @@ def ngs_motif_count_list_stats(dfnames: list, dfs: list, selector: str, motif: s
 ### motif enrichment his adv ###
 ################################
 
-def create_motif_histogram_adv_plot(dfname: str, rows: list, dfs: list[pd.DataFrame], labels: list, motif_length: int, top_n: int = 20):
+### old ###
+def create_motif_histogram_adv_plot(dfname: str, rows: list, dfs: list[pd.DataFrame], labels: list, motif_length: int):
     """
     Creates a motif frequency histogram from multiple sequence regions.
     Motifs are ranked by sum of relative frequency across all regions.
     Total counts are displayed above bars.
     """
 
+    top_n: int = 20
     rel_freqs = []
     n_rows = sum(rows)
 
@@ -469,16 +473,75 @@ def motif_search_adv(selectors: list, motif_length: int):
         
     return ext_dfs, rows
 
+#######################################
+### motif enrichment his background ###
+#######################################
+
+def create_motif_histogram_plot_background(dfname: str, n_rows: int, df: pd.DataFrame, motif_length: int, name_mod: str = ""):
+    """
+    Creates a motif frequency histogram from a single sequence region.
+    Motifs are ranked by their relative frequency.
+    Total counts are displayed above bars.
+    """
+
+    top_n: int = 20
+
+    df = df.copy()
+    total = df["count"].sum()
+    df["rel_freq"] = df["count"] / total * 100
+
+    top_motifs = df.nlargest(top_n, "rel_freq")["motif"]
+    plot_df = df[df["motif"].isin(top_motifs)].set_index("motif")
+    plot_df = plot_df.loc[top_motifs]
+
+    fig, ax = plt.subplots(figsize=(13, 5), tight_layout=True)
+    color = "#1f77b4"
+    plot_df["rel_freq"].plot(kind="bar", ax=ax, edgecolor="black", width=0.8, color=color)
+
+    for i, (motif, row) in enumerate(plot_df.iterrows()):
+        y_offset = row["rel_freq"] + 0.5
+        ax.text(i, y_offset, f"{int(row['count'])}", ha="center", va="bottom", fontsize=10)
+
+    ax.set_title(f"dataset: {dfname} ({name_mod})    motif length: {motif_length}     number of DVGs: {n_rows}")
+    ax.set_xlabel("motif")
+    ax.set_ylabel("relative frequency (%)")
+    ax.tick_params(axis='x', labelrotation=90)
+    ax.set_ylim(0, 10)
+
+    save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}/motif")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"{name_mod}motif_bg_{motif_length}_his_{dfname}.png"
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+def motif_search_background(df: pd.DataFrame, motif_length: int):
+    """
+
+    """
+    all_motifs = []
+
+    for seq in df['dvg_sequence']:
+        if len(seq) < motif_length:
+            continue
+
+        all_motifs += [seq[i:i + motif_length] for i in range(len(seq) - motif_length + 1)]
+
+    df_motifs = pd.DataFrame(Counter(all_motifs).items(), columns=["motif", "count"])
+
+    return df_motifs
+
 ############################
 ### motif enrichment his ###
 ############################
 
-def create_motif_histogram_plot(dfname: str, n_rows: int, dfs: list[pd.DataFrame], motif_length: int, top_n: int = 20):
+def create_motif_histogram_plot(dfname: str, n_rows: int, dfs: list[pd.DataFrame], motif_length: int, name_mod: str = ""):
     """
     Creates a motif frequency histogram from 4 sequence regions.
     Motifs are ranked by sum of relative frequency in site_start and site_end.
     Total counts (only from site_start and site_end) are displayed above bars.
     """
+
+    top_n: int = 20
 
     if len(dfs) != 4:
         raise ValueError("expected list of 4 DataFrames, got {}".format(len(dfs)))
@@ -519,7 +582,7 @@ def create_motif_histogram_plot(dfname: str, n_rows: int, dfs: list[pd.DataFrame
         y_offset = plot_df.loc[motif].max() + 0.5
         ax.text(i, y_offset, f"{int(total_count)}", ha="center", va="bottom", fontsize=10)
 
-    ax.set_title(f"dataset: {dfname}     motif length: {motif_length}     number of DVGs: {n_rows}")
+    ax.set_title(f"dataset: {dfname} ({name_mod})    motif length: {motif_length}     number of DVGs: {n_rows}")
     ax.set_xlabel("motif")
     ax.set_ylabel("relative frequency (%)")
     ax.legend(title="sequence part")
@@ -528,7 +591,7 @@ def create_motif_histogram_plot(dfname: str, n_rows: int, dfs: list[pd.DataFrame
 
     save_path = os.path.join(RESULTSPATH, f"enrichment/{dfname}/motif")
     os.makedirs(save_path, exist_ok=True)
-    fname = f"motif_{motif_length}_his_{dfname}.png"
+    fname = f"{name_mod}motif_{motif_length}_his_{dfname}.png"
     plt.savefig(os.path.join(save_path, fname), dpi=300)
     plt.close()
 
@@ -769,13 +832,15 @@ if __name__ == "__main__":
 
     ### MULTI ###
 
-    selector = "IBV"
+    selector = "in vitro"
     dfname = selector
     dfnames = get_dataset_names(cutoff=40, selection=selector)
     dfs, _ = load_all(dfnames, False)
 
+    name_mod = ""
+
     # dfs = add_ngs_percentile_rank_list(dfs)
-    # dfs = [df[df["NGS_percentile_rank"] == 9] for df in dfs]
+    # dfs = [df[df["NGS_percentile_rank"] == 0] for df in dfs]
 
     ############################
     ### nucleotide count dis ###
@@ -818,12 +883,33 @@ if __name__ == "__main__":
 
     ### auto ###
 
-    # motif_length = 5
-    # selector_category = "virus"
+    # motif_length = 3
+    # selector_category = "model"
     # dfname = selector_category
     # selectors = get_selctors(selector_category)
     # dfs, rows = motif_search_adv(selectors, motif_length)
     # create_motif_histogram_adv_plot(dfname, rows, dfs, selectors, motif_length)
+
+    #######################################
+    ### motif enrichment his background ###
+    #######################################
+
+    ### single ###
+
+    # df = add_dvg_sequence(df)
+    # n_rows = df.shape[0]
+    # motif_length = 3
+    # seq_dfs = motif_search_background(df, motif_length)
+    # create_motif_histogram_plot_background(dfname, n_rows, seq_dfs, motif_length)
+
+    ### multi ###
+
+    df = pd.concat(dfs, ignore_index=True)
+    df = add_dvg_sequence(df)
+    n_rows = df.shape[0]
+    motif_length = 3
+    seq_dfs = motif_search_background(df, motif_length)
+    create_motif_histogram_plot_background(dfname, n_rows, seq_dfs, motif_length, name_mod)
 
     ############################
     ### motif enrichment his ###
@@ -842,7 +928,7 @@ if __name__ == "__main__":
     # n_rows = df.shape[0]
     # motif_length = 3
     # seq_dfs = motif_search(df, motif_length)
-    # create_motif_histogram_plot(dfname, n_rows, seq_dfs, motif_length)
+    # create_motif_histogram_plot(dfname, n_rows, seq_dfs, motif_length, name_mod)
 
     ############################
     ### enrichment positions ### old

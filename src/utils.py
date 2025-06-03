@@ -1277,6 +1277,28 @@ def add_selector(df: pd.DataFrame, selector: str) -> pd.DataFrame:
     df['selector'] = selector
     return df
 
+### look up ###
+def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    def compute_marked_dvg_sequence(row):
+        full_seq = row['full_seq']
+        start = row['Start']
+        end = row['End']
+        
+        # Erzeuge eine Liste aus dem String (Strings sind unveränderlich)
+        seq_list = list(full_seq)
+
+        # Ersetze alle Zeichen im Bereich [start, end-1] durch 'X'
+        for i in range(start, end):
+            if 0 <= i < len(seq_list):  # Sicherheitscheck
+                seq_list[i] = 'X'
+
+        # Füge die Liste wieder zu einem String zusammen
+        return ''.join(seq_list)
+
+    df['marked_dvg_sequence'] = df.apply(compute_marked_dvg_sequence, axis=1)
+    return df
+
+### look up ###
 def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     def compute_dvg_sequence(row):
         full_seq = row['full_seq']
@@ -1478,7 +1500,7 @@ def add_motif_count(df: pd.DataFrame, motif: str):
 ######################
 
 def one_hot_encode(seq, max_len=3000):
-    base_map = {'A': [1,0,0,0], 'U': [0,1,0,0], 'C': [0,0,1,0], 'G': [0,0,0,1]}
+    base_map = {'A': [1,0,0,0], 'U': [0,1,0,0], 'C': [0,0,1,0], 'G': [0,0,0,1], 'X': [0,0,0,0]}
     seq = seq.upper().replace('T', 'U')[:max_len]
     encoded = [base_map.get(b, [0,0,0,0]) for b in seq]
     while len(encoded) < max_len:

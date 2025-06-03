@@ -32,7 +32,7 @@ from utils import add_dvg_sequence, add_marked_dvg_sequence, add_norm_log_ngs_re
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
-NAME_MOD = "v4_IAV"
+NAME_MOD = "v3_IAV"
 
 def save_encoders_scaler(strain_enc, segment_enc, scaler, save_dir):
     os.makedirs(save_dir, exist_ok=True)
@@ -151,6 +151,15 @@ history = model.fit(
 # --- Evaluation ---
 y_pred_probs = model.predict([X_seq_test, X_meta_test])
 
+# Verteilung der Wahrscheinlichkeiten
+plt.figure()
+plt.hist(y_pred_probs, bins=50)
+plt.title("Verteilung der Vorhersagewahrscheinlichkeiten")
+plt.xlabel("Wahrscheinlichkeit (Klasse 1)")
+plt.ylabel("Anzahl")
+plt.tight_layout()
+plt.show()
+
 # F1-optimale Schwelle
 prec, rec, thresh = precision_recall_curve(y_test, y_pred_probs)
 f1 = 2 * (prec * rec) / (prec + rec + 1e-8)
@@ -167,72 +176,42 @@ print(confusion_matrix(y_test, y_pred))
 print("ROC-AUC Score:")
 print(roc_auc_score(y_test, y_pred_probs))
 
-# Set global plot style
-plt.style.use("seaborn")
-plt.rc("font", size=12)
+# F1 vs Threshold
+plt.figure()
+plt.plot(thresh, f1[:-1])
+plt.xlabel("Threshold")
+plt.ylabel("F1-Score")
+plt.title("F1-Score vs. Entscheidungs-Schwelle")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
 
-# Prepare save path
+# ROC-Kurve
+fpr, tpr, _ = roc_curve(y_test, y_pred_probs)
+roc_auc = auc(fpr, tpr)
+plt.figure()
+plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC-Kurve")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# Precision-Recall-Kurve
+plt.figure()
+plt.plot(rec, prec)
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title("Precision-Recall-Kurve")
+plt.tight_layout()
+plt.show()
+
+# --- Speichern ---
 enc_save_path = os.path.join(RESULTSPATH, "networks/cnn/binary")
-os.makedirs(enc_save_path, exist_ok=True)
+save_encoders_scaler(strain_enc, segment_enc, scaler, enc_save_path)
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 model_path = os.path.join(enc_save_path, f"cnn_bin_del_{NAME_MOD}_{timestamp}.h5")
 model.save(model_path)
-
-# ----- f1 vs threshold -----
-f1_values = f1[:-1]
-
-plt.figure()
-plt.plot(thresh, f1_values, label="model", color="blue")
-plt.xlabel("threshold")
-plt.ylabel("f1 score")
-plt.title("f1 score vs. decision threshold")
-plt.legend()
-plt.tight_layout()
-f1_plot_path = os.path.join(enc_save_path, f"f1_vs_threshold_{NAME_MOD}_{timestamp}.png")
-plt.savefig(f1_plot_path, dpi=300)
-plt.close()
-
-# ----- roc curve -----
-fpr, tpr, _ = roc_curve(y_test, y_pred_probs)
-roc_auc = auc(fpr, tpr)
-
-plt.figure()
-plt.plot(fpr, tpr, label=f"model (auc = {roc_auc:.2f})", color="blue")
-plt.plot([0, 1], [0, 1], 'k--', linewidth=1)  # random baseline
-plt.xlabel("false positive rate")
-plt.ylabel("true positive rate")
-plt.title("roc curve")
-plt.legend()
-plt.tight_layout()
-roc_plot_path = os.path.join(enc_save_path, f"roc_curve_{NAME_MOD}_{timestamp}.png")
-plt.savefig(roc_plot_path, dpi=300)
-plt.close()
-
-# ----- precision-recall curve -----
-plt.figure()
-plt.plot(rec, prec, label="model", color="blue")
-plt.xlabel("recall")
-plt.ylabel("precision")
-plt.title("precision-recall curve")
-plt.legend()
-plt.tight_layout()
-pr_plot_path = os.path.join(enc_save_path, f"precision_recall_{NAME_MOD}_{timestamp}.png")
-plt.savefig(pr_plot_path, dpi=300)
-plt.close()
-
-# ----- prediction probability distribution -----
-plt.figure()
-plt.hist(y_pred_probs, bins=50, color="blue", edgecolor="black", label="model")
-plt.xlim(0.0, 1.0)
-plt.xlabel("prediction probability (class 1)")
-plt.ylabel("count")
-plt.title("distribution of prediction probabilities")
-plt.legend()
-plt.tight_layout()
-hist_path = os.path.join(enc_save_path, f"prob_distribution_{NAME_MOD}_{timestamp}.png")
-plt.savefig(hist_path, dpi=300)
-plt.close()
-
-# ----- save encoders and scaler -----
-save_encoders_scaler(strain_enc, segment_enc, scaler, enc_save_path)

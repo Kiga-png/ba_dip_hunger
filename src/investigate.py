@@ -18,7 +18,7 @@ from typing import List
 
 sys.path.insert(0, "..")
 from utils import load_dataset, get_dataset_names, load_all, join_data, preprocess, generate_expected_data
-from utils import add_dvg_sequence
+from utils import add_norm_log_ngs_read_count, add_marked_dvg_sequence
 from utils import SEGMENTS, RESULTSPATH, DATASET_STRAIN_DICT, CMAP, NUCLEOTIDES, CUTOFF, DATAPATH
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
@@ -73,10 +73,23 @@ if __name__ == "__main__":
     # dfs = [df]
     # resave(dfnames, dfs, "dvg")
 
-    selector = "IBV"
+    ############################
+
+    selector = "IAV"
     dfname = selector
     dfnames = get_dataset_names(cutoff=40, selection=selector)
     dfs, _ = load_all(dfnames, False)
     df = pd.concat(dfs, ignore_index=True)
-    print(df.shape[0])
+
+    df = add_norm_log_ngs_read_count(df)
+    df = add_marked_dvg_sequence(df)
+
+    dfnames = []
+    dfnames.append(dfname)
+    dfs = []
+    dfs.append(df)
+
+    resave(dfnames, dfs, "cnn")
+
+
 

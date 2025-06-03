@@ -6,11 +6,10 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
-from itertools import product
 
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Concatenate, Dense, Conv1D, MaxPooling1D, Flatten, Dropout, Embedding
+from tensorflow.keras.layers import Input, Concatenate, Dense, Conv1D, MaxPooling1D, Flatten, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -28,11 +27,11 @@ tf.random.set_seed(SEED)
 # Eigene Utils
 sys.path.insert(0, "..")
 from utils import load_all, get_dataset_names
-from utils import add_dvg_sequence, add_marked_dvg_sequence, add_norm_log_ngs_read_count
+from utils import one_hot_encode, add_dvg_sequence, add_norm_log_ngs_read_count
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
-NAME_MOD = "v4_IAV"
+NAME_MOD = "IBV"
 
 def save_encoders_scaler(strain_enc, segment_enc, scaler, save_dir):
     os.makedirs(save_dir, exist_ok=True)
@@ -43,31 +42,13 @@ def save_encoders_scaler(strain_enc, segment_enc, scaler, save_dir):
     with open(os.path.join(save_dir, f"scaler_{NAME_MOD}.pkl"), "wb") as f:
         pickle.dump(scaler, f)
 
-# --- K-mer Hilfsfunktionen ---
-def generate_kmer_vocab(k=3, alphabet="ACGUX"):
-    return [''.join(p) for p in product(alphabet, repeat=k)]
-
-def build_kmer_index(vocab):
-    return {kmer: i + 1 for i, kmer in enumerate(vocab)}  # 0 = padding
-
-def seq_to_kmers(seq, k=3):
-    return [seq[i:i+k] for i in range(len(seq) - k + 1)]
-
-def encode_kmer_sequences(sequences, kmer_to_index, k=3):
-    encoded = []
-    for seq in sequences:
-        kmers = seq_to_kmers(seq, k)
-        indices = [kmer_to_index.get(kmer, 0) for kmer in kmers]
-        encoded.append(indices)
-    return encoded
-
 # --- Daten laden ---
-selector = "IAV"
+selector = "IBV"
 dfnames = get_dataset_names(cutoff=40, selection=selector)
 dfs, _ = load_all(dfnames, False)
 df = pd.concat(dfs, ignore_index=True)
 
-df = add_marked_dvg_sequence(df)
+df = add_dvg_sequence(df)
 df = add_norm_log_ngs_read_count(df)
 
 # --- Quartil-Labeling ---
@@ -85,14 +66,10 @@ df["segment_enc"] = segment_enc.fit_transform(df["Segment"])
 scaler = MinMaxScaler()
 df[["start_scaled", "end_scaled"]] = scaler.fit_transform(df[["Start", "End"]])
 
-# --- K-mer-Encoding der Sequenzen ---
-k = 3
-kmer_vocab = generate_kmer_vocab(k)
-kmer_to_index = build_kmer_index(kmer_vocab)
-
-X_seq_raw = encode_kmer_sequences(df["marked_dvg_sequence"], kmer_to_index, k)
+# --- Sequenz-Encoding + Padding ---
+X_seq_raw = [one_hot_encode(seq) for seq in df["dvg_sequence"]]
 max_len = max(len(seq) for seq in X_seq_raw)
-X_seq = pad_sequences(X_seq_raw, maxlen=max_len, padding="post", value=0)
+X_seq = pad_sequences(X_seq_raw, maxlen=max_len, padding="post", dtype="float32")
 
 # --- Metadaten-Features ---
 X_meta = np.stack([
@@ -112,17 +89,13 @@ X_seq_train, X_seq_test, X_meta_train, X_meta_test, y_train, y_test = train_test
     X_seq, X_meta, y, test_size=0.2, stratify=y, random_state=SEED
 )
 
-# --- Class Weights ---
+# --- Manuelle Class Weights ---
 class_weight_dict = {0: 1.5, 1: 1.0}
 print("Manuell gesetzte Class Weights:", class_weight_dict)
 
-# --- CNN mit Embedding ---
-vocab_size = len(kmer_to_index) + 1  # +1 für Padding
-embedding_dim = 16
-
-input_seq = Input(shape=(X_seq.shape[1],), name="sequence_input")
-x = Embedding(input_dim=vocab_size, output_dim=embedding_dim, mask_zero=True)(input_seq)
-x = Conv1D(32, 5, activation='relu', padding='same')(x)
+# --- CNN-Modell (vereinfacht + stärker reguliert) ---
+input_seq = Input(shape=(X_seq.shape[1], 4), name="sequence_input")
+x = Conv1D(32, 5, activation='relu', padding='same')(input_seq)
 x = MaxPooling1D(2)(x)
 x = Flatten()(x)
 
@@ -151,13 +124,22 @@ history = model.fit(
 # --- Evaluation ---
 y_pred_probs = model.predict([X_seq_test, X_meta_test])
 
-# F1-optimale Schwelle
+# Wahrscheinlichkeitsverteilung visualisieren
+plt.figure()
+plt.hist(y_pred_probs, bins=50)
+plt.title("Verteilung der Vorhersagewahrscheinlichkeiten")
+plt.xlabel("Wahrscheinlichkeit (Klasse 1)")
+plt.ylabel("Anzahl")
+plt.tight_layout()
+plt.show()
+
+# Schwellenoptimierung für F1
 prec, rec, thresh = precision_recall_curve(y_test, y_pred_probs)
 f1 = 2 * (prec * rec) / (prec + rec + 1e-8)
 best_thresh = thresh[np.argmax(f1)]
 print("Beste Schwelle für F1:", best_thresh)
 
-# Binarisierung
+# Neue Vorhersage
 y_pred = (y_pred_probs > best_thresh).astype(int)
 
 print("Classification Report:")
@@ -167,72 +149,42 @@ print(confusion_matrix(y_test, y_pred))
 print("ROC-AUC Score:")
 print(roc_auc_score(y_test, y_pred_probs))
 
-# Set global plot style
-plt.style.use("seaborn")
-plt.rc("font", size=12)
+# F1 vs Threshold plot
+plt.figure()
+plt.plot(thresh, f1[:-1])  # Letzter Threshold hat keinen F1-Wert
+plt.xlabel("Threshold")
+plt.ylabel("F1-Score")
+plt.title("F1-Score vs. Entscheidungs-Schwelle")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
 
-# Prepare save path
+# ROC-Kurve
+fpr, tpr, _ = roc_curve(y_test, y_pred_probs)
+roc_auc = auc(fpr, tpr)
+plt.figure()
+plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC-Kurve")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# PR-Kurve
+plt.figure()
+plt.plot(rec, prec)
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title("Precision-Recall-Kurve")
+plt.tight_layout()
+plt.show()
+
+# --- Speichern ---
 enc_save_path = os.path.join(RESULTSPATH, "networks/cnn/binary")
-os.makedirs(enc_save_path, exist_ok=True)
+save_encoders_scaler(strain_enc, segment_enc, scaler, enc_save_path)
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 model_path = os.path.join(enc_save_path, f"cnn_bin_del_{NAME_MOD}_{timestamp}.h5")
 model.save(model_path)
-
-# ----- f1 vs threshold -----
-f1_values = f1[:-1]
-
-plt.figure()
-plt.plot(thresh, f1_values, label="model", color="blue")
-plt.xlabel("threshold")
-plt.ylabel("f1 score")
-plt.title("f1 score vs. decision threshold")
-plt.legend()
-plt.tight_layout()
-f1_plot_path = os.path.join(enc_save_path, f"f1_vs_threshold_{NAME_MOD}_{timestamp}.png")
-plt.savefig(f1_plot_path, dpi=300)
-plt.close()
-
-# ----- roc curve -----
-fpr, tpr, _ = roc_curve(y_test, y_pred_probs)
-roc_auc = auc(fpr, tpr)
-
-plt.figure()
-plt.plot(fpr, tpr, label=f"model (auc = {roc_auc:.2f})", color="blue")
-plt.plot([0, 1], [0, 1], 'k--', linewidth=1)  # random baseline
-plt.xlabel("false positive rate")
-plt.ylabel("true positive rate")
-plt.title("roc curve")
-plt.legend()
-plt.tight_layout()
-roc_plot_path = os.path.join(enc_save_path, f"roc_curve_{NAME_MOD}_{timestamp}.png")
-plt.savefig(roc_plot_path, dpi=300)
-plt.close()
-
-# ----- precision-recall curve -----
-plt.figure()
-plt.plot(rec, prec, label="model", color="blue")
-plt.xlabel("recall")
-plt.ylabel("precision")
-plt.title("precision-recall curve")
-plt.legend()
-plt.tight_layout()
-pr_plot_path = os.path.join(enc_save_path, f"precision_recall_{NAME_MOD}_{timestamp}.png")
-plt.savefig(pr_plot_path, dpi=300)
-plt.close()
-
-# ----- prediction probability distribution -----
-plt.figure()
-plt.hist(y_pred_probs, bins=50, color="blue", edgecolor="black", label="model")
-plt.xlim(0.0, 1.0)
-plt.xlabel("prediction probability (class 1)")
-plt.ylabel("count")
-plt.title("distribution of prediction probabilities")
-plt.legend()
-plt.tight_layout()
-hist_path = os.path.join(enc_save_path, f"prob_distribution_{NAME_MOD}_{timestamp}.png")
-plt.savefig(hist_path, dpi=300)
-plt.close()
-
-# ----- save encoders and scaler -----
-save_encoders_scaler(strain_enc, segment_enc, scaler, enc_save_path)
