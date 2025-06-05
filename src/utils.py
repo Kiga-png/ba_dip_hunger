@@ -1277,34 +1277,42 @@ def add_selector(df: pd.DataFrame, selector: str) -> pd.DataFrame:
     df['selector'] = selector
     return df
 
-### look up ###
-def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
-    def compute_marked_dvg_sequence(row):
+def add_gc_content_dvg_sequnce(df: pd.DataFrame) -> pd.DataFrame:
+    df = add_nucleotide_count_dvg_sequence(df)
+    def compute_gc_content(row) -> float:
+        seq = row['dvg_sequence']
+        g = seq.count('G')
+        c = seq.count('C')
+        total = row['nucleotide_count']
+        return (g + c) / total if total > 0 else 0.0
+
+    df['gc_content'] = df.apply(compute_gc_content, axis=1)
+    return df
+
+def add_nucleotide_count_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    df = add_dvg_sequence(df)
+    def count_nucleotides(seq: str) -> int:
+        return sum(seq.count(nuc) for nuc in ['A', 'U', 'G', 'C'])
+
+    df['nucleotide_count'] = df['dvg_sequence'].apply(count_nucleotides)
+    return df
+
+def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    def compute_dvg_sequence(row):
         full_seq = row['full_seq']
         start = row['Start']
-        end = row['End']
+        end = row['End'] - 1
         
         # Erzeuge eine Liste aus dem String (Strings sind unveränderlich)
         seq_list = list(full_seq)
 
-        # Ersetze alle Zeichen im Bereich [start, end-1] durch 'X'
+        # Ersetze alle Zeichen im Bereich [start, end - 2] durch 'X'
         for i in range(start, end):
             if 0 <= i < len(seq_list):  # Sicherheitscheck
                 seq_list[i] = 'X'
 
         # Füge die Liste wieder zu einem String zusammen
         return ''.join(seq_list)
-
-    df['marked_dvg_sequence'] = df.apply(compute_marked_dvg_sequence, axis=1)
-    return df
-
-### look up ###
-def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
-    def compute_dvg_sequence(row):
-        full_seq = row['full_seq']
-        start = row['Start']
-        end = row['End']
-        return full_seq[:start] + full_seq[end-1:]
 
     df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
     return df
@@ -1353,6 +1361,12 @@ def add_ngs_percentile_rank(df: pd.DataFrame):
     return df
 
 ######################
+
+def add_norm_ngs_read_count(df: pd.DataFrame):
+    max = df['NGS_read_count'].max()
+    min = df['NGS_read_count'].min()
+    df['norm_NGS_read_count'] = (df['NGS_read_count'] - min) / (max - min)
+    return df
 
 def add_norm_log_ngs_read_count_list(dfs: list):
     mod_dfs = []

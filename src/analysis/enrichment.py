@@ -832,15 +832,15 @@ if __name__ == "__main__":
 
     ### MULTI ###
 
-    selector = "in vitro"
+    selector = "IAV"
     dfname = selector
     dfnames = get_dataset_names(cutoff=40, selection=selector)
     dfs, _ = load_all(dfnames, False)
 
-    name_mod = ""
+    name_mod = "per5_"
 
-    # dfs = add_ngs_percentile_rank_list(dfs)
-    # dfs = [df[df["NGS_percentile_rank"] == 0] for df in dfs]
+    dfs = add_ngs_percentile_rank_list(dfs)
+    dfs = [df[df["NGS_percentile_rank"] == 5] for df in dfs]
 
     ############################
     ### nucleotide count dis ###
@@ -904,12 +904,12 @@ if __name__ == "__main__":
 
     ### multi ###
 
-    df = pd.concat(dfs, ignore_index=True)
-    df = add_dvg_sequence(df)
-    n_rows = df.shape[0]
-    motif_length = 3
-    seq_dfs = motif_search_background(df, motif_length)
-    create_motif_histogram_plot_background(dfname, n_rows, seq_dfs, motif_length, name_mod)
+    # df = pd.concat(dfs, ignore_index=True)
+    # df = add_dvg_sequence(df)
+    # n_rows = df.shape[0]
+    # motif_length = 3
+    # seq_dfs = motif_search_background(df, motif_length)
+    # create_motif_histogram_plot_background(dfname, n_rows, seq_dfs, motif_length, name_mod)
 
     ############################
     ### motif enrichment his ###
@@ -924,11 +924,11 @@ if __name__ == "__main__":
 
     ### multi ###
 
-    # df = pd.concat(dfs, ignore_index=True)
-    # n_rows = df.shape[0]
-    # motif_length = 3
-    # seq_dfs = motif_search(df, motif_length)
-    # create_motif_histogram_plot(dfname, n_rows, seq_dfs, motif_length, name_mod)
+    df = pd.concat(dfs, ignore_index=True)
+    n_rows = df.shape[0]
+    motif_length = 3
+    seq_dfs = motif_search(df, motif_length)
+    create_motif_histogram_plot(dfname, n_rows, seq_dfs, motif_length, name_mod)
 
     ############################
     ### enrichment positions ### old
