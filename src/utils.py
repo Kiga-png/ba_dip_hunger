@@ -1354,7 +1354,7 @@ def add_ngs_percentile_rank(df: pd.DataFrame):
     df = df.copy()
     df['NGS_percentile_rank'] = pd.qcut(
         df['NGS_read_count'],
-        q=10,
+        q=20,
         labels=False,
         duplicates='drop'
     )
@@ -1417,9 +1417,9 @@ def add_log_n_ngs_read_count(df: pd.DataFrame):
     df['log_n_NGS_read_count'] = np.log(df['NGS_read_count'])
     return df
 
-######################
-### direct repeats ###
-######################
+###############
+### repeats ###
+###############
 
 def count_direct_repeats(df: pd.DataFrame):
     df = add_direct_repeat_len(df)
@@ -1462,30 +1462,9 @@ def add_direct_repeat_len(df: pd.DataFrame):
         df.loc[index, "direct_repeat_len"] = int(direct_repeat_len)
     return df
 
-########################
-### motif enrichment ###
-########################
-
-def add_nucleotide_count(df: pd.DataFrame, nucleotide: str):
-    """
-
-    """
-    nucleotide_counts = []
-
-    for seq in df['seq_around_deletion_junction']:
-        if len(seq) != 20:
-            nucleotide_counts.append(0)
-            continue
-
-        seq1 = seq[0:5]
-        seq2 = seq[15:20]
-        nucleotide_count = seq1.count(nucleotide) + seq2.count(nucleotide)
-        nucleotide_counts.append(nucleotide_count)
-
-    df = df.copy()
-    df[f"{nucleotide}_count"] = nucleotide_counts
-
-    return df  
+###########################
+### motif enrichment bs ###
+###########################
 
 def add_motif_count(df: pd.DataFrame, motif: str):
     """
@@ -1508,6 +1487,12 @@ def add_motif_count(df: pd.DataFrame, motif: str):
     df[f"{motif}_count"] = motif_counts
 
     return df
+
+########################
+### motif enrichment ###
+########################
+
+
 
 ######################
 ### one hot encode ###
