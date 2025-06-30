@@ -9,6 +9,9 @@ import pandas as pd
 import seaborn as sns
 import scipy.stats as stats
 
+import RNA
+from multiprocessing import Pool, cpu_count
+
 from typing import Tuple
 from Bio import SeqIO
 
@@ -1262,6 +1265,10 @@ CUSTOM_COLORS = [
     "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
     "#ffbb78", "#aec7e8"
 ]
+COLORS = ["#ff6666", "#ffbd55", "#ffff66", "#9de24f", "#87cefa"]
+STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui", "BLEE", "Victoria", "Brisbane", "Yamagata"]
+A_STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui"]
+B_STRAINS = ["BLEE", "Victoria", "Brisbane", "Yamagata"]
 
 ###############
 ### general ###
@@ -1303,18 +1310,57 @@ def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
         start = row['Start']
         end = row['End'] - 1
         
-        # Erzeuge eine Liste aus dem String (Strings sind unveränderlich)
         seq_list = list(full_seq)
 
-        # Ersetze alle Zeichen im Bereich [start, end - 2] durch 'X'
         for i in range(start, end):
-            if 0 <= i < len(seq_list):  # Sicherheitscheck
+            if 0 <= i < len(seq_list):
                 seq_list[i] = 'X'
 
-        # Füge die Liste wieder zu einem String zusammen
         return ''.join(seq_list)
 
     df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+    return df
+
+def add_remaining_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    def compute_dvg_sequence(row):
+        full_seq = row['full_seq']
+        start = row['Start']
+        end = row['End']
+
+        return full_seq[:start] + full_seq[end:]
+
+    df['remaining_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+    return df
+
+def fold_sequence(seq: str):
+    """
+
+    """
+    structure, mfe = RNA.fold(seq)
+    return structure, mfe
+
+def add_sec_features_parallel(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
+    sequences = df['remaining_sequence'].tolist()
+    
+    with Pool(processes=cpu_count()) as pool:
+        results = pool.map(fold_sequence, sequences)
+    
+    structures, mfes = zip(*results)
+    df['Structure'] = structures
+    df['MFE'] = mfes
+    return df
+
+def add_mfe_percentile_rank(df: pd.DataFrame, split_number: int = 20):
+    df = df.copy()
+    df['MFE_percentile_rank'] = pd.qcut(
+        df['MFE'],
+        q=split_number,
+        labels=False,
+        duplicates='drop'
+    ) + 1
     return df
 
 def add_dfname_list(dfnames: list, dfs: list) -> list:
@@ -1335,6 +1381,27 @@ def get_selctors(selector_category: str):
     if selector_category == "all":
         return ["IAV", "IBV", "in vivo human", "in vivo mouse", "in vitro"]
 
+def save_df(dfname: str, df: pd.DataFrame, fname: str, strain: str="", segment: str=""):
+
+    save_path, _ = os.path.split(RESULTSPATH)
+    save_path = os.path.join(save_path, "dfs")
+    save_path = os.path.join(save_path, dfname)
+
+    if strain:
+        save_path = os.path.join(save_path, strain)
+    else:
+        save_path = os.path.join(save_path, "all")
+
+    if segment:
+        save_path = os.path.join(save_path, segment)
+    else:
+        save_path = os.path.join(save_path, "all")
+
+    os.makedirs(save_path, exist_ok=True)
+    fname = fname + ".csv"
+
+    df.to_csv(os.path.join(save_path, fname), index=False)
+
 ######################
 ### ngs read count ###
 ######################
@@ -1350,14 +1417,14 @@ def add_ngs_percentile_rank_list(dfs: list):
         mod_dfs.append(add_ngs_percentile_rank(df))
     return mod_dfs
 
-def add_ngs_percentile_rank(df: pd.DataFrame):
+def add_ngs_percentile_rank(df: pd.DataFrame, split_number: int = 20):
     df = df.copy()
     df['NGS_percentile_rank'] = pd.qcut(
         df['NGS_read_count'],
-        q=20,
+        q=split_number,
         labels=False,
         duplicates='drop'
-    )
+    ) + 1
     return df
 
 ######################
@@ -1455,11 +1522,14 @@ def add_direct_repeat_len(df: pd.DataFrame):
         start = row["Start"]
         end = row["End"] - 1
         direct_repeat_len = 0
+
         while start > 0 and seq[start - 1] == seq[end - 1]:
             direct_repeat_len = direct_repeat_len + 1
             start = start - 1
             end = end - 1
-        df.loc[index, "direct_repeat_len"] = int(direct_repeat_len)
+        df.loc[index, "direct_repeat_len"] = direct_repeat_len
+
+    df["direct_repeat_len"] = df["direct_repeat_len"].astype(int)
     return df
 
 ###########################
@@ -1487,12 +1557,6 @@ def add_motif_count(df: pd.DataFrame, motif: str):
     df[f"{motif}_count"] = motif_counts
 
     return df
-
-########################
-### motif enrichment ###
-########################
-
-
 
 ######################
 ### one hot encode ###
