@@ -12,13 +12,13 @@ from utils import RESULTSPATH
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score
 import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
 import joblib
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
-NAME_MOD = "IBV_v1"
+NAME_MOD = "IBV_v2"
 
 save_path = os.path.join(RESULTSPATH, "networks", "reg")
 os.makedirs(save_path, exist_ok=True)
@@ -145,5 +145,9 @@ print(f"- Bestes Modell: {best_model_path}")
 loss, mae = model.evaluate(X_test, y_test)
 predictions = model.predict(X_test).flatten()
 mse = mean_squared_error(y_test, predictions)
+rmse = np.sqrt(mse)
+r2 = r2_score(y_test, predictions)
 
 print(f"\n📊 Test MSE: {mse:.4f}")
+print(f"📉 Test RMSE: {rmse:.4f}")
+print(f"📈 Test R² Score: {r2:.4f}")
