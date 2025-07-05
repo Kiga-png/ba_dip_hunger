@@ -13,6 +13,7 @@ import pandas as pd
 
 from scipy import stats
 from scipy.stats import ttest_ind, mannwhitneyu
+from scipy.interpolate import CubicSpline
 from itertools import product
 from sklearn.linear_model import LinearRegression
 from typing import Tuple
@@ -34,18 +35,136 @@ RESULTSPATH = os.path.join(RESULTSPATH, "heatmap")
 ### motif heatmap ####
 ######################
 
-def make_full_motif_heatmap_analysis(dfname: str, dfs: list, top_n: int = 20, strain: str = "", segment: str = ""):
+def make_full_motif_heatmap_analysis(dfname: str, dfs: list, top_n: int, strain: str = "", segment: str = ""):
     """
 
     """
-    for motif_length in range(2, 6):
-        make_motif_heatmap_analysis(dfname, dfs, motif_length, top_n, strain, segment)
-        make_reg_motif_heatmap_analysis(dfname, dfs, motif_length, top_n, strain, segment)
+    max_motif_length = 8
+
+    df = pd.concat(dfs, ignore_index=True)
+    if strain:
+        df = df[df["Strain"] == strain]
+    if segment:
+        df = df[df["Segment"] == segment]
+    dvg_count = df.shape[0]
+
+    df = add_ngs_percentile_rank(df)
+    plot_names = ["before_del", "del_start", "del_end", "after_del"]
+
+    all_mean_freq_diffs = [[None for _ in range(max_motif_length)] for _ in range(4)]
+    all_top_freq_diffs  = [[None for _ in range(max_motif_length)] for _ in range(4)]
+    for motif_length in range(1, max_motif_length + 1):
+        df_copy = df.copy()
+        motif_df, skipped_count = add_motifs(df_copy, motif_length)
+        dvg_count -= skipped_count
+
+        mean_freq_diffs, top_freq_diffs = make_motif_heatmap_analysis(dfname, motif_df, plot_names, dvg_count, motif_length, top_n, strain, segment)
+        print(f"motif length {motif_length} completed")
+
+        for i in range(0, 4):
+            all_mean_freq_diffs[i][motif_length - 1] = mean_freq_diffs[i]
+            all_top_freq_diffs[i][motif_length - 1] = top_freq_diffs[i]
+
+    create_metric_spine_plot("mean_frequency_difference", "motif_length", "-", plot_names, all_mean_freq_diffs, "mean frequency difference (%)", dvg_count, dfname, strain, segment)
+    create_metric_spine_plot("top_frequency_difference", "motif_length", "-", plot_names, all_top_freq_diffs, "top frequency difference (%)", dvg_count, dfname, strain, segment)
+
+def make_full_reg_motif_heatmap_analysis(dfname: str, dfs: list, top_n: int, strain: str = "", segment: str = ""):
+    """
+
+    """
+    max_motif_length = 8
+
+    df = pd.concat(dfs, ignore_index=True)
+    if strain:
+        df = df[df["Strain"] == strain]
+    if segment:
+        df = df[df["Segment"] == segment]
+    dvg_count = df.shape[0]
+
+    df = add_ngs_percentile_rank(df)
+    reg_plot_names = ["reg_before_del", "reg_del_start", "reg_del_end", "reg_after_del"]
+
+    all_mean_coefficients = [[None for _ in range(max_motif_length)] for _ in range(4)]
+    all_top_coefficients  = [[None for _ in range(max_motif_length)] for _ in range(4)]
+    for motif_length in range(1, max_motif_length + 1):
+        df_copy = df.copy()
+        motif_df, skipped_count = add_motifs(df_copy, motif_length)
+        dvg_count -= skipped_count
+
+        mean_coefficients, top_coefficients = make_reg_motif_heatmap_analysis(dfname, motif_df, reg_plot_names, dvg_count, motif_length, top_n, strain, segment)
+        print(f"motif length {motif_length} completed")
+
+        for i in range(0, 4):
+            all_mean_coefficients[i][motif_length - 1] = mean_coefficients[i]
+            all_top_coefficients[i][motif_length - 1] = top_coefficients[i]
+
+    create_metric_spine_plot("mean_reg_coefficients", "motif_length", "-", reg_plot_names, all_mean_coefficients, "mean regression coefficients (-)", dvg_count, dfname, strain, segment)
+    create_metric_spine_plot("top_reg_coefficients", "motif_length", "-", reg_plot_names, all_top_coefficients, "top regression coefficients (-)", dvg_count, dfname, strain, segment)
+
+def create_metric_spine_plot(
+    spine_name: str,
+    field: str,
+    field_specifier: str,
+    metric_names: list,
+    metrics: list,
+    metric_specifier: str,
+    dvg_count: int,
+    data: str,
+    strain: str = "",
+    segment: str = "",
+    ):  
+    """
+
+    """
+    plt.figure(figsize=(10, 6))
+    num_points = len(metrics[0])
+    x = np.arange(1, num_points + 1)
+    x_smooth = np.linspace(x.min(), x.max(), 300)
+
+    for i, y in enumerate(metrics):
+        spline = CubicSpline(x, y)
+        y_smooth = spline(x_smooth)
+        color = COLORS[i % len(COLORS)]
+        plt.plot(x_smooth, y_smooth, label=metric_names[i], color=color)
+        plt.scatter(x, y, color=color, s=30)
+
+    title_name = f"{field} spineplot ({spine_name})"
+    title_name += f"\ndata: {data}"
+    if strain:
+        title_name += f", strain: {strain}"
+    if segment:
+        title_name += f", segment: {segment}"
+    title_name += f" (n={dvg_count})"
+    plt.title(title_name)
+
+    plt.xlabel(f"{field} ({field_specifier})")
+    plt.ylabel(metric_specifier)
+    plt.grid(True, alpha=0.3)
+
+    plt.xticks(np.arange(1, num_points + 1))
+    plt.legend(title="type")
+
+    save_path = os.path.join(RESULTSPATH, field, dfname)
+    save_path = os.path.join(save_path, strain if strain else "all")
+    save_path = os.path.join(save_path, segment if segment else "all")
+
+    os.makedirs(save_path, exist_ok=True)
+
+    fname = f"{field}_{spine_name}_bar_{data}"
+    if strain:
+        fname += f"_{strain}"
+    if segment:
+        fname += f"_{segment}"
+    fname += ".png"
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
 
 ### true motif heatmap ####
 
 # optional #
-def opt_add_motifs(df: pd.DataFrame, motif_length: int = 5):
+def add_motifs(df: pd.DataFrame, motif_length: int):
     """
 
     """
@@ -53,6 +172,9 @@ def opt_add_motifs(df: pd.DataFrame, motif_length: int = 5):
     motifs1 = []
     motifs2 = []
     motifs3 = []
+
+    valid_indices = []
+    skipped_count = 0
 
     for idx, row in df.iterrows():
         seq = row['full_seq']
@@ -62,10 +184,12 @@ def opt_add_motifs(df: pd.DataFrame, motif_length: int = 5):
         start0 = start
         end0 = end - 1
 
-        if start0 - motif_length < 0 or start0 + motif_length > len(seq):
-            raise ValueError(f"motif extraction at 'Start' for row {idx} exceeds sequence bounds.")
-        if end0 - motif_length < 0 or end0 + motif_length > len(seq):
-            raise ValueError(f"motif extraction at 'End' for row {idx} exceeds sequence bounds.")
+        if (start0 - motif_length < 0 or 
+            start0 + motif_length > len(seq) or 
+            end0 - motif_length < 0 or 
+            end0 + motif_length > len(seq)):
+            skipped_count += 1
+            continue
 
         motif0 = seq[start0 - motif_length:start0]
         motif1 = seq[start0:start0 + motif_length]
@@ -76,15 +200,18 @@ def opt_add_motifs(df: pd.DataFrame, motif_length: int = 5):
         motifs1.append(motif1)
         motifs2.append(motif2)
         motifs3.append(motif3)
+        valid_indices.append(idx)
+
+    df = df.loc[valid_indices].copy().reset_index(drop=True)
 
     df['motif0'] = motifs0
     df['motif1'] = motifs1
     df['motif2'] = motifs2
     df['motif3'] = motifs3
 
-    return df
+    return df, skipped_count
 
-def add_motifs(df: pd.DataFrame, motif_length: int):
+def old_add_motifs(df: pd.DataFrame, motif_length: int):
     """
 
     """
@@ -118,48 +245,32 @@ def add_motifs(df: pd.DataFrame, motif_length: int):
 
     return df
 
-def compute_comb_motif_count_df(df: pd.DataFrame, motif_length: int):
+def compute_motif_freq_dfs(df: pd.DataFrame, motif_length: int):
     """
 
     """
     bases = ['A', 'C', 'G', 'U']
-    all_possible_motifs = [''.join(p) for p in itertools.product(bases, repeat=motif_length)]
-    all_possible_motifs.sort()
-
-    motif_cols = ['motif0', 'motif1', 'motif2', 'motif3']
-    all_motifs = pd.concat([df[col] for col in motif_cols], ignore_index=True)
-
-    motif_counts = all_motifs.value_counts(dropna=True).to_dict()
-
-    raw_motif_df = pd.DataFrame({
-        'motif': all_possible_motifs,
-        'count': [motif_counts.get(motif, 0) for motif in all_possible_motifs]
-    })
-
-    return raw_motif_df
-
-def compute_comb_motif_freq_df(df: pd.DataFrame, motif_length: int):
-    """
+    possible_motifs = [''.join(p) for p in itertools.product(bases, repeat=motif_length)]
+    possible_motifs.sort()
     
-    """
-    bases = ['A', 'C', 'G', 'U']
-    all_possible_motifs = [''.join(p) for p in itertools.product(bases, repeat=motif_length)]
-    all_possible_motifs.sort()
-
     motif_cols = ['motif0', 'motif1', 'motif2', 'motif3']
-    all_motifs = pd.concat([df[col] for col in motif_cols], ignore_index=True)
+    motif_freq_dfs = []
 
-    motif_counts = all_motifs.value_counts(dropna=True).to_dict()
-    total_motifs = len(all_motifs)
+    for col in motif_cols:
+        motif_series = df[col]
+        motif_counts = motif_series.value_counts(dropna=True).to_dict()
+        total_motifs = len(motif_series)
 
-    raw_motif_df = pd.DataFrame({
-        'motif': all_possible_motifs,
-        'freq': [(motif_counts.get(motif, 0) / total_motifs) * 100 for motif in all_possible_motifs]
-    })
+        motif_freq_df = pd.DataFrame({
+            'motif': possible_motifs,
+            'freq': [(motif_counts.get(motif, 0) / total_motifs) * 100 for motif in possible_motifs]
+        })
 
-    return raw_motif_df
+        motif_freq_dfs.append(motif_freq_df)
 
-def compute_motif_count_heatmap_dfs(df: pd.DataFrame, top_motifs: list):
+    return motif_freq_dfs
+
+def compute_motif_count_heatmap_dfs(df: pd.DataFrame, top_motifs_lists: list):
     """
 
     """
@@ -173,11 +284,11 @@ def compute_motif_count_heatmap_dfs(df: pd.DataFrame, top_motifs: list):
         combined = pd.concat([relevant_df[['NGS_percentile_rank']], one_hot], axis=1)
         return combined.groupby('NGS_percentile_rank', as_index=False).sum()
 
-    motif_count_dfs = [
-        count_motifs_by_column(df, 'motif0', top_motifs),
-        count_motifs_by_column(df, 'motif1', top_motifs),
-        count_motifs_by_column(df, 'motif2', top_motifs),
-        count_motifs_by_column(df, 'motif3', top_motifs),
+    motif_cols = ['motif0', 'motif1', 'motif2', 'motif3']
+
+    motif_count_heatmap_dfs = [
+        count_motifs_by_column(df, col, top_motifs)
+        for col, top_motifs in zip(motif_cols, top_motifs_lists)
     ]
 
     percentile_rank_count_df = (
@@ -186,7 +297,7 @@ def compute_motif_count_heatmap_dfs(df: pd.DataFrame, top_motifs: list):
         .reset_index(name='count')
     )
 
-    return motif_count_dfs, percentile_rank_count_df
+    return motif_count_heatmap_dfs, percentile_rank_count_df
 
 def compute_motif_count_dfs(dfs: list):
     """
@@ -240,6 +351,8 @@ def create_freq_heatmap_plot(
     feature = 0,
     metric_name = "",
     metric: float = 0,
+    lead_name = "",
+    lead: float = 0
     ):  
     """
 
@@ -263,7 +376,10 @@ def create_freq_heatmap_plot(
         count_str = str(count[0]) if len(count) > 0 else "0"
         rank_labels.append(f"{rank}\n(n={count_str})")
 
-    plt.figure(figsize=(1 + len(field_labels) * 0.6, 1 + len(rank_labels) * 0.4))
+    min_width = 13
+    fig_width = max(min_width, 1 + len(field_labels) * 0.6)
+    fig_height = 1 + len(rank_labels) * 0.4
+    plt.figure(figsize=(fig_width, fig_height))
 
     ax = sns.heatmap(
         pivot_df,
@@ -285,12 +401,14 @@ def create_freq_heatmap_plot(
         title_name += f" - {feature_name}: {feature}"
     if metric_name:
         title_name += f" - {metric_name}: {metric}"
+    if lead_name:
+        title_name += f" - {lead_name}: {lead}"
     title_name += f"\ndata: {data}"
     if strain:
         title_name += f", strain: {strain}"
     if segment:
         title_name += f", segment: {segment}"
-    title_name += f", (n={dvg_count})"
+    title_name += f" (n={dvg_count})"
     ax.set_title(title_name)
 
     save_path = os.path.join(RESULTSPATH, field, dfname)
@@ -320,37 +438,36 @@ def create_freq_heatmap_plot(
     plt.savefig(os.path.join(save_path, fname), dpi=300)
     plt.close()
 
-def make_motif_heatmap_analysis(dfname: str, dfs: list, motif_length: int, top_n: int=20, strain: str="", segment: str=""):
-    df = pd.concat(dfs, ignore_index=True)
+def make_motif_heatmap_analysis(dfname: str, df: pd.DataFrame, heatmap_names: list, dvg_count: int, motif_length: int, top_n: int=20, strain: str="", segment: str=""):
+    """
 
-    if strain:
-        df = df[df["Strain"] == strain]
-    if segment:
-        df = df[df["Segment"] == segment]
+    """
+    motif_freq_dfs = compute_motif_freq_dfs(df, motif_length)
+    batif_freq_df = compute_batif_freq_df(dfname, motif_length, strain, segment)
 
-    dvg_count = df.shape[0]
+    top_motif_lists = []
+    mean_freq_diffs = []
+    top_freq_diffs = []
+    for i in range(0, 4):
+        comb_freq_df = subtract_freq_dfs(motif_freq_dfs[i], batif_freq_df)
+        top_comb_freq_df = comb_freq_df.nlargest(top_n, 'top_freq')
+        top_comb_freq_df = comb_freq_df.sort_values(by='top_freq', ascending=False).head(top_n)
+        mean_freq_diff = round(top_comb_freq_df['top_freq'].mean(), 5)
+        mean_freq_diffs.append(mean_freq_diff)
+        top_freq_diff = round(top_comb_freq_df['top_freq'].iloc[0], 5)
+        top_freq_diffs.append(top_freq_diff)
+        top_motif_list = top_comb_freq_df['motif'].tolist()
+        top_motif_lists.append(top_motif_list)
+        create_freq_bar_plot(heatmap_names[i], "motif", f"top {top_n}", top_comb_freq_df, dvg_count, dfname, strain, segment, "motif_length", motif_length, 'mean frequency difference', mean_freq_diff, 'top frequency difference', top_freq_diff)
 
-    df = add_ngs_percentile_rank(df)
-    df = add_motifs(df, motif_length)
-
-    comb_motif_freq_df = compute_comb_motif_freq_df(df, motif_length)
-    comb_batif_freq_df = compute_comb_batif_freq_df(dfname, motif_length, strain, segment)
-    comb_freq_df = subtract_freq_dfs(comb_motif_freq_df, comb_batif_freq_df)
-    top_comb_freq_df = comb_freq_df.nlargest(top_n, 'top_freq')
-
-    top_comb_freq_df = comb_freq_df.sort_values(by='top_freq', ascending=False).head(top_n)
-    mean_feq_dif = round(top_comb_freq_df['top_freq'].mean(), 5)
-    top_motifs = top_comb_freq_df['motif'].tolist()
-
-    create_freq_bar_plot("sites_vs_background", "motif", f"top {top_n}", top_comb_freq_df, dvg_count, dfname, strain, segment, "motif_length", motif_length, 'mean frequency difference', mean_feq_dif)
-
-    motif_count_heatmap_dfs, percentile_rank_count_df = compute_motif_count_heatmap_dfs(df, top_motifs)
+    motif_count_heatmap_dfs, percentile_rank_count_df = compute_motif_count_heatmap_dfs(df, top_motif_lists)
     motif_count_dfs = compute_motif_count_dfs(motif_count_heatmap_dfs)
     motif_freq_heatmap_dfs = compute_motif_freq_heatmap_dfs(motif_count_heatmap_dfs, percentile_rank_count_df)
 
-    heatmap_names = ["before_del", "del_start", "del_end", "after_del"]
     for i in range(0, 4):
-        create_freq_heatmap_plot(heatmap_names[i], "motif", f"top {top_n}", motif_freq_heatmap_dfs[i], motif_count_dfs[i], percentile_rank_count_df, dvg_count, dfname, strain, segment, "motif_length", motif_length, 'mean frequency difference', mean_feq_dif)
+        create_freq_heatmap_plot(heatmap_names[i], "motif", f"top {top_n}", motif_freq_heatmap_dfs[i], motif_count_dfs[i], percentile_rank_count_df, dvg_count, dfname, strain, segment, "motif_length", motif_length, 'mean frequency difference', mean_freq_diffs[i], 'top frequency difference', top_freq_diffs[i])
+
+    return mean_freq_diffs, top_freq_diffs
 
 ### background motif distribution ####
 
@@ -379,7 +496,7 @@ def compute_batif_count_df(motif_length: int, strain: str, segment: str):
 
     return batif_count_df
 
-def compute_batif_freq_df(motif_length: int, strain: str, segment: str):
+def compute_single_batif_freq_df(motif_length: int, strain: str, segment: str):
     """
 
     """
@@ -406,7 +523,7 @@ def compute_batif_freq_df(motif_length: int, strain: str, segment: str):
 
     return batif_df[['motif', 'freq']]
 
-def compute_comb_batif_freq_df(dfname: str, motif_length: int, strain: str, segment: str):
+def compute_batif_freq_df(dfname: str, motif_length: int, strain: str, segment: str):
     """
 
     """
@@ -417,14 +534,14 @@ def compute_comb_batif_freq_df(dfname: str, motif_length: int, strain: str, segm
         strains = B_STRAINS
 
     if segment and strain:
-        batif_freq_df = compute_batif_freq_df(motif_length, strain, segment)
+        batif_freq_df = compute_single_batif_freq_df(motif_length, strain, segment)
         return batif_freq_df
     
     comb_df = pd.DataFrame()
 
     if strain:
         for segment in SEGMENTS:
-            batif_freq_df = compute_batif_freq_df(motif_length, strain, segment)
+            batif_freq_df = compute_single_batif_freq_df(motif_length, strain, segment)
             if comb_df.empty:
                 comb_df = batif_freq_df.copy()
             else:
@@ -435,7 +552,7 @@ def compute_comb_batif_freq_df(dfname: str, motif_length: int, strain: str, segm
     
     if segment:
         for strain in strains:
-            batif_freq_df = compute_batif_freq_df(motif_length, strain, segment)
+            batif_freq_df = compute_single_batif_freq_df(motif_length, strain, segment)
             if comb_df.empty:
                 comb_df = batif_freq_df.copy()
             else:
@@ -446,7 +563,7 @@ def compute_comb_batif_freq_df(dfname: str, motif_length: int, strain: str, segm
     
     for strain in strains:
         for segment in SEGMENTS:
-            batif_freq_df = compute_batif_freq_df(motif_length, strain, segment)
+            batif_freq_df = compute_single_batif_freq_df(motif_length, strain, segment)
             if comb_df.empty:
                 comb_df = batif_freq_df.copy()
             else:
@@ -480,6 +597,8 @@ def create_freq_bar_plot(
     feature = 0,
     metric_name = "",
     metric: float = 0,
+    lead_name = "",
+    lead: float = 0
     ):
     """
 
@@ -510,6 +629,8 @@ def create_freq_bar_plot(
         title_name += f" - {feature_name}: {feature}"
     if metric_name:
         title_name += f" - {metric_name}: {metric}"
+    if lead_name:
+        title_name += f" - {lead_name}: {lead}"
     title_name += f"\ndata: {data}"
     if strain:
         title_name += f", strain: {strain}"
@@ -597,36 +718,33 @@ def remove_linear_regression_rows(top_motif_count_df: pd.DataFrame) -> pd.DataFr
     """
     return top_motif_count_df.drop(columns=['coefficient', 'intercept'], errors='ignore')
 
-def make_reg_motif_heatmap_analysis(dfname: str, dfs: list, motif_length: int, top_n: int=20, strain: str="", segment: str=""):
-    df = pd.concat(dfs, ignore_index=True)
+def make_reg_motif_heatmap_analysis(dfname: str, df: pd.DataFrame, heatmap_names: list, dvg_count: int, motif_length: int, top_n: int=20, strain: str="", segment: str=""):
+    """
 
-    if strain:
-        df = df[df["Strain"] == strain]
-    if segment:
-        df = df[df["Segment"] == segment]
-
-    dvg_count = df.shape[0]
-
-    df = add_ngs_percentile_rank(df)
-    df = add_motifs(df, motif_length)
-
-    motifs = generate_motif_list(motif_length)
-    motif_count_heatmap_dfs, percentile_rank_count_df = compute_motif_count_heatmap_dfs(df, motifs)
+    """
+    possible_motifs = generate_motif_list(motif_length)
+    possible_motifs_list = [possible_motifs] * 4
+    motif_count_heatmap_dfs, percentile_rank_count_df = compute_motif_count_heatmap_dfs(df, possible_motifs_list)
     motif_count_dfs = compute_motif_count_dfs(motif_count_heatmap_dfs)
     motif_freq_heatmap_dfs = compute_motif_freq_heatmap_dfs(motif_count_heatmap_dfs, percentile_rank_count_df)
     reg_motif_freq_heatmap_dfs = add_linear_regression_rows(motif_freq_heatmap_dfs)
 
-    heatmap_names = ["reg_before_del", "reg_del_start", "reg_del_end", "reg_after_del"]
+    mean_coefficients = []
+    top_coefficients = []
     for i in range(0, 4):
         trans_reg_motif_freq_heatmap_df = reg_motif_freq_heatmap_dfs[i].T
         trans_reg_motif_freq_heatmap_df['coefficient'] = trans_reg_motif_freq_heatmap_df['coefficient'].abs()
         top_trans_reg_motif_freq_heatmap_df = trans_reg_motif_freq_heatmap_df.sort_values(by='coefficient', ascending=False).head(top_n)
         mean_coefficient = round(top_trans_reg_motif_freq_heatmap_df["coefficient"].mean(), 5)
+        mean_coefficients.append(mean_coefficient)
+        top_coefficient = round(top_trans_reg_motif_freq_heatmap_df["coefficient"].iloc[0], 5)
+        top_coefficients.append(top_coefficient)
         top_motifs = top_trans_reg_motif_freq_heatmap_df.index.tolist()
         top_motif_count_df = compute_top_motif_count_df(motif_count_dfs[i], top_motifs)
         top_trans_motif_freq_heatmap_df = remove_linear_regression_rows(top_trans_reg_motif_freq_heatmap_df)
         top_motif_freq_heatmap_df = top_trans_motif_freq_heatmap_df.T
-        create_freq_heatmap_plot(heatmap_names[i], "motif", f"top {top_n}", top_motif_freq_heatmap_df, top_motif_count_df, percentile_rank_count_df, dvg_count, dfname, strain, segment, "motif_length", motif_length, 'mean coefficient', mean_coefficient)
+        create_freq_heatmap_plot(heatmap_names[i], "motif", f"top {top_n}", top_motif_freq_heatmap_df, top_motif_count_df, percentile_rank_count_df, dvg_count, dfname, strain, segment, "motif_length", motif_length, 'mean regression coefficient', mean_coefficient, 'top regression coefficient', top_coefficient)
+    return mean_coefficients, top_coefficients
 
 ### random motif heatmap ####
 
@@ -1162,7 +1280,7 @@ if __name__ == "__main__":
 
     ### MULTI ###
 
-    selector = "IBV"
+    selector = "IAV"
     dfname = selector
     dfnames = get_dataset_names(cutoff=40, selection=selector)
     dfs, _ = load_all(dfnames, False)
@@ -1171,10 +1289,9 @@ if __name__ == "__main__":
     ### testing ####
     ################
 
-    # make_motif_heatmap_analysis(dfname, dfs, 5, 20, "PR8", "PB1")
-    # make_reg_motif_heatmap_analysis(dfname, dfs, 5, 20, "PR8", "PB1")
-    # make_full_motif_heatmap_analysis(dfname, dfs, 20, "", "")
-    make_repeat_heatmap_analysis(dfname, dfs, 5, "", "")
+    # make_full_motif_heatmap_analysis(dfname, dfs, 8, "PR8", "PB1")
+    make_full_reg_motif_heatmap_analysis(dfname, dfs, 8, "PR8", "PB1")
+    # make_repeat_heatmap_analysis(dfname, dfs, 3, "", "")
 
     # preprocess_sec_features(dfname, dfs, "sec", "", "")
-    make_mfe_heatmap_analysis(dfname, "sec", "", "")
+    # make_mfe_heatmap_analysis(dfname, "sec", "", "")
