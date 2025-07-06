@@ -3,6 +3,8 @@
 '''
 import os
 import sys
+import subprocess
+import tempfile
 
 import random
 import numpy as np
@@ -12,7 +14,7 @@ import seaborn as sns
 import pandas as pd
 
 from scipy import stats
-from scipy.stats import ttest_ind, mannwhitneyu
+from scipy.stats import skew, kurtosis
 from scipy.interpolate import CubicSpline
 from itertools import product
 from sklearn.linear_model import LinearRegression
@@ -23,7 +25,8 @@ import RNA
 
 sys.path.insert(0, "..")
 from utils import get_dataset_names, load_all, get_sequence, get_seq_len
-from utils import add_remaining_sequence, add_dvg_sequence, add_direct_repeat_len, cap_direct_repeat_len, add_mfe_percentile_rank, add_sec_features_parallel, save_df, add_ngs_percentile_rank
+from utils import add_dvg_sequence, add_direct_repeat_len, cap_direct_repeat_len, add_sec_features_parallel, save_df
+from utils import add_feature_percentile_rank, add_log_feature, add_norm_feature, add_remaining_sequence, add_dvg_length
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 from utils import COLORS, STRAINS, A_STRAINS, B_STRAINS
 
@@ -31,15 +34,15 @@ RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, "heatmap")
 
 
-######################
-### motif heatmap ####
-######################
+#####################
+### full scripts ####
+#####################
 
 def make_full_motif_heatmap_analysis(dfname: str, dfs: list, top_n: int, strain: str = "", segment: str = ""):
     """
 
     """
-    max_motif_length = 8
+    max_motif_length = 5
 
     df = pd.concat(dfs, ignore_index=True)
     if strain:
@@ -48,7 +51,7 @@ def make_full_motif_heatmap_analysis(dfname: str, dfs: list, top_n: int, strain:
         df = df[df["Segment"] == segment]
     dvg_count = df.shape[0]
 
-    df = add_ngs_percentile_rank(df)
+    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
     plot_names = ["before_del", "del_start", "del_end", "after_del"]
 
     all_mean_freq_diffs = [[None for _ in range(max_motif_length)] for _ in range(4)]
@@ -72,7 +75,7 @@ def make_full_reg_motif_heatmap_analysis(dfname: str, dfs: list, top_n: int, str
     """
 
     """
-    max_motif_length = 8
+    max_motif_length = 5
 
     df = pd.concat(dfs, ignore_index=True)
     if strain:
@@ -81,7 +84,7 @@ def make_full_reg_motif_heatmap_analysis(dfname: str, dfs: list, top_n: int, str
         df = df[df["Segment"] == segment]
     dvg_count = df.shape[0]
 
-    df = add_ngs_percentile_rank(df)
+    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
     reg_plot_names = ["reg_before_del", "reg_del_start", "reg_del_end", "reg_after_del"]
 
     all_mean_coefficients = [[None for _ in range(max_motif_length)] for _ in range(4)]
@@ -100,6 +103,262 @@ def make_full_reg_motif_heatmap_analysis(dfname: str, dfs: list, top_n: int, str
 
     create_metric_spine_plot("mean_reg_coefficients", "motif_length", "-", reg_plot_names, all_mean_coefficients, "mean regression coefficients (-)", dvg_count, dfname, strain, segment)
     create_metric_spine_plot("top_reg_coefficients", "motif_length", "-", reg_plot_names, all_top_coefficients, "top regression coefficients (-)", dvg_count, dfname, strain, segment)
+
+def make_full_ngs_distribution_analysis(dfname: str, dfs: list, strain: str = "", segment: str = ""):
+    """
+
+    """
+    df = pd.concat(dfs, ignore_index=True)
+    if strain:
+        df = df[df["Strain"] == strain]
+    if segment:
+        df = df[df["Segment"] == segment]
+
+    feature = "NGS_read_count"
+    log_feature = 'log_' + feature
+    norm_log_feature = 'norm_log_' + feature
+
+    df = add_log_feature(df, feature, log_feature)
+    df = add_norm_feature(df, log_feature, norm_log_feature)
+
+    create_feature_distribution_plot(df, norm_log_feature, '-', True, dfname, strain, segment)
+
+def make_full_length_mfe_correlation_analysis(dfname: str, strain: str = "", segment: str = ""):
+    """
+
+    """
+    read_path, _ = os.path.split(RESULTSPATH)
+    read_path = os.path.join(read_path, "dfs", dfname, "all", "all")
+    fname = f"sec" + ".csv"
+    df = pd.read_csv(os.path.join(read_path, fname))
+
+    if strain:
+        df = df[df["Strain"] == strain]
+    if segment:
+        df = df[df["Segment"] == segment]
+
+    df = add_remaining_sequence(df)
+    df = add_dvg_length(df)
+
+    feature = 'dvg_length'
+    norm_feature = 'norm_' + feature
+    df = add_norm_feature(df, feature, norm_feature)
+
+    create_feature_correlation_plot(df, norm_feature, "-", "MFE", "kcal/mol", dfname, strain, segment)
+
+def make_full_sec_structure_plots(dfname: str, dfs: list, strain: str = "", segment: str = ""):
+    df = pd.concat(dfs, ignore_index=True)
+
+    if strain:
+        df = df[df["Strain"] == strain]
+    if segment:
+        df = df[df["Segment"] == segment]
+
+    df = add_remaining_sequence(df)
+    sequences = df["remaining_sequence"].head(5)
+
+    save_path = os.path.join(RESULTSPATH, "structures", dfname, strain if strain else "all", segment if segment else "all")
+    os.makedirs(save_path, exist_ok=True)
+
+    for idx, seq in enumerate(sequences):
+        if not isinstance(seq, str) or not seq.strip():
+            continue
+
+        seq = seq.strip().upper()
+        structure, mfe = RNA.fold(seq)
+
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".txt") as f:
+            f.write(f"{seq}\n{structure}\n")
+            temp_input = f.name
+
+        try:
+            subprocess.run(["RNAplot", "-o", "svg", "-t", "0", "-i", temp_input], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] RNAplot failed for sequence {idx+1}: {e}")
+            continue
+
+        svg_source = "rna.svg"
+        svg_target = os.path.join(save_path, f"structure_{idx+1}_mfe_{mfe:.2f}.svg")
+        if os.path.exists(svg_source):
+            os.rename(svg_source, svg_target)
+        else:
+            print(f"[WARNING] RNAplot output not found for sequence {idx+1}")
+
+        os.remove(temp_input)
+
+
+def add_motif_features(dfname: str, dfs: list, motif_length: int, strain: str="", segment: str=""):
+    """
+
+    """
+    df = pd.concat(dfs, ignore_index=True)
+    if strain:
+        df = df[df["Strain"] == strain]
+    if segment:
+        df = df[df["Segment"] == segment]
+
+    df, skipped_count = add_motifs(df, motif_length)
+    print(f'{skipped_count} have been left out')
+
+    df_copy = df.copy()
+
+    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
+
+    motif_freq_dfs = compute_motif_freq_dfs(df, motif_length)
+    batif_freq_df = compute_batif_freq_df(dfname, motif_length, strain, segment)
+
+    for i in range(0, 4):
+        comb_freq_df = subtract_freq_dfs(motif_freq_dfs[i], batif_freq_df)
+        top_comb_freq_df = comb_freq_df.nlargest(motif_length, 'top_freq')
+        top_comb_freq_df = comb_freq_df.sort_values(by='top_freq', ascending=False).head(3)
+        top_motif_list = top_comb_freq_df['motif'].tolist()
+        motif_col = f"motif{i}"
+        for motif in top_motif_list:
+            check_col = f"check{i}_{top_motif_list.index(motif)}"
+            df_copy[check_col] = df_copy[motif_col].apply(lambda x: 1 if x == motif else 0)
+    
+    save_df(dfname, df_copy, f"motif_length_{motif_length}", strain, segment)
+
+def add_reg_motif_features(dfname: str, dfs: list, motif_length: int, strain: str="", segment: str=""):
+    """
+
+    """
+    df = pd.concat(dfs, ignore_index=True)
+    if strain:
+        df = df[df["Strain"] == strain]
+    if segment:
+        df = df[df["Segment"] == segment]
+
+    df, skipped_count = add_motifs(df, motif_length)
+    print(f'{skipped_count} have been left out')
+
+    df_copy = df.copy()
+
+    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
+
+    possible_motifs = generate_motif_list(motif_length)
+    possible_motifs_list = [possible_motifs] * 4
+    motif_count_heatmap_dfs, percentile_rank_count_df = compute_motif_count_heatmap_dfs(df, possible_motifs_list)
+    motif_freq_heatmap_dfs = compute_motif_freq_heatmap_dfs(motif_count_heatmap_dfs, percentile_rank_count_df)
+    reg_motif_freq_heatmap_dfs = add_linear_regression_rows(motif_freq_heatmap_dfs)
+
+    for i in range(0, 4):
+        trans_reg_motif_freq_heatmap_df = reg_motif_freq_heatmap_dfs[i].T
+        trans_reg_motif_freq_heatmap_df['coefficient'] = trans_reg_motif_freq_heatmap_df['coefficient'].abs()
+        top_trans_reg_motif_freq_heatmap_df = trans_reg_motif_freq_heatmap_df.sort_values(by='coefficient', ascending=False).head(3)
+        top_motifs = top_trans_reg_motif_freq_heatmap_df.index.tolist()
+        motif_col = f"motif{i}"
+        for motif in top_motifs:
+            check_col = f"check{i}_{top_motifs.index(motif)}"
+            df_copy[check_col] = df_copy[motif_col].apply(lambda x: 1 if x == motif else 0)
+
+    save_df(dfname, df_copy, f"reg_motif_length_{motif_length}", strain, segment)
+    
+#################
+### general  ####
+#################
+
+def create_freq_heatmap_plot(
+    heatmap_name: str,
+    field: str,
+    field_specifier: str,
+    freq_heatmap_df: pd.DataFrame,
+    count_df: pd.DataFrame,
+    percentile_rank_count_df: pd.DataFrame,
+    dvg_count: int,
+    data: str,
+    strain: str = "",
+    segment: str = "",
+    feature_name = "",
+    feature = 0,
+    metric_name = "",
+    metric: float = 0,
+    lead_name = "",
+    lead: float = 0
+    ):  
+    """
+
+    """
+    pivot_df = freq_heatmap_df
+    field_order = list(pivot_df.columns)
+    rank_order = list(pivot_df.index)
+
+    field_count_series = count_df.set_index(field)['count']
+
+    field_labels = [
+        f"{field}\n(n={field_count_series.get(field, 0)})"
+        for field in field_order
+    ]
+
+    rank_labels = []
+    for rank in rank_order:
+        count = percentile_rank_count_df.loc[
+            percentile_rank_count_df['NGS_percentile_rank'] == rank, 'count'
+        ].values
+        count_str = str(count[0]) if len(count) > 0 else "0"
+        rank_labels.append(f"{rank}\n(n={count_str})")
+
+    min_width = 13
+    fig_width = max(min_width, 1 + len(field_labels) * 0.6)
+    fig_height = 1 + len(rank_labels) * 0.4
+    plt.figure(figsize=(fig_width, fig_height))
+
+    ax = sns.heatmap(
+        pivot_df,
+        cmap="viridis",
+        linewidths=0.5,
+        linecolor='white',
+        xticklabels=field_labels,
+        yticklabels=rank_labels,
+        cbar_kws={'label': 'relative frequency (%)'},
+        annot=True,
+        fmt=".1f"
+    )
+
+    ax.set_xlabel(f"{field} ({field_specifier})")
+    ax.set_ylabel("NGS_rank (percentile)")
+
+    title_name = f"{field} heatmap ({heatmap_name})"
+    if feature_name:
+        title_name += f" - {feature_name}: {feature}"
+    if metric_name:
+        title_name += f" - {metric_name}: {metric}"
+    if lead_name:
+        title_name += f" - {lead_name}: {lead}"
+    title_name += f"\ndata: {data}"
+    if strain:
+        title_name += f", strain: {strain}"
+    if segment:
+        title_name += f", segment: {segment}"
+    title_name += f" (n={dvg_count})"
+    ax.set_title(title_name)
+
+    save_path = os.path.join(RESULTSPATH, field, dfname)
+
+    if strain:
+        save_path = os.path.join(save_path, strain)
+    else:
+        save_path = os.path.join(save_path, "all")
+    if segment:
+        save_path = os.path.join(save_path, segment)
+    else:
+        save_path = os.path.join(save_path, "all")
+
+    save_path = os.path.join(save_path, f"{feature_name}_{feature}")
+    os.makedirs(save_path, exist_ok=True)
+    fname = f"{field}_{heatmap_name}_heatmap_{data}"
+
+    if strain:
+        fname += f"_{strain}"
+    if segment:
+        fname += f"_{segment}"
+    if feature_name:
+        fname += f"_{feature_name}_{feature}"
+    fname += ".png"
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
 
 def create_metric_spine_plot(
     spine_name: str,
@@ -144,7 +403,7 @@ def create_metric_spine_plot(
     plt.xticks(np.arange(1, num_points + 1))
     plt.legend(title="type")
 
-    save_path = os.path.join(RESULTSPATH, field, dfname)
+    save_path = os.path.join(RESULTSPATH, field, data)
     save_path = os.path.join(save_path, strain if strain else "all")
     save_path = os.path.join(save_path, segment if segment else "all")
 
@@ -161,9 +420,181 @@ def create_metric_spine_plot(
     plt.savefig(os.path.join(save_path, fname), dpi=300)
     plt.close()
 
+def create_feature_distribution_plot(
+    df: pd.DataFrame,
+    feature_name: str,
+    features_specifier: str,
+    show_percentiles: bool,
+    data: str,
+    strain: str = "",
+    segment: str = ""
+    ):
+    """
+
+    """
+    plt.style.use("seaborn-darkgrid")
+    plt.figure(figsize=(10, 6))
+
+    values = df[feature_name].dropna()
+    n = len(values)
+
+    mean_val = np.mean(values)
+    var_val = np.var(values)
+    skew_val = skew(values)
+    kurt_val = kurtosis(values)
+
+    sns.histplot(
+        values,
+        bins=30,
+        kde=True,
+        stat="percent",
+        color=COLORS[4],
+        edgecolor="white",
+        label="distribution"
+    )
+
+    plt.axvline(mean_val, color=COLORS[2], linestyle="-", linewidth=1, label="mean")
+
+    if show_percentiles:
+        q90 = np.percentile(values, 90)
+        q95 = np.percentile(values, 95)
+        plt.axvline(q90, color=COLORS[1], linestyle="--", linewidth=1, label="90th percentile")
+        plt.axvline(q95, color=COLORS[0], linestyle="--", linewidth=1, label="95th percentile")
+
+    title = f"distribution of {feature_name}"
+    title += f"\ndata: {data}"
+    if strain:
+        title += f", strain: {strain}"
+    if segment:
+        title += f", segment: {segment}"
+    title += f" (n={n})"
+    plt.title(title)
+
+    plt.xlabel(f"{feature_name} ({features_specifier})")
+    plt.ylabel("relative frequency (%)")
+
+    plt.legend(
+        loc="upper right",
+        bbox_to_anchor=(0.98, 0.95),
+        borderaxespad=0.,
+        title="legend"
+    )
+
+    stats_text = (
+        f"mean: {mean_val:.2f}\n"
+        f"variance: {var_val:.2f}\n"
+        f"skewness: {skew_val:.2f}\n"
+        f"kurtosis: {kurt_val:.2f}"
+    )
+    props = dict(boxstyle="round", facecolor="white", alpha=0.7)
+    plt.gca().text(
+        0.02, 0.95, stats_text,
+        transform=plt.gca().transAxes,
+        fontsize=9,
+        verticalalignment="top",
+        horizontalalignment="left",
+        bbox=props
+    )
+
+    plt.ylim(0, 25)
+
+    save_path = os.path.join(RESULTSPATH, "distribution", dfname)
+    save_path = os.path.join(save_path, strain if strain else "all")
+    save_path = os.path.join(save_path, segment if segment else "all")
+    os.makedirs(save_path, exist_ok=True)
+
+    fname = f"distribution_{feature_name}_{data}"
+    if strain:
+        fname += f"_{strain}"
+    if segment:
+        fname += f"_{segment}"
+    fname += ".png"
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+def create_feature_correlation_plot(
+    df: pd.DataFrame,
+    feature_x: str,
+    features_specifier_x: str,
+    feature_y: str,
+    features_specifier_y: str,
+    data: str,
+    strain: str = "",
+    segment: str = ""
+):
+    """
+
+    """
+    plt.style.use("seaborn-darkgrid")
+    plt.figure(figsize=(10, 6))
+
+    values = df[[feature_x, feature_y]].dropna()
+    n = len(values)
+
+    sns.scatterplot(
+        data=values,
+        x=feature_x,
+        y=feature_y,
+        color=COLORS[4],
+        edgecolor="white",
+        s=50,
+        alpha=0.7,
+        label="data points"
+    )
+
+    reg_line = sns.regplot(
+        data=values,
+        x=feature_x,
+        y=feature_y,
+        scatter=False,
+        color=COLORS[0]
+    )
+
+    reg_line.lines[0].set_label("regression line")
+
+    title = f"correlation between {feature_x} and {feature_y}"
+    title += f"\ndata: {data}"
+    if strain:
+        title += f", strain: {strain}"
+    if segment:
+        title += f", segment: {segment}"
+    title += f" (n={n})"
+    plt.title(title)
+
+    plt.xlabel(f"{feature_x} ({features_specifier_x})")
+    plt.ylabel(f"{feature_y} ({features_specifier_y})")
+
+    plt.legend(
+        loc="upper right",
+        bbox_to_anchor=(0.98, 0.95),
+        borderaxespad=0.,
+        title="legend"
+    )
+
+    save_path = os.path.join(RESULTSPATH, "correlation", dfname)
+    save_path = os.path.join(save_path, strain if strain else "all")
+    save_path = os.path.join(save_path, segment if segment else "all")
+    os.makedirs(save_path, exist_ok=True)
+
+    fname = f"correlation_{feature_x}_vs_{feature_y}_{data}"
+    if strain:
+        fname += f"_{strain}"
+    if segment:
+        fname += f"_{segment}"
+    fname += ".png"
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, fname), dpi=300)
+    plt.close()
+
+######################
+### motif heatmap ####
+######################
+
 ### true motif heatmap ####
 
-# optional #
 def add_motifs(df: pd.DataFrame, motif_length: int):
     """
 
@@ -211,7 +642,8 @@ def add_motifs(df: pd.DataFrame, motif_length: int):
 
     return df, skipped_count
 
-def old_add_motifs(df: pd.DataFrame, motif_length: int):
+# max motif length 5 #
+def add_short_motifs(df: pd.DataFrame, motif_length: int):
     """
 
     """
@@ -335,108 +767,6 @@ def compute_motif_freq_heatmap_dfs(
         motif_freq_heatmap_dfs.append(norm_motif_heatmap_df)
     
     return motif_freq_heatmap_dfs
-
-def create_freq_heatmap_plot(
-    heatmap_name: str,
-    field: str,
-    field_specifier: str,
-    freq_heatmap_df: pd.DataFrame,
-    count_df: pd.DataFrame,
-    percentile_rank_count_df: pd.DataFrame,
-    dvg_count: int,
-    data: str,
-    strain: str = "",
-    segment: str = "",
-    feature_name = "",
-    feature = 0,
-    metric_name = "",
-    metric: float = 0,
-    lead_name = "",
-    lead: float = 0
-    ):  
-    """
-
-    """
-    pivot_df = freq_heatmap_df
-    field_order = list(pivot_df.columns)
-    rank_order = list(pivot_df.index)
-
-    field_count_series = count_df.set_index(field)['count']
-
-    field_labels = [
-        f"{field}\n(n={field_count_series.get(field, 0)})"
-        for field in field_order
-    ]
-
-    rank_labels = []
-    for rank in rank_order:
-        count = percentile_rank_count_df.loc[
-            percentile_rank_count_df['NGS_percentile_rank'] == rank, 'count'
-        ].values
-        count_str = str(count[0]) if len(count) > 0 else "0"
-        rank_labels.append(f"{rank}\n(n={count_str})")
-
-    min_width = 13
-    fig_width = max(min_width, 1 + len(field_labels) * 0.6)
-    fig_height = 1 + len(rank_labels) * 0.4
-    plt.figure(figsize=(fig_width, fig_height))
-
-    ax = sns.heatmap(
-        pivot_df,
-        cmap="viridis",
-        linewidths=0.5,
-        linecolor='white',
-        xticklabels=field_labels,
-        yticklabels=rank_labels,
-        cbar_kws={'label': 'relative frequency (%)'},
-        annot=True,
-        fmt=".1f"
-    )
-
-    ax.set_xlabel(f"{field} ({field_specifier})")
-    ax.set_ylabel("NGS_rank (percentile)")
-
-    title_name = f"{field} heatmap ({heatmap_name})"
-    if feature_name:
-        title_name += f" - {feature_name}: {feature}"
-    if metric_name:
-        title_name += f" - {metric_name}: {metric}"
-    if lead_name:
-        title_name += f" - {lead_name}: {lead}"
-    title_name += f"\ndata: {data}"
-    if strain:
-        title_name += f", strain: {strain}"
-    if segment:
-        title_name += f", segment: {segment}"
-    title_name += f" (n={dvg_count})"
-    ax.set_title(title_name)
-
-    save_path = os.path.join(RESULTSPATH, field, dfname)
-
-    if strain:
-        save_path = os.path.join(save_path, strain)
-    else:
-        save_path = os.path.join(save_path, "all")
-    if segment:
-        save_path = os.path.join(save_path, segment)
-    else:
-        save_path = os.path.join(save_path, "all")
-
-    save_path = os.path.join(save_path, f"{feature_name}_{feature}")
-    os.makedirs(save_path, exist_ok=True)
-    fname = f"{field}_{heatmap_name}_heatmap_{data}"
-
-    if strain:
-        fname += f"_{strain}"
-    if segment:
-        fname += f"_{segment}"
-    if feature_name:
-        fname += f"_{feature_name}_{feature}"
-    fname += ".png"
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_path, fname), dpi=300)
-    plt.close()
 
 def make_motif_heatmap_analysis(dfname: str, df: pd.DataFrame, heatmap_names: list, dvg_count: int, motif_length: int, top_n: int=20, strain: str="", segment: str=""):
     """
@@ -746,64 +1076,6 @@ def make_reg_motif_heatmap_analysis(dfname: str, df: pd.DataFrame, heatmap_names
         create_freq_heatmap_plot(heatmap_names[i], "motif", f"top {top_n}", top_motif_freq_heatmap_df, top_motif_count_df, percentile_rank_count_df, dvg_count, dfname, strain, segment, "motif_length", motif_length, 'mean regression coefficient', mean_coefficient, 'top regression coefficient', top_coefficient)
     return mean_coefficients, top_coefficients
 
-### random motif heatmap ####
-
-# TODO #
-def add_ratifs(df: pd.DataFrame, motif_length: int) -> pd.DataFrame:
-    random.seed(42)
-
-    def get_random_subseq(seq: str) -> str:
-        if not isinstance(seq, str) or len(seq) < motif_length:
-            return ""
-        start = random.randint(0, len(seq) - motif_length)
-        return seq[start:start + motif_length]
-
-    df['dvg_ratif'] = df['remaining_sequence'].apply(get_random_subseq)
-    df['del_ratif'] = df['deleted_sequence'].apply(get_random_subseq)
-    return df
-
-# TODO #
-def create_ratif_heatmap_df(df: pd.DataFrame, top_motifs: list):
-    """
-
-    """
-
-    def count_motifs_by_column(df: pd.DataFrame, column: str, top_motifs: list):
-        relevant_df = df[['NGS_percentile_rank', column]].copy()
-        relevant_df = relevant_df[relevant_df[column].isin(top_motifs)]
-
-        one_hot = pd.get_dummies(relevant_df[column])
-        one_hot = one_hot.reindex(columns=top_motifs, fill_value=0)
-
-        combined = pd.concat([relevant_df[['NGS_percentile_rank']], one_hot], axis=1)
-        return combined.groupby('NGS_percentile_rank', as_index=False).sum()
-
-    dvg_ratif_heatmap_df = count_motifs_by_column(df, 'dvg_ratif', top_motifs)
-    del_ratif_heatmap_df = count_motifs_by_column(df, 'del_ratif', top_motifs)
-
-    percentile_rank_count_df = (
-        df.groupby('NGS_percentile_rank')
-        .size()
-        .reset_index(name='count')
-    )
-
-    return [dvg_ratif_heatmap_df, del_ratif_heatmap_df], percentile_rank_count_df
-
-# TODO #
-def ratif_heatmap_analysis(dfname: str, df: pd.DataFrame, motif_length: int, segment: str, top_n: int):
-    dvg_count = df.shape[0]
-    df = add_ngs_percentile_rank(df)
-    df = add_motifs(df, motif_length)
-    raw_motif_count_df = create_raw_motif_count_df(df, top_n)
-    raw_motif_count_df.sort_values(by='count', ascending=False).head(top_n)
-    top_motifs = raw_motif_count_df['motif'].tolist()
-    df = add_remaining_sequence(df)
-    df = add_ratifs(df, motif_length)
-    ratif_heatmap_dfs, percentile_rank_count_df = create_ratif_heatmap_df(df, top_motifs)
-    ratif_count_dfs = create_motif_count_dfs(ratif_heatmap_dfs)
-    create_motif_heatmap_plot(dfname, dvg_count, motif_length, segment, "random_dvg", ratif_heatmap_dfs[0], ratif_count_dfs[0], percentile_rank_count_df)
-    create_motif_heatmap_plot(dfname, dvg_count, motif_length, segment, "random_del", ratif_heatmap_dfs[1], ratif_count_dfs[1], percentile_rank_count_df)
-    
 ######################
 ### repeat heatmap ###
 ######################
@@ -1201,63 +1473,6 @@ def nucleotide_heatmap_analysis(dfname: str, df: pd.DataFrame):
     create_nucleotide_heatmap_plot(dfname, dvg_count, "G", nucleotide2_heatmap_df, percentile_rank_count_df)
     create_nucleotide_heatmap_plot(dfname, dvg_count, "U", nucleotide3_heatmap_df, percentile_rank_count_df)
 
-##################################
-### random nucleotide heatmap ####
-##################################
-
-def create_randotide_heatmap_df(df: pd.DataFrame):
-    random.seed(42)
-    nucleotides = ['A', 'C', 'G', 'U']
-    num_positions = 10
-    results = {nt: [] for nt in nucleotides}
-
-    df = df[df['remaining_sequence'].str.len() > 0]
-    df = df[df['deleted_sequence'].str.len() > 0]
-    percentile_rank_count_df = df.groupby('NGS_percentile_rank').size().reset_index(name='count')
-
-    for rank, group in df.groupby('NGS_percentile_rank'):
-        counts = {nt: [0] * 20 for nt in nucleotides}
-
-        for _, row in group.iterrows():
-            dvg_seq = row['remaining_sequence']
-            del_seq = row['deleted_sequence']
-
-            if isinstance(dvg_seq, str) and len(dvg_seq) > 0:
-                for i in range(num_positions):
-                    pos = random.randint(0, len(dvg_seq) - 1)
-                    nt = dvg_seq[pos]
-                    if nt in nucleotides:
-                        counts[nt][i] += 1
-
-            if isinstance(del_seq, str) and len(del_seq) > 0:
-                for i in range(num_positions):
-                    pos = random.randint(0, len(del_seq) - 1)
-                    nt = del_seq[pos]
-                    if nt in nucleotides:
-                        counts[nt][num_positions + i] += 1
-
-        for nt in nucleotides:
-            results[nt].append([rank] + counts[nt])
-
-    nucleotide_heatmap_dfs = {}
-    columns = ['NGS_percentile_rank'] + list(range(20))
-    for nt in nucleotides:
-        df_nt = pd.DataFrame(results[nt], columns=columns)
-        nucleotide_heatmap_dfs[nt] = df_nt.sort_values('NGS_percentile_rank').reset_index(drop=True)
-
-    return nucleotide_heatmap_dfs['A'], nucleotide_heatmap_dfs['C'], nucleotide_heatmap_dfs['G'], nucleotide_heatmap_dfs['U'], percentile_rank_count_df
-
-def randotide_heatmap_analysis(dfname: str, df: pd.DataFrame):
-    dvg_count = df.shape[0]
-    df = add_ngs_percentile_rank(df)
-    df = add_remaining_sequence(df)
-    nucleotide0_heatmap_df, nucleotide1_heatmap_df, nucleotide2_heatmap_df, nucleotide3_heatmap_df, percentile_rank_count_df = create_randotide_heatmap_df(df)
-    create_nucleotide_heatmap_plot(dfname, dvg_count, "random_A", nucleotide0_heatmap_df, percentile_rank_count_df)
-    create_nucleotide_heatmap_plot(dfname, dvg_count, "random_C", nucleotide1_heatmap_df, percentile_rank_count_df)
-    create_nucleotide_heatmap_plot(dfname, dvg_count, "random_G", nucleotide2_heatmap_df, percentile_rank_count_df)
-    create_nucleotide_heatmap_plot(dfname, dvg_count, "random_U", nucleotide3_heatmap_df, percentile_rank_count_df)
-
-
 if __name__ == "__main__":
     '''
 
@@ -1280,7 +1495,7 @@ if __name__ == "__main__":
 
     ### MULTI ###
 
-    selector = "IAV"
+    selector = "IBV"
     dfname = selector
     dfnames = get_dataset_names(cutoff=40, selection=selector)
     dfs, _ = load_all(dfnames, False)
@@ -1289,9 +1504,16 @@ if __name__ == "__main__":
     ### testing ####
     ################
 
-    # make_full_motif_heatmap_analysis(dfname, dfs, 8, "PR8", "PB1")
-    make_full_reg_motif_heatmap_analysis(dfname, dfs, 8, "PR8", "PB1")
+    # make_full_motif_heatmap_analysis(dfname, dfs, 5, "PR8", "PB1")
+    # make_full_reg_motif_heatmap_analysis(dfname, dfs, 5, "PR8", "PB1")
+    # make_full_ngs_distribution_analysis(dfname, dfs, "PR8", "PB1")
+    make_full_length_mfe_correlation_analysis(dfname, "", "")
+    # make_full_sec_structure_plots(dfname, dfs, "PR8", "PB1")
+
     # make_repeat_heatmap_analysis(dfname, dfs, 3, "", "")
+
+    # add_motif_features(dfname, dfs, 3, "PR8", "PB1")
+    # add_reg_motif_features(dfname, dfs, 3, "PR8", "PB1")
 
     # preprocess_sec_features(dfname, dfs, "sec", "", "")
     # make_mfe_heatmap_analysis(dfname, "sec", "", "")

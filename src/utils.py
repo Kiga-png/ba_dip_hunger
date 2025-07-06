@@ -1284,24 +1284,24 @@ def add_selector(df: pd.DataFrame, selector: str) -> pd.DataFrame:
     df['selector'] = selector
     return df
 
-def add_gc_content_dvg_sequnce(df: pd.DataFrame) -> pd.DataFrame:
-    df = add_nucleotide_count_dvg_sequence(df)
-    def compute_gc_content(row) -> float:
-        seq = row['dvg_sequence']
-        g = seq.count('G')
-        c = seq.count('C')
-        total = row['nucleotide_count']
-        return (g + c) / total if total > 0 else 0.0
-
-    df['gc_content'] = df.apply(compute_gc_content, axis=1)
-    return df
-
 def add_nucleotide_count_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     df = add_dvg_sequence(df)
     def count_nucleotides(seq: str) -> int:
         return sum(seq.count(nuc) for nuc in ['A', 'U', 'G', 'C'])
 
     df['nucleotide_count'] = df['dvg_sequence'].apply(count_nucleotides)
+    return df
+
+
+
+def add_cg_content(df: pd.DataFrame):
+    def calculate_gc_content(seq):
+        if not isinstance(seq, str) or len(seq) == 0:
+            return 0.0
+        gc_count = seq.count('G') + seq.count('C')
+        return (gc_count / len(seq))
+
+    df['cg_content'] = df['dvg_sequence'].apply(calculate_gc_content)
     return df
 
 def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
@@ -1321,6 +1321,10 @@ def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
     return df
 
+def add_dvg_length(df: pd.DataFrame):
+    df['dvg_length'] = df['remaining_sequence'].apply(len)
+    return df
+
 def add_remaining_sequence(df: pd.DataFrame) -> pd.DataFrame:
     def compute_dvg_sequence(row):
         full_seq = row['full_seq']
@@ -1332,26 +1336,7 @@ def add_remaining_sequence(df: pd.DataFrame) -> pd.DataFrame:
     df['remaining_sequence'] = df.apply(compute_dvg_sequence, axis=1)
     return df
 
-def fold_sequence(seq: str):
-    """
 
-    """
-    structure, mfe = RNA.fold(seq)
-    return structure, mfe
-
-def add_sec_features_parallel(df: pd.DataFrame) -> pd.DataFrame:
-    """
-
-    """
-    sequences = df['remaining_sequence'].tolist()
-    
-    with Pool(processes=cpu_count()) as pool:
-        results = pool.map(fold_sequence, sequences)
-    
-    structures, mfes = zip(*results)
-    df['Structure'] = structures
-    df['MFE'] = mfes
-    return df
 
 def add_mfe_percentile_rank(df: pd.DataFrame, split_number: int = 20):
     df = df.copy()
@@ -1381,6 +1366,8 @@ def get_selctors(selector_category: str):
     if selector_category == "all":
         return ["IAV", "IBV", "in vivo human", "in vivo mouse", "in vitro"]
 
+### ### ###
+
 def save_df(dfname: str, df: pd.DataFrame, fname: str, strain: str="", segment: str=""):
 
     save_path, _ = os.path.split(RESULTSPATH)
@@ -1401,6 +1388,49 @@ def save_df(dfname: str, df: pd.DataFrame, fname: str, strain: str="", segment: 
     fname = fname + ".csv"
 
     df.to_csv(os.path.join(save_path, fname), index=False)
+
+def add_feature_percentile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int = 20):
+    df = df.copy()
+    df[rank_name] = pd.qcut(
+        df[feature_name],
+        q=split_number,
+        labels=False,
+        duplicates='drop'
+    ) + 1
+    return df
+
+def add_log_feature(df: pd.DataFrame, feature_name: str, log_name: str):
+    df[log_name] = np.log10(df[feature_name])
+    return df
+
+def add_norm_feature(df: pd.DataFrame, feature_name: str, norm_name: str):
+    max = df[feature_name].max()
+    min = df[feature_name].min()
+    df[norm_name] = (df[feature_name] - min) / (max - min)
+    return df
+
+###
+
+def fold_sequence(seq: str):
+    """
+
+    """
+    structure, mfe = RNA.fold(seq)
+    return structure, mfe
+
+def add_sec_features_parallel(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
+    sequences = df['remaining_sequence'].tolist()
+    
+    with Pool(processes=cpu_count()) as pool:
+        results = pool.map(fold_sequence, sequences)
+    
+    structures, mfes = zip(*results)
+    df['Structure'] = structures
+    df['MFE'] = mfes
+    return df
 
 ######################
 ### ngs read count ###
