@@ -17,14 +17,14 @@ import joblib
 
 # === Einstellungen ===
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
-KMER_SIZE = 3
-NAME_MOD = f"IAV_pri_cnn_reg_motif_length_{KMER_SIZE}_v0"
+KMER_SIZE = 7
+NAME_MOD = f"IAV_cnn_reg_motif_length_{KMER_SIZE}_v0"
 save_path = os.path.join(RESULTSPATH, "networks", "cnn", "reg")
 os.makedirs(save_path, exist_ok=True)
 
 # === Daten laden ===
 read_path = os.path.join(RESULTSPATH, "dfs", "IAV", "PR8", "PB1")
-fname = f"nn_pri_motif_length_{KMER_SIZE}.csv"
+fname = f"nn_motif_length_{KMER_SIZE}.csv"
 df = pd.read_csv(os.path.join(read_path, fname))
 
 # === K-mer-Tokenisierung ===

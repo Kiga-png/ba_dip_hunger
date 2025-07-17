@@ -21,7 +21,7 @@ if __name__ == "__main__":
     data = "IAV"
     strain = "PR8"
     segment = "PB1"
-    motif_length = 3
+    motif_length = 7
 
     read_path, _ = os.path.split(RESULTSPATH)
     read_path = os.path.join(read_path, "dfs", data, strain, segment)
@@ -48,4 +48,4 @@ if __name__ == "__main__":
     df = df.drop("deleted_sequence", axis=1)
     df = df.drop("seq_around_deletion_junction", axis=1)
 
-    save_df(data, df, f"nn_pri_motif_length_{motif_length}", strain, segment)
+    save_df(data, df, f"nn_motif_length_{motif_length}", strain, segment)

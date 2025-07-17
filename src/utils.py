@@ -4,16 +4,19 @@
 import os
 import re
 
+import itertools as it
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as stats
 
 import RNA
-from multiprocessing import Pool, cpu_count
 
+from multiprocessing import Pool, cpu_count
 from typing import Tuple
 from Bio import SeqIO
+
+from sklearn.linear_model import LinearRegression
 
 ### STATIC VALUES ###
 # load config and assign values to global variables
@@ -1274,37 +1277,83 @@ B_STRAINS = ["BLEE", "Victoria", "Brisbane", "Yamagata"]
 ### general ###
 ###############
 
-def add_slector_list(dfs: list, selectors: list) -> list:
-    mod_dfs = []
-    for df, selector in zip(dfs, selectors):
-        mod_dfs.append(add_selector(df, selector))
-    return mod_dfs
+### load and save ###
 
-def add_selector(df: pd.DataFrame, selector: str) -> pd.DataFrame:
-    df['selector'] = selector
+def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
+    '''
+    
+    '''
+    if data:
+        pass
+    else:
+        data = 'all'
+    if strain:
+        df = df[df['Strain'] == strain]
+    else:
+        strain = 'all'
+    if segment:
+        df = df[df['Segment'] == segment]
+    else:
+        segment = 'all'
+    
+    return df, data, strain, segment
+
+def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '')-> pd.DataFrame:
+    '''
+
+    '''
+    read_path, _ = os.path.split(RESULTSPATH)
+    read_path = os.path.join(read_path, 'preprocess')
+    read_path = os.path.join(read_path, folder) if folder else read_path
+    read_path = os.path.join(read_path, subfolder) if subfolder else read_path
+    os.makedirs(read_path, exist_ok=True)
+
+    fname = fname + ".csv"
+    df = pd.read_csv(os.path.join(read_path, fname))
     return df
 
-def add_nucleotide_count_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
-    df = add_dvg_sequence(df)
-    def count_nucleotides(seq: str) -> int:
-        return sum(seq.count(nuc) for nuc in ['A', 'U', 'G', 'C'])
+def load_all_preprocessed(fnames: list, folder: str = '', subfolder: str = '')-> list:
+    '''
 
-    df['nucleotide_count'] = df['dvg_sequence'].apply(count_nucleotides)
-    return df
+    '''
+    dfs = []
+    for fname in fnames:
+        df = load_preprocessed_dataset(fname, folder, subfolder)
+        dfs.append(df)
 
+    return dfs
 
+def merge_missing_features(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
+    '''
 
-def add_cg_content(df: pd.DataFrame):
-    def calculate_gc_content(seq):
-        if not isinstance(seq, str) or len(seq) == 0:
-            return 0.0
-        gc_count = seq.count('G') + seq.count('C')
-        return (gc_count / len(seq))
+    '''
+    df1_filtered = df1[df1['key'].isin(df2['key'])].copy()
+    missing_cols = [col for col in df2.columns if col not in df1.columns and col != 'key']
 
-    df['cg_content'] = df['dvg_sequence'].apply(calculate_gc_content)
-    return df
+    df2_subset = df2[['key'] + missing_cols]
+    merged_df = pd.merge(df1_filtered, df2_subset, on='key', how='inner')
 
-def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    return merged_df
+
+def save_df(df: pd.DataFrame, fname: str, folder: str = "", subfolder: str = "", data: str = "", strain: str = "", segment: str = ""):
+    '''
+    
+    '''
+    save_path, _ = os.path.split(RESULTSPATH)
+    save_path = os.path.join(save_path, "preprocess")
+    save_path = os.path.join(save_path, folder) if folder else save_path
+    save_path = os.path.join(save_path, subfolder) if subfolder else save_path
+    save_path = os.path.join(save_path, data) if data else save_path
+    save_path = os.path.join(save_path, strain) if strain else save_path
+    save_path = os.path.join(save_path, segment) if segment else save_path
+    os.makedirs(save_path, exist_ok=True)
+    fname = fname + ".csv"
+
+    df.to_csv(os.path.join(save_path, fname), index=False)
+
+### length features ###
+
+def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     def compute_dvg_sequence(row):
         full_seq = row['full_seq']
         start = row['Start']
@@ -1318,14 +1367,24 @@ def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
 
         return ''.join(seq_list)
 
-    df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+    df['marked_dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+    return df
+
+def add_cg_content(df: pd.DataFrame):
+    def calculate_gc_content(seq):
+        if not isinstance(seq, str) or len(seq) == 0:
+            return 0.0
+        gc_count = seq.count('G') + seq.count('C')
+        return (gc_count / len(seq))
+
+    df['cg_content'] = df['dvg_sequence'].apply(calculate_gc_content)
     return df
 
 def add_dvg_length(df: pd.DataFrame):
-    df['dvg_length'] = df['remaining_sequence'].apply(len)
+    df['dvg_length'] = df['dvg_sequence'].apply(len)
     return df
 
-def add_remaining_sequence(df: pd.DataFrame) -> pd.DataFrame:
+def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     def compute_dvg_sequence(row):
         full_seq = row['full_seq']
         start = row['Start']
@@ -1333,29 +1392,85 @@ def add_remaining_sequence(df: pd.DataFrame) -> pd.DataFrame:
 
         return full_seq[:start] + full_seq[end:]
 
-    df['remaining_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+    df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
     return df
 
+def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
+    """
 
+    """
+    df["5_end_length"] = df["Start"]
+    df["3_end_length"] = df["full_seq"].str.len() - df["End"]
+    df["deletion_length"] = df["End"] - df["Start"] - 1
 
-def add_mfe_percentile_rank(df: pd.DataFrame, split_number: int = 20):
+    return df
+
+### intersects ###
+
+def manage_intersects(df: pd.DataFrame, modifier: str) -> pd.DataFrame:
+    df = add_iid(df)
+    if modifier == '':
+        intersects = 'all'
+    elif modifier == 'remove':
+        df = remove_duplicate_iids(df)
+    elif modifier == 'sum':
+        df = sum_by_iid(df)
+    elif modifier == 'mean':
+        df = mean_by_iid(df)
+    else:
+        print('invalid intersects modifier')
+
+    return df, intersects
+
+def mean_by_iid(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df['MFE_percentile_rank'] = pd.qcut(
-        df['MFE'],
-        q=split_number,
-        labels=False,
-        duplicates='drop'
-    ) + 1
+    
+    def aggregate_group(group):
+        averaged = group.iloc[0].copy()
+        averaged['NGS_read_count'] = group['NGS_read_count'].mean()
+        return averaged
+
+    result = df.groupby('iid', group_keys=False).apply(aggregate_group).reset_index(drop=True)
+    return result
+
+def sum_by_iid(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    
+    def aggregate_group(group):
+        summed = group.iloc[0].copy()
+        summed['NGS_read_count'] = group['NGS_read_count'].sum()
+        return summed
+
+    result = df.groupby('iid', group_keys=False).apply(aggregate_group).reset_index(drop=True)
+    return result
+
+def remove_duplicate_iids(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    iid_counts = df['iid'].value_counts()
+    unique_iids = iid_counts[iid_counts == 1].index
+
+    return df[df['iid'].isin(unique_iids)].reset_index(drop=True)
+
+def add_iid(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    unique_pairs = df[['key', 'Strain']].drop_duplicates().reset_index(drop=True)
+    unique_pairs['iid'] = range(1, len(unique_pairs) + 1)
+    df = df.merge(unique_pairs, on=['key', 'Strain'], how='left')
+    
     return df
 
-def add_dfname_list(dfnames: list, dfs: list) -> list:
-    mod_dfs = []
-    for dfname, df in zip(dfnames, dfs):
-        mod_dfs.append(add_dfname(dfname, df))
-    return mod_dfs
+### identifier ###
 
-def add_dfname(dfname: str, df: pd.DataFrame) -> pd.DataFrame:
-    df['dfname'] = dfname
+def add_dfnames(dfnames: list, dfs: list) -> list:
+    updated_dfs = []
+    for dfname, df in zip(dfnames, dfs):
+        df = df.copy()
+        df['dataset'] = dfname
+        updated_dfs.append(df)
+    return updated_dfs
+
+def add_selector(df: pd.DataFrame, selector: str) -> pd.DataFrame:
+    df['selector'] = selector
     return df
 
 def get_selctors(selector_category: str):
@@ -1366,28 +1481,30 @@ def get_selctors(selector_category: str):
     if selector_category == "all":
         return ["IAV", "IBV", "in vivo human", "in vivo mouse", "in vitro"]
 
-### ### ###
+### augment data ###
 
-def save_df(dfname: str, df: pd.DataFrame, fname: str, strain: str="", segment: str=""):
+def rename_feature(df: pd.DataFrame, old_name: str, new_name: str) -> pd.DataFrame:
+    '''
+    
+    '''
+    if old_name not in df.columns:
+        raise ValueError(f"column '{old_name}' not found in DataFrame")
 
-    save_path, _ = os.path.split(RESULTSPATH)
-    save_path = os.path.join(save_path, "dfs")
-    save_path = os.path.join(save_path, dfname)
+    return df.rename(columns={old_name: new_name})
 
-    if strain:
-        save_path = os.path.join(save_path, strain)
-    else:
-        save_path = os.path.join(save_path, "all")
+def filter_for_feature(df: pd.DataFrame, feature_name: str, filter_number: int):
+    '''
+    
+    '''
+    df = df[df[feature_name] == filter_number]
+    return df
 
-    if segment:
-        save_path = os.path.join(save_path, segment)
-    else:
-        save_path = os.path.join(save_path, "all")
-
-    os.makedirs(save_path, exist_ok=True)
-    fname = fname + ".csv"
-
-    df.to_csv(os.path.join(save_path, fname), index=False)
+def filter_against_feature(df: pd.DataFrame, feature_name: str, filter_number: int):
+    '''
+    
+    '''
+    df = df[df[feature_name] != filter_number]
+    return df
 
 def add_feature_percentile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int = 20):
     df = df.copy()
@@ -1409,7 +1526,7 @@ def add_norm_feature(df: pd.DataFrame, feature_name: str, norm_name: str):
     df[norm_name] = (df[feature_name] - min) / (max - min)
     return df
 
-###
+### sec features ###
 
 def fold_sequence(seq: str):
     """
@@ -1418,72 +1535,33 @@ def fold_sequence(seq: str):
     structure, mfe = RNA.fold(seq)
     return structure, mfe
 
-def add_sec_features_parallel(df: pd.DataFrame) -> pd.DataFrame:
+def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, mfe_name: str) -> pd.DataFrame:
     """
 
     """
-    sequences = df['remaining_sequence'].tolist()
+    sequences = df[sequence_name].tolist()
     
     with Pool(processes=cpu_count()) as pool:
         results = pool.map(fold_sequence, sequences)
     
     structures, mfes = zip(*results)
-    df['Structure'] = structures
-    df['MFE'] = mfes
+    df[structure_name] = structures
+    df[mfe_name] = mfes
     return df
 
-######################
-### ngs read count ###
-######################
-
-def add_dist_ngs_read_count(df: pd.DataFrame):
-    sum = df['NGS_read_count'].sum()
-    df['dist_NGS_read_count'] = df['NGS_read_count'] / sum
+def add_loop_count(df: pd.DataFrame, sequence_name: str, count_name: str) -> pd.DataFrame:
+    df[count_name] = df[sequence_name].apply(lambda s: len(re.findall(r'\.+', s)))
     return df
 
-def add_ngs_percentile_rank_list(dfs: list):
-    mod_dfs = []
-    for df in dfs:
-        mod_dfs.append(add_ngs_percentile_rank(df))
-    return mod_dfs
-
-def add_ngs_percentile_rank(df: pd.DataFrame, split_number: int = 20):
-    df = df.copy()
-    df['NGS_percentile_rank'] = pd.qcut(
-        df['NGS_read_count'],
-        q=split_number,
-        labels=False,
-        duplicates='drop'
-    ) + 1
+def add_max_loop(df: pd.DataFrame, sequence_name: str, max_name: str) -> pd.DataFrame:
+    df[max_name:] = df[sequence_name].apply(
+        lambda s: max((len(match) for match in re.findall(r'\.+', s)), default=0)
+    )
     return df
 
-######################
+### statistics ###
 
-def add_norm_ngs_read_count(df: pd.DataFrame):
-    max = df['NGS_read_count'].max()
-    min = df['NGS_read_count'].min()
-    df['norm_NGS_read_count'] = (df['NGS_read_count'] - min) / (max - min)
-    return df
-
-def add_norm_log_ngs_read_count_list(dfs: list):
-    mod_dfs = []
-    for df in dfs:
-        mod_dfs.append(add_norm_log_ngs_read_count(df))
-    return mod_dfs
-
-def add_norm_log_ngs_read_count(df: pd.DataFrame):
-    df = add_log_ngs_read_count(df)
-    max_log = df['log_NGS_read_count'].max()
-    min_log = df['log_NGS_read_count'].min()
-    df['norm_log_NGS_read_count'] = (df['log_NGS_read_count'] - min_log) / (max_log - min_log)
-    return df
-
-def add_log_ngs_read_count(df: pd.DataFrame):
-    df['log_NGS_read_count'] = np.log10(df['NGS_read_count'])
-    return df
-
-######################
-
+# TODO #
 def perform_t_test_log(df: pd.DataFrame):
     df = add_norm_log_d_ngs_read_count(df)
     log_d_counts = df['norm_log_d_NGS_read_count']
@@ -1492,58 +1570,283 @@ def perform_t_test_log(df: pd.DataFrame):
     t_stat, p_value = stats.ttest_ind(log_n_counts, log_d_counts)
     return p_value
 
-def add_norm_log_d_ngs_read_count(df: pd.DataFrame):
-    df = add_log_d_ngs_read_count(df)
-    max_log_d = df['log_d_NGS_read_count'].max()
-    min_log_d = df['log_d_NGS_read_count'].min()
-    df['norm_log_d_NGS_read_count'] = (df['log_d_NGS_read_count'] - min_log_d) / (max_log_d - min_log_d)
-    return df
-
-def add_log_d_ngs_read_count(df: pd.DataFrame):
-    df['log_d_NGS_read_count'] = np.log10(df['NGS_read_count'])
-    return df
-
-def add_norm_log_n_ngs_read_count(df: pd.DataFrame):
-    df = add_log_n_ngs_read_count(df)
-    max_log_n = df['log_n_NGS_read_count'].max()
-    min_log_n = df['log_n_NGS_read_count'].min()
-    df['norm_log_n_NGS_read_count'] = (df['log_n_NGS_read_count'] - min_log_n) / (max_log_n - min_log_n)
-    return df
-
-def add_log_n_ngs_read_count(df: pd.DataFrame):
-    df['log_n_NGS_read_count'] = np.log(df['NGS_read_count'])
-    return df
-
 ###############
-### repeats ###
+### visuals ###
 ###############
 
-def count_direct_repeats(df: pd.DataFrame):
-    df = add_direct_repeat_len(df)
-    df = cap_direct_repeat_len(df)
-    dr_length_dict = dict({i: 0 for i in range(0, 6)})
-    for index, row in df.iterrows():
-        i = row["direct_repeat_len"]
-        dr_length_dict[i] = dr_length_dict[i] + 1
-    return dr_length_dict
+### general ###
 
-def count_direct_repeats_segment(df: pd.DataFrame, segment: str):
-    df = add_direct_repeat_len(df)
-    df = cap_direct_repeat_len(df)
-    dr_length_dict = dict({i: 0 for i in range(0, 6)})
-    segment_df = df[df["Segment"] == segment]
-    for index, row in segment_df.iterrows():
-        i = row["direct_repeat_len"]
-        dr_length_dict[i] = dr_length_dict[i] + 1
-    return dr_length_dict
+def compute_percentile_rank_count_df(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    
+    '''
+    return (
+        df.groupby('NGS_percentile_rank')
+        .size()
+        .reset_index(name='count')
+    )
+
+def compute_seq_feature_count_df(sequence: str, feature_name: str, filter: list):
+    '''
+
+    '''
+    data = {
+        feature_name: [],
+        'count': []
+    }
+
+    for value in filter:
+        count = sequence.count(value)
+        data[feature_name].append(value)
+        data['count'].append(count)
+
+    count_df = pd.DataFrame(data)
+
+    return count_df
+
+def compute_feature_count_df(df: pd.DataFrame, feature_name: str, filter: list = []):
+    '''
+
+    '''
+    feature_series = df[feature_name].dropna()
+    feature_counts = feature_series.value_counts().to_dict()
+
+    if not filter:
+        filter = sorted(feature_series.unique().tolist())
+
+    feature_count_df = pd.DataFrame({
+        feature_name: filter,
+        'count': [feature_counts.get(value, 0) for value in filter]
+    })
+
+    return feature_count_df
+
+def compute_feature_freq_df(count_df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
+    '''
+
+    '''
+    total = count_df['count'].sum()
+    freq_df = count_df.copy()
+    freq_df['freq'] = (freq_df['count'] / total) * 100
+
+    return freq_df[[feature_name, 'freq']]
+
+def subtract_freq_dfs(freq_df0: pd.DataFrame, freq_df1: pd.DataFrame, feature_name: str) -> pd.DataFrame:
+    '''
+
+    '''
+    diff_freq_df = pd.DataFrame({
+        feature_name: freq_df0[feature_name],
+        'freq0': freq_df0['freq'],
+        'freq1': freq_df1['freq'],
+        'freq_diff': freq_df0['freq'] - freq_df1['freq']
+    })
+    return diff_freq_df
+
+### heatmap ###
+
+def compute_feature_count_heatmap_df(df: pd.DataFrame, feature_name: str, filter: list = []) -> pd.DataFrame:
+    '''
+
+    '''
+    relevant_df = df[['NGS_percentile_rank', feature_name]].copy()
+
+    if filter:
+        relevant_df = relevant_df[relevant_df[feature_name].isin(filter)]
+    else:
+        filter = sorted(relevant_df[feature_name].dropna().unique().tolist())
+
+    one_hot = pd.get_dummies(relevant_df[feature_name])
+    one_hot = one_hot.reindex(columns=filter, fill_value=0)
+    combined = pd.concat([relevant_df[['NGS_percentile_rank']], one_hot], axis=1)
+
+    return combined.groupby('NGS_percentile_rank', as_index=False).sum()
+
+def compute_feature_count_heatmap_sum_df(df: pd.DataFrame, feature_name: str):
+    '''
+
+    '''
+    feature_columns = df.columns[1:]
+    count_sums = df[feature_columns].sum()
+
+    feature_count_df = pd.DataFrame({
+        feature_name: feature_columns.astype(str),
+        'count': count_sums.values.astype(int)
+    })
+
+    return feature_count_df
+
+def compute_feature_freq_heatmap_df(feature_count_heatmap_df: pd.DataFrame, percentile_rank_count_df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    rank_counts = percentile_rank_count_df.set_index('NGS_percentile_rank')['count']
+    pivot_df = feature_count_heatmap_df.set_index('NGS_percentile_rank')
+    pivot_df = pivot_df.loc[pivot_df.index.intersection(rank_counts.index)]
+    feature_freq_heatmap_df = pivot_df.div(rank_counts, axis=0) * 100
+
+    return feature_freq_heatmap_df
+
+def add_lin_reg_rows(freq_heatmap_df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    
+    '''
+    X = np.arange(1, len(freq_heatmap_df) + 1).reshape(-1, 1)
+
+    intercepts = {}
+    coefficients = {}
+
+    for column in freq_heatmap_df.columns:
+        y = freq_heatmap_df[column].values
+
+        valid_idx = ~np.isnan(y)
+        if valid_idx.sum() < 2:
+            intercepts[column] = 0.0
+            coefficients[column] = 0.0
+            continue
+
+        model = LinearRegression().fit(X[valid_idx], y[valid_idx])
+        intercepts[column] = model.intercept_
+        coefficients[column] = model.coef_[0]
+
+    reg_freq_heatmap_df = freq_heatmap_df.copy()
+    reg_freq_heatmap_df.loc['intercept'] = intercepts
+    reg_freq_heatmap_df.loc['coefficient'] = coefficients
+
+    return reg_freq_heatmap_df
+
+##############
+### motifs ###
+##############
+
+### motifs ###
+
+def generate_motifs(motif_length: int):
+    '''
+
+    '''
+    nucleotides = ['A', 'C', 'G', 'U']
+    motifs = [''.join(p) for p in it.product(nucleotides, repeat=motif_length)]
+    
+    return sorted(motifs)
+
+def add_site_motifs(df: pd.DataFrame, motif_length: int):
+    '''
+
+    '''
+    site0_motifs = []
+    site1_motifs = []
+    site2_motifs = []
+    site3_motifs = []
+
+    valid_indices = []
+    skipped_count = 0
+
+    for idx, row in df.iterrows():
+        seq = row['full_seq']
+        start = row['Start']
+        end = row['End']
+
+        start0 = start
+        end0 = end - 1
+
+        if (start0 - motif_length < 0 or 
+            start0 + motif_length > len(seq) or 
+            end0 - motif_length < 0 or 
+            end0 + motif_length > len(seq)):
+            skipped_count += 1
+            continue
+
+        site0_motif = seq[start0 - motif_length:start0]
+        site1_motif = seq[start0:start0 + motif_length]
+        site2_motif = seq[end0 - motif_length:end0]
+        site3_motif = seq[end0:end0 + motif_length]
+
+        site0_motifs.append(site0_motif)
+        site1_motifs.append(site1_motif)
+        site2_motifs.append(site2_motif)
+        site3_motifs.append(site3_motif)
+        valid_indices.append(idx)
+
+    df = df.loc[valid_indices].copy().reset_index(drop=True)
+
+    df['site0_motif'] = site0_motifs
+    df['site1_motif'] = site1_motifs
+    df['site2_motif'] = site2_motifs
+    df['site3_motif'] = site3_motifs
+
+    return df, skipped_count
+
+def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, segment: str):
+    '''
+
+    '''
+    motifs = generate_motifs(motif_length)
+
+    strains = STRAINS
+    if data == 'IAV':
+        strains = A_STRAINS
+    if data == 'IBV':
+        strains = B_STRAINS
+
+    if segment != 'all' and strain != 'all':
+        full_seq = get_sequence(strain, segment)
+        motif_count_df = compute_seq_feature_count_df(full_seq, 'motif', motifs)
+        motif_freq_df = compute_feature_freq_df(motif_count_df, 'motif')
+        return motif_freq_df
+    
+    comb_df = pd.DataFrame()
+
+    if strain != 'all':
+        for segment in SEGMENTS:
+            full_seq = get_sequence(strain, segment)
+            motif_count_df = compute_seq_feature_count_df(full_seq, 'motif', motifs)
+            motif_freq_df = compute_feature_freq_df(motif_count_df, 'motif')
+            if comb_df.empty:
+                comb_df = motif_freq_df.copy()
+            else:
+                comb_df['freq'] += motif_freq_df['freq']
+
+        comb_df['freq'] = comb_df['freq'] / len(SEGMENTS) 
+        return comb_df
+    
+    if segment != 'all':
+        for strain in strains:
+            full_seq = get_sequence(strain, segment)
+            motif_count_df = compute_seq_feature_count_df(full_seq, 'motif', motifs)
+            motif_freq_df = compute_feature_freq_df(motif_count_df, 'motif')
+            if comb_df.empty:
+                comb_df = motif_freq_df.copy()
+            else:
+                comb_df['freq'] += motif_freq_df['freq']
+
+        comb_df['freq'] = comb_df['freq'] / len(strains)
+        return comb_df
+    
+    for strain in strains:
+        for segment in SEGMENTS:
+            full_seq = get_sequence(strain, segment)
+            motif_count_df = compute_seq_feature_count_df(full_seq, 'motif', motifs)
+            motif_freq_df = compute_feature_freq_df(motif_count_df, 'motif')
+            if comb_df.empty:
+                comb_df = motif_freq_df.copy()
+            else:
+                comb_df['freq'] += motif_freq_df['freq']
+
+    comb_df['freq'] = comb_df['freq'] / (len(strains) * len(SEGMENTS))
+    return comb_df
 
 ######################
+### direct repeats ###
+######################
+
+### direct repeats ###
 
 def cap_direct_repeat_len(df: pd.DataFrame, cap: int = 5):
     for index, row in df.iterrows():
-        direct_repeat_len = row["direct_repeat_len"]
+        direct_repeat_len = row["direct_repeat_length"]
         if direct_repeat_len > cap:
-            df.loc[index, "direct_repeat_len"] = cap
+            df.loc[index, "direct_repeat_length"] = cap
     return df
 
 def add_direct_repeat_len(df: pd.DataFrame):
@@ -1557,40 +1860,16 @@ def add_direct_repeat_len(df: pd.DataFrame):
             direct_repeat_len = direct_repeat_len + 1
             start = start - 1
             end = end - 1
-        df.loc[index, "direct_repeat_len"] = direct_repeat_len
+        df.loc[index, "direct_repeat_length"] = direct_repeat_len
 
-    df["direct_repeat_len"] = df["direct_repeat_len"].astype(int)
-    return df
-
-###########################
-### motif enrichment bs ###
-###########################
-
-def add_motif_count(df: pd.DataFrame, motif: str):
-    """
-
-    """
-    pattern = f'(?={re.escape(motif)})'
-    motif_counts = []
-
-    for seq in df['seq_around_deletion_junction']:
-        if len(seq) != 20:
-            motif_counts.append(0)
-            continue
-
-        seq1 = seq[0:5]
-        seq2 = seq[15:20]
-        motif_count = len(list(re.finditer(pattern, seq1))) + len(list(re.finditer(pattern, seq2)))
-        motif_counts.append(motif_count)
-
-    df = df.copy()
-    df[f"{motif}_count"] = motif_counts
-
+    df["direct_repeat_length"] = df["direct_repeat_length"].astype(int)
     return df
 
 ######################
 ### one hot encode ###
 ######################
+
+### one hot encode ###
 
 def one_hot_encode(seq, max_len=3000):
     base_map = {'A': [1,0,0,0], 'U': [0,1,0,0], 'C': [0,0,1,0], 'G': [0,0,0,1], 'X': [0,0,0,0]}
