@@ -1335,7 +1335,7 @@ def merge_missing_features(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame
 
     return merged_df
 
-def save_df(df: pd.DataFrame, fname: str, folder: str = "", subfolder: str = "", data: str = "", strain: str = "", segment: str = ""):
+def save_df(df: pd.DataFrame, fname: str, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
     '''
     
     '''
@@ -1346,6 +1346,7 @@ def save_df(df: pd.DataFrame, fname: str, folder: str = "", subfolder: str = "",
     save_path = os.path.join(save_path, data) if data else save_path
     save_path = os.path.join(save_path, strain) if strain else save_path
     save_path = os.path.join(save_path, segment) if segment else save_path
+    save_path = os.path.join(save_path, intersects) if intersects else save_path
     os.makedirs(save_path, exist_ok=True)
     fname = fname + ".csv"
 
@@ -1408,19 +1409,21 @@ def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
 ### intersects ###
 
 def manage_intersects(df: pd.DataFrame, modifier: str) -> pd.DataFrame:
-    df = add_iid(df)
     if modifier == '':
-        intersects = 'all'
+        modifier = 'all'
     elif modifier == 'remove':
+        df = add_iid(df)
         df = remove_duplicate_iids(df)
     elif modifier == 'sum':
+        df = add_iid(df)
         df = sum_by_iid(df)
     elif modifier == 'mean':
+        df = add_iid(df)
         df = mean_by_iid(df)
     else:
         print('invalid intersects modifier')
 
-    return df, intersects
+    return df, modifier
 
 def mean_by_iid(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -1844,8 +1847,8 @@ def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, se
 
 def cap_direct_repeat_len(df: pd.DataFrame, cap: int = 5):
     for index, row in df.iterrows():
-        direct_repeat_len = row["direct_repeat_length"]
-        if direct_repeat_len > cap:
+        direct_repeat_length = row["direct_repeat_length"]
+        if direct_repeat_length > cap:
             df.loc[index, "direct_repeat_length"] = cap
     return df
 
@@ -1854,13 +1857,13 @@ def add_direct_repeat_len(df: pd.DataFrame):
         seq = row["full_seq"]
         start = row["Start"]
         end = row["End"] - 1
-        direct_repeat_len = 0
+        direct_repeat_length = 0
 
         while start > 0 and seq[start - 1] == seq[end - 1]:
-            direct_repeat_len = direct_repeat_len + 1
+            direct_repeat_length = direct_repeat_length + 1
             start = start - 1
             end = end - 1
-        df.loc[index, "direct_repeat_length"] = direct_repeat_len
+        df.loc[index, "direct_repeat_length"] = direct_repeat_length
 
     df["direct_repeat_length"] = df["direct_repeat_length"].astype(int)
     return df

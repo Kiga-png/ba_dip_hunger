@@ -16,7 +16,9 @@ from sklearn.metrics import roc_auc_score, roc_curve
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
+
 import joblib
+import re
 
 # === Einstellungen ===
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
@@ -53,12 +55,12 @@ maxlen = df["encoded_seq"].apply(len).max()
 X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=maxlen)
 
 # === Kategoriale Merkmale ===
-categorical_cols = ["Segment", "Strain", "motif0", "motif1", "motif2", "motif3"]
+categorical_cols = ["Segment", "Strain", "site0_motif", "site1_motif", "site2_motif", "site3_motif"]
 encoder = OneHotEncoder(sparse=False)
 X_cat = encoder.fit_transform(df[categorical_cols])
 
 # === Numerische Merkmale ===
-numerical_cols = [col for col in df.columns if "check" in col] + ["Start", "End", "dvg_length", "cg_content"]
+numerical_cols = [col for col in df.columns if re.search(r"motif\d+", col)] + ["Start", "End", "dvg_length", "cg_content"]
 scaler = StandardScaler()
 X_num = scaler.fit_transform(df[numerical_cols])
 
