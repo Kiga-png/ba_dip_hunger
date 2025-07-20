@@ -60,7 +60,7 @@ def preprocess_sec_site_motif_features(dfnames: list, dfs: list):
     for dfname, df in zip(dfnames, dfs):
         save_sec_site_motif_features(df, dfname, 'datasets', 'sec_motif')
 
-def preprocess_sec_full_features(dfnames: list):
+def preprocess_sec_combine_features(dfnames: list):
     '''
 
     '''
@@ -196,13 +196,11 @@ if __name__ == '__main__':
 
     ### SINGLE ###
 
+    index = 20
+
     dfnames = get_dataset_names(cutoff=40)
-    dfs, _ = load_all(dfnames, False)
-
-    index = 1
-
     dfnames = [dfnames[index]]
-    dfs = [dfs[index]]
+    dfs, _ = load_all(dfnames, False)
 
     data = dfnames[0]
     strain = DATASET_STRAIN_DICT[data]
@@ -212,15 +210,39 @@ if __name__ == '__main__':
     ### MULTI ###
 
     # data = 'IBV'
+    # strain = ''
+    # segment = ''
+    # intersects = ''
+
     # dfnames = get_dataset_names(cutoff=40, selection=data)
     # dfs, _ = load_all(dfnames, False)
-    
-    ### PREPROCESS ###
+
+    ### PREPROCESS SINGLE ###
 
     # folder = 'datasets'
     # subfolder = 'sec_full'
 
-    # # data = "IBV"
+    # index = 20
+
+    # dfnames = get_dataset_names(cutoff=40)
+    # dfnames = [dfnames[index]]
+    # dfs = load_all_preprocessed(dfnames, folder, subfolder)
+
+    # data = dfnames[0]
+    # strain = DATASET_STRAIN_DICT[data]
+    # segment = ''
+    # intersects = ''
+    
+    ### PREPROCESS MULTI ###
+
+    # folder = 'datasets'
+    # subfolder = 'sec_full'
+
+    # data = 'IBV'
+    # strain = ''
+    # segment = ''
+    # intersects = ''
+
     # # dfnames = get_dataset_names(cutoff=40, selection=data)
     # dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
@@ -230,6 +252,6 @@ if __name__ == '__main__':
 
     # preprocess_sec_dvg_features(dfnames, dfs)
     # preprocess_sec_site_motif_features(dfnames, dfs)
-    # preprocess_sec_full_features(dfnames)
+    # preprocess_sec_combine_features(dfnames)
 
-    preprocess_site_motif_features(dfs, 3, 'IAV', 'PR8')
+    # preprocess_site_motif_features(dfs, 3, data, strain, segment, intersects)

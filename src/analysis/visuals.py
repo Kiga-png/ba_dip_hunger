@@ -772,34 +772,47 @@ if __name__ == "__main__":
 
     ### SINGLE ###
 
+    # index = 20
+
     # dfnames = get_dataset_names(cutoff=40)
-    # dfs, _ = load_all(dfnames, False)
-
-    # index = 1
-
     # dfnames = [dfnames[index]]
-    # dfs = [dfs[index]]
+    # dfs, _ = load_all(dfnames, False)
 
     # data = dfnames[0]
     # strain = DATASET_STRAIN_DICT[data]
-
     # segment = ''
     # intersects = ''
 
     ### MULTI ###
 
-    data = 'IAV'
-    strain = 'PR8'
-    segment = 'PB1'
-    intersects = 'sum'
+    # data = 'IBV'
+    # strain = ''
+    # segment = ''
+    # intersects = ''
 
-    dfnames = get_dataset_names(cutoff=40, selection=data)
-    dfs, _ = load_all(dfnames, False)
+    # dfnames = get_dataset_names(cutoff=40, selection=data)
+    # dfs, _ = load_all(dfnames, False)
 
-    ### PREPROCESS ###
+    ### PREPROCESS SINGLE ###
 
     # folder = 'datasets'
-    # subfolder = 'sec_all'
+    # subfolder = 'sec_full'
+
+    # index = 20
+
+    # dfnames = get_dataset_names(cutoff=40)
+    # dfnames = [dfnames[index]]
+    # dfs = load_all_preprocessed(dfnames, folder, subfolder)
+
+    # data = dfnames[0]
+    # strain = DATASET_STRAIN_DICT[data]
+    # segment = ''
+    # intersects = ''
+    
+    ### PREPROCESS MULTI ###
+
+    # folder = 'datasets'
+    # subfolder = 'sec_full'
 
     # data = 'IBV'
     # strain = ''

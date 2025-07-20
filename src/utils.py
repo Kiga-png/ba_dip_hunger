@@ -28,6 +28,14 @@ CMAP = "Accent"
 CUTOFF = 15
 N_SAMPLES = 35000
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
+
+INM_DATASETS = ["Wang2023", "Penn2022", "Lui2019"]
+INV_DATASETS = ["Alnaji2021", "Pelz2021", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07" ,"Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Alnaji2019_BLEE", "Sheng2018"]
+INH_DATASETS = ["Berry2021_A", "Berry2021_B", "Berry2021_B_Yam", "Southgate2019", "Valesano2020_Yam", "Valesano2020_Vic"]
+IAV_DATASETS = ["Alnaji2021", "Pelz2021", "Wang2023", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07", "Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Berry2021_A", "Penn2022", "Lui2019"]
+IBV_DATASETS = ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018", "Berry2021_B_Yam", "Southgate2019","Valesano2020_Yam"]
+
+STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui", "BLEE", "Victoria", "Brisbane", "Yamagata"]
 SEGMENTS = list(["PB2", "PB1", "PA", "HA", "NP", "NA", "M", "NS"])
 NUCLEOTIDES = dict({"A": "Adenine", "C": "Cytosin", "G": "Guanine", "U": "Uracil"})
 
@@ -714,16 +722,28 @@ def get_dataset_names(cutoff: int=0, selection: str="")-> list:
     names = df[df["Size"] >= cutoff]["Dataset"].to_list()
 
     # make selection based on in vivo/cells etc.
-    if selection == "in vivo mouse":
-        select_names = ["Wang2023", "Penn2022", "Lui2019"]
-    elif selection == "in vitro":
-        select_names = ["Alnaji2021", "Pelz2021", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07" ,"Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Alnaji2019_BLEE", "Sheng2018"]
-    elif selection == "in vivo human":
-        select_names = ["Berry2021_A", "Berry2021_B", "Berry2021_B_Yam", "Southgate2019", "Valesano2020_Yam", "Valesano2020_Vic"]
+    if selection == "in_vivo_mouse":
+        select_names = INM_DATASETS
+    elif selection == "in_vitro":
+        select_names = INV_DATASETS
+    elif selection == "in_vivo_human":
+        select_names = INH_DATASETS
     elif selection == "IAV":
-        select_names = ["Alnaji2021", "Pelz2021", "Wang2023", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07", "Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Berry2021_A", "Penn2022", "Lui2019"]
+        select_names = IAV_DATASETS
     elif selection == "IBV":
-        select_names = ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018", "Berry2021_B_Yam", "Southgate2019","Valesano2020_Yam"]
+        select_names = IBV_DATASETS
+    elif selection == "IAV_in_vivo_mouse":
+        select_names = list(set(IAV_DATASETS) & set(INM_DATASETS))
+    elif selection == "IAV_in_vitro":
+        select_names = list(set(IAV_DATASETS) & set(INV_DATASETS))
+    elif selection == "IAV_in_vivo_human":
+        select_names = list(set(IAV_DATASETS) & set(INH_DATASETS))
+    elif selection == "IBV_in_vivo_mouse":
+        select_names = list(set(IBV_DATASETS) & set(INM_DATASETS))
+    elif selection == "IBV_in_vitro":
+        select_names = list(set(IBV_DATASETS) & set(INV_DATASETS))
+    elif selection == "IBV_in_vivo_human":
+        select_names = list(set(IBV_DATASETS) & set(INH_DATASETS))
     else:
         select_names = names
 
@@ -1267,17 +1287,25 @@ CUSTOM_COLORS = [
     "#e377c2", "#ff1493", "#bcbd22", "#17becf", "#393b79", "#ff9896",
     "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
     "#ffbb78", "#aec7e8"
-]
+    ]
+
 COLORS = ["#ff6666", "#ffbd55", "#ffff66", "#9de24f", "#87cefa"]
-STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui", "BLEE", "Victoria", "Brisbane", "Yamagata"]
-A_STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui"]
-B_STRAINS = ["BLEE", "Victoria", "Brisbane", "Yamagata"]
 
 ###############
 ### general ###
 ###############
 
 ### load and save ###
+
+def get_strains(datasets: list):
+    seen = set()
+    strains = []
+    for dataset in datasets:
+        strain = DATASET_STRAIN_DICT.get(dataset)
+        if strain is not None and strain not in seen:
+            seen.add(strain)
+            strains.append(strain)
+    return strains
 
 def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
     '''
@@ -1786,11 +1814,30 @@ def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, se
     '''
     motifs = generate_motifs(motif_length)
 
-    strains = STRAINS
-    if data == 'IAV':
-        strains = A_STRAINS
-    if data == 'IBV':
-        strains = B_STRAINS
+    if data == 'in_vivo_mouse':
+        strains = get_strains(INM_DATASETS)
+    elif data == 'in_vitro':
+        strains = get_strains(INV_DATASETS)
+    elif data == 'in_vivo_human':
+        strains = get_strains(INH_DATASETS)
+    elif data == 'IAV':
+        strains = get_strains(IAV_DATASETS)
+    elif data == 'IBV':
+        strains = get_strains(IBV_DATASETS)
+    elif data == 'IAV_in_vivo_mouse':
+        strains = get_strains(list(set(IAV_DATASETS) & set(INM_DATASETS)))
+    elif data == 'IAV_in_vitro':
+        strains = get_strains(list(set(IAV_DATASETS) & set(INV_DATASETS)))
+    elif data == 'IAV_in_vivo_human':
+        strains = get_strains(list(set(IAV_DATASETS) & set(INH_DATASETS)))
+    elif data == 'IBV_in_vivo_mouse':
+        strains = get_strains(list(set(IBV_DATASETS) & set(INM_DATASETS)))
+    elif data == 'IBV_in_vitro':
+        strains = get_strains(list(set(IBV_DATASETS) & set(INV_DATASETS)))
+    elif data == 'IBV_in_vivo_human':
+        strains = get_strains(list(set(IBV_DATASETS) & set(INH_DATASETS)))
+    else:
+        strains = STRAINS
 
     if segment != 'all' and strain != 'all':
         full_seq = get_sequence(strain, segment)
