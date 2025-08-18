@@ -27,11 +27,15 @@ RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
 CMAP = "Accent"
 CUTOFF = 15
 N_SAMPLES = 35000
+SEED = 42
+
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
 
-INM_DATASETS = ["Wang2023", "Penn2022", "Lui2019"]
-INV_DATASETS = ["Alnaji2021", "Pelz2021", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07" ,"Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Alnaji2019_BLEE", "Sheng2018"]
-INH_DATASETS = ["Berry2021_A", "Berry2021_B", "Berry2021_B_Yam", "Southgate2019", "Valesano2020_Yam", "Valesano2020_Vic"]
+VIVO_M_DATASETS = ["Wang2023", "Penn2022", "Lui2019"]
+VITRO_DATASETS = ["Alnaji2021", "Pelz2021", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07" ,"Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Alnaji2019_BLEE", "Sheng2018"]
+VIVO_H_DATASETS = ["Berry2021_A", "Berry2021_B", "Berry2021_B_Yam", "Southgate2019", "Valesano2020_Yam", "Valesano2020_Vic"]
+VIVO_DATASETS = VIVO_M_DATASETS + VIVO_H_DATASETS
+
 IAV_DATASETS = ["Alnaji2021", "Pelz2021", "Wang2023", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07", "Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Berry2021_A", "Penn2022", "Lui2019"]
 IBV_DATASETS = ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018", "Berry2021_B_Yam", "Southgate2019","Valesano2020_Yam"]
 
@@ -723,27 +727,31 @@ def get_dataset_names(cutoff: int=0, selection: str="")-> list:
 
     # make selection based on in vivo/cells etc.
     if selection == "in_vivo_mouse":
-        select_names = INM_DATASETS
+        select_names = VIVO_M_DATASETS
     elif selection == "in_vitro":
-        select_names = INV_DATASETS
+        select_names = VITRO_DATASETS
     elif selection == "in_vivo_human":
-        select_names = INH_DATASETS
+        select_names = VIVO_H_DATASETS
     elif selection == "IAV":
         select_names = IAV_DATASETS
     elif selection == "IBV":
         select_names = IBV_DATASETS
     elif selection == "IAV_in_vivo_mouse":
-        select_names = list(set(IAV_DATASETS) & set(INM_DATASETS))
+        select_names = list(set(IAV_DATASETS) & set(VIVO_M_DATASETS))
     elif selection == "IAV_in_vitro":
-        select_names = list(set(IAV_DATASETS) & set(INV_DATASETS))
+        select_names = list(set(IAV_DATASETS) & set(VITRO_DATASETS))
     elif selection == "IAV_in_vivo_human":
-        select_names = list(set(IAV_DATASETS) & set(INH_DATASETS))
+        select_names = list(set(IAV_DATASETS) & set(VIVO_H_DATASETS))
+    elif selection == "IAV_in_vivo":
+        select_names = list(set(IAV_DATASETS) & set(VIVO_DATASETS))
     elif selection == "IBV_in_vivo_mouse":
-        select_names = list(set(IBV_DATASETS) & set(INM_DATASETS))
+        select_names = list(set(IBV_DATASETS) & set(VIVO_M_DATASETS))
     elif selection == "IBV_in_vitro":
-        select_names = list(set(IBV_DATASETS) & set(INV_DATASETS))
+        select_names = list(set(IBV_DATASETS) & set(VITRO_DATASETS))
     elif selection == "IBV_in_vivo_human":
-        select_names = list(set(IBV_DATASETS) & set(INH_DATASETS))
+        select_names = list(set(IBV_DATASETS) & set(VIVO_H_DATASETS))
+    elif selection == "IBV_in_vivo":
+        select_names = list(set(IBV_DATASETS) & set(VIVO_DATASETS))
     else:
         select_names = names
 
@@ -1311,22 +1319,28 @@ def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
     '''
     
     '''
-    if data:
+    if data == 'all':
+        pass
+
+    if strain == 'all':
         pass
     else:
-        data = 'all'
-    if strain:
         df = df[df['Strain'] == strain]
-    else:
-        strain = 'all'
-    if segment:
-        df = df[df['Segment'] == segment]
-    else:
-        segment = 'all'
-    
-    return df, data, strain, segment
 
-def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '')-> pd.DataFrame:
+    if segment == 'all':
+        pass
+    else:
+        df = df[df['Segment'] == segment]
+    
+    return df
+
+def manage_separate_specifiers(dfs: list, data: str, strain: str, segment: str):
+    '''
+    
+    '''
+    return [manage_specifiers(df, data, strain, segment) for df in dfs]
+
+def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = '')-> pd.DataFrame:
     '''
 
     '''
@@ -1334,19 +1348,23 @@ def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '')
     read_path = os.path.join(read_path, 'preprocess')
     read_path = os.path.join(read_path, folder) if folder else read_path
     read_path = os.path.join(read_path, subfolder) if subfolder else read_path
+    read_path = os.path.join(read_path, data) if data else read_path
+    read_path = os.path.join(read_path, strain) if strain else read_path
+    read_path = os.path.join(read_path, segment) if segment else read_path
+    read_path = os.path.join(read_path, intersects) if intersects else read_path
     os.makedirs(read_path, exist_ok=True)
 
     fname = fname + ".csv"
-    df = pd.read_csv(os.path.join(read_path, fname))
+    df = pd.read_csv(os.path.join(read_path, fname), keep_default_na=False, na_values=[])
     return df
 
-def load_all_preprocessed(fnames: list, folder: str = '', subfolder: str = '')-> list:
+def load_all_preprocessed(fnames: list, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = '')-> list:
     '''
 
     '''
     dfs = []
     for fname in fnames:
-        df = load_preprocessed_dataset(fname, folder, subfolder)
+        df = load_preprocessed_dataset(fname, folder, subfolder, data, strain, segment, intersects)
         dfs.append(df)
 
     return dfs
@@ -1363,12 +1381,10 @@ def merge_missing_features(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame
 
     return merged_df
 
-def save_df(df: pd.DataFrame, fname: str, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
+def save_df(df: pd.DataFrame, fname: str, save_path: str, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
     '''
     
     '''
-    save_path, _ = os.path.split(RESULTSPATH)
-    save_path = os.path.join(save_path, "preprocess")
     save_path = os.path.join(save_path, folder) if folder else save_path
     save_path = os.path.join(save_path, subfolder) if subfolder else save_path
     save_path = os.path.join(save_path, data) if data else save_path
@@ -1378,7 +1394,7 @@ def save_df(df: pd.DataFrame, fname: str, folder: str = '', subfolder: str = '',
     os.makedirs(save_path, exist_ok=True)
     fname = fname + ".csv"
 
-    df.to_csv(os.path.join(save_path, fname), index=False)
+    df.to_csv(os.path.join(save_path, fname), index=False, na_rep="")
 
 ### length features ###
 
@@ -1434,83 +1450,195 @@ def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-### intersects ###
+### metadata ###
 
-def manage_intersects(df: pd.DataFrame, modifier: str) -> pd.DataFrame:
-    if modifier == '':
-        modifier = 'all'
-    elif modifier == 'remove':
-        df = add_iid(df)
-        df = remove_duplicate_iids(df)
-    elif modifier == 'sum':
-        df = add_iid(df)
-        df = sum_by_iid(df)
-    elif modifier == 'mean':
-        df = add_iid(df)
-        df = mean_by_iid(df)
-    else:
-        print('invalid intersects modifier')
+def add_dataset_keys(dfs):
+    """
 
-    return df, modifier
+    """
+    updated_dfs = []
+    for i, df in enumerate(dfs, start=1):
+        df_copy = df.copy()
+        df_copy["dataset_key"] = i
+        updated_dfs.append(df_copy)
+    return updated_dfs
 
-def mean_by_iid(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
+def add_dataset_names(dfnames: list, dfs: list) -> list:
+    '''
     
-    def aggregate_group(group):
-        averaged = group.iloc[0].copy()
-        averaged['NGS_read_count'] = group['NGS_read_count'].mean()
-        return averaged
-
-    result = df.groupby('iid', group_keys=False).apply(aggregate_group).reset_index(drop=True)
-    return result
-
-def sum_by_iid(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    
-    def aggregate_group(group):
-        summed = group.iloc[0].copy()
-        summed['NGS_read_count'] = group['NGS_read_count'].sum()
-        return summed
-
-    result = df.groupby('iid', group_keys=False).apply(aggregate_group).reset_index(drop=True)
-    return result
-
-def remove_duplicate_iids(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    iid_counts = df['iid'].value_counts()
-    unique_iids = iid_counts[iid_counts == 1].index
-
-    return df[df['iid'].isin(unique_iids)].reset_index(drop=True)
-
-def add_iid(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    unique_pairs = df[['key', 'Strain']].drop_duplicates().reset_index(drop=True)
-    unique_pairs['iid'] = range(1, len(unique_pairs) + 1)
-    df = df.merge(unique_pairs, on=['key', 'Strain'], how='left')
-    
-    return df
-
-### identifier ###
-
-def add_dfnames(dfnames: list, dfs: list) -> list:
+    '''
     updated_dfs = []
     for dfname, df in zip(dfnames, dfs):
         df = df.copy()
-        df['dataset'] = dfname
+        df['dataset_name'] = dfname
         updated_dfs.append(df)
+
     return updated_dfs
 
-def add_selector(df: pd.DataFrame, selector: str) -> pd.DataFrame:
-    df['selector'] = selector
+def add_metadata_features(dfnames: list, dfs: list) -> list:
+    '''
+    
+    '''
+    fname = f'metadata.csv'
+    read_path = os.path.join(RESULTSPATH, 'metadata', fname)
+    meta_df = pd.read_csv(read_path)
+
+    meta_features = ['system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype']
+
+    updated_dfs = []
+    for dfname, df in zip(dfnames, dfs):
+        df = df.copy()
+        df['dataset_name'] = dfname
+
+        for meta_feature in meta_features:
+            value = meta_df.loc[meta_df['names'] == dfname, meta_feature].iloc[0]
+            value = value if not pd.isna(value) else "UNKNOWN"
+            df[meta_feature] = value
+
+        updated_dfs.append(df)
+
+    return updated_dfs
+
+### intersects ###
+
+def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.DataFrame:
+    if modifier == 'all':
+        return df
+    elif modifier == 'remove':
+        df = add_ikey(df)
+        df = remove_by_ikey(df, 1)
+    elif modifier == 'mean':
+        df = add_ikey(df)
+        df = mean_by_ikey(df, feature_name)
+    elif modifier == 'median':
+        df = add_ikey(df)
+        df = median_by_ikey(df, feature_name)
+    else:
+        print('unvalid intersects modifier')
+
+    df = df.drop(columns=['ikey'])
     return df
 
-def get_selctors(selector_category: str):
-    if selector_category == "virus":
-        return ["IAV", "IBV"]
-    if selector_category == "model":
-        return ["in vivo human", "in vivo mouse", "in vitro"]
-    if selector_category == "all":
-        return ["IAV", "IBV", "in vivo human", "in vivo mouse", "in vitro"]
+def add_ikey(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    
+    '''
+    df = df.copy()
+    df['ikey'] = df['Strain'].astype(str) + '_' + df['key'].astype(str)
+    return df
+
+def remove_by_ikey(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    '''
+
+    '''
+    df = df.copy()
+
+    ikey_counts = df['ikey'].value_counts()
+    non_unique_ikeys = ikey_counts[ikey_counts > 1].index
+    non_unique_rows = df[df['ikey'].isin(non_unique_ikeys)]
+    n_to_remove = int(len(non_unique_rows) * threshold)
+    rows_to_remove = non_unique_rows.sample(n=n_to_remove, random_state=SEED)
+    df = df.drop(index=rows_to_remove.index).reset_index(drop=True)
+
+    return df
+
+def mean_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
+    '''
+    
+    '''
+    df = df.copy()
+    mean_values = df.groupby('ikey')[feature_name].transform(
+        lambda x: x.mean() if len(x) > 1 else x
+    )
+
+    df[feature_name] = mean_values
+    
+    return df
+
+def median_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
+    '''
+
+    '''
+    df = df.copy()
+    median_values = df.groupby('ikey')[feature_name].transform(
+        lambda x: x.median() if len(x) > 1 else x
+    )
+
+    df[feature_name] = median_values
+
+    return df
+
+def set_intersect_proportion(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    '''
+
+    '''
+    count = required_pseudo_intersects_for_threshold(df, threshold)
+    if count >= 0:
+        df = add_pseudo_intersects(df, count)
+        print("pseudo candidates have been added")
+    else:
+        df = remove_intersects(df, abs(count))
+
+    return df
+
+def required_pseudo_intersects_for_threshold(df: pd.DataFrame, threshold: float) -> int:
+    '''
+    
+    '''
+    if 'ikey' not in df.columns:
+        raise ValueError("DataFrame must contain an 'ikey' column.")
+    if not (0 < threshold < 1):
+        raise ValueError("threshold must be a float between 0 and 1 (exclusive).")
+    
+    total_rows = len(df)
+    ikey_counts = df['ikey'].value_counts()
+    non_unique_count = ikey_counts[ikey_counts > 1].sum()
+
+    numerator = threshold * total_rows - non_unique_count
+    denominator = 1 - threshold
+    adjustment = numerator / denominator
+
+    return int(round(adjustment))
+
+def add_pseudo_intersects(df: pd.DataFrame, pseudo_count: int) -> pd.DataFrame:
+    '''
+    
+    '''
+    feature_name = 'norm_log_NGS_read_count'
+    
+    np.random.seed(SEED)
+    value_probs = df[feature_name].value_counts(normalize=True)
+    sampled_rows = df.sample(n=pseudo_count, replace=True, random_state=SEED).copy()
+
+    sampled_rows[feature_name] = np.random.choice(
+        value_probs.index, 
+        size=pseudo_count, 
+        p=value_probs.values
+    )
+
+    return pd.concat([df, sampled_rows], ignore_index=True)
+
+def remove_intersects(df: pd.DataFrame, remove_count: int) -> pd.DataFrame:
+    '''
+    
+    '''
+    if 'ikey' not in df.columns:
+        raise ValueError("DataFrame must contain an 'ikey' column.")
+
+    if remove_count <= 0:
+        return df.copy()
+
+    ikey_counts = df['ikey'].value_counts()
+    non_unique_ikeys = ikey_counts[ikey_counts > 1].index
+    non_unique_rows = df[df['ikey'].isin(non_unique_ikeys)]
+
+    if remove_count > len(non_unique_rows):
+        raise ValueError(f"cannot remove {remove_count} rows — only {len(non_unique_rows)} non-unique 'ikey' rows available.")
+
+    rows_to_remove = non_unique_rows.sample(n=remove_count, random_state=SEED)
+    df_cleaned = df.drop(index=rows_to_remove.index).reset_index(drop=True)
+
+    return df_cleaned
 
 ### augment data ###
 
@@ -1557,19 +1685,99 @@ def add_norm_feature(df: pd.DataFrame, feature_name: str, norm_name: str):
     df[norm_name] = (df[feature_name] - min) / (max - min)
     return df
 
+def add_separate_ngs_features(dfs: list, separated: bool):
+    '''
+
+    '''
+    feature = 'NGS_read_count'
+    log_feature = 'log_' + feature
+    norm_log_feature = 'norm_' + log_feature
+
+    if separated:
+        updated_dfs = []
+        for df in dfs:
+            df = add_log_feature(df, feature, log_feature)
+            df = add_norm_feature(df, log_feature, norm_log_feature)
+            updated_dfs.append(df)
+
+        return updated_dfs
+
+    else:
+        for i, df in enumerate(dfs):
+            df['dataset_index'] = i
+        concat_df = pd.concat(dfs, ignore_index=True)
+
+        concat_df = add_log_feature(concat_df, feature, log_feature)
+        concat_df = add_norm_feature(concat_df, log_feature, norm_log_feature)
+
+        updated_dfs = [
+            group.drop(columns='dataset_index').reset_index(drop=True)
+            for _, group in concat_df.groupby('dataset_index')
+            ]
+
+        return updated_dfs
+
+def balance_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float) -> pd.DataFrame:
+    '''
+    
+    '''
+    df_low = df[df[feature_name] < threshold].copy()
+    df_high = df[df[feature_name] >= threshold].copy()
+
+    size_low = len(df_low)
+    size_high = len(df_high)
+
+    rng = np.random.default_rng(SEED)
+    if size_low < size_high:
+        df_high = df_high.sample(n=size_low, random_state=SEED)
+    elif size_high < size_low:
+        df_low = df_low.sample(n=size_high, random_state=SEED)
+
+    df_balanced = pd.concat([df_low, df_high], ignore_index=True)
+    df_balanced = df_balanced.sample(frac=1, random_state=SEED).reset_index(drop=True)
+
+    return df_balanced
+
 ### sec features ###
 
-def fold_sequence(seq: str):
-    """
+def add_marked_structure(df: pd.DataFrame) -> pd.DataFrame:
+    '''
 
-    """
+    '''
+    def compute_marked_structure(row):
+        struct = row["structure"]
+        full_len = len(row["full_seq"])
+        start = row["Start"]
+        end = row["End"]
+
+        n_missing = end - start
+        prefix = struct[:start]
+        suffix = struct[start:]
+        marked = prefix + "X" * n_missing + suffix
+
+        if len(marked) != full_len:
+            raise ValueError(
+                f"length mismatch for row with Start={start}, End={end}: "
+                f"full_seq={full_len}, marked_structure={len(marked)}"
+            )
+        
+        return marked
+
+    df["marked_structure"] = df.apply(compute_marked_structure, axis=1)
+    return df
+
+def fold_sequence(seq: str):
+    '''
+
+    '''
     structure, mfe = RNA.fold(seq)
+
     return structure, mfe
 
 def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, mfe_name: str) -> pd.DataFrame:
-    """
+    '''
 
-    """
+    '''
     sequences = df[sequence_name].tolist()
     
     with Pool(processes=cpu_count()) as pool:
@@ -1578,28 +1786,72 @@ def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, 
     structures, mfes = zip(*results)
     df[structure_name] = structures
     df[mfe_name] = mfes
+
     return df
 
-def add_loop_count(df: pd.DataFrame, sequence_name: str, count_name: str) -> pd.DataFrame:
-    df[count_name] = df[sequence_name].apply(lambda s: len(re.findall(r'\.+', s)))
+def add_loop_count(df: pd.DataFrame, structure_name: str, count_name: str) -> pd.DataFrame:
+    '''
+
+    '''
+    df[count_name] = df[structure_name].apply(lambda s: len(re.findall(r'\.+', s)))
+
     return df
 
-def add_max_loop(df: pd.DataFrame, sequence_name: str, max_name: str) -> pd.DataFrame:
-    df[max_name:] = df[sequence_name].apply(
+def add_max_loop(df: pd.DataFrame, structure_name: str, max_name: str) -> pd.DataFrame:
+    '''
+
+    '''
+    df[max_name] = df[structure_name].apply(
         lambda s: max((len(match) for match in re.findall(r'\.+', s)), default=0)
-    )
+        )
+    
     return df
 
 ### statistics ###
 
-# TODO #
-def perform_t_test_log(df: pd.DataFrame):
-    df = add_norm_log_d_ngs_read_count(df)
-    log_d_counts = df['norm_log_d_NGS_read_count']
-    df = add_norm_log_n_ngs_read_count(df)
-    log_n_counts = df['norm_log_n_NGS_read_count']
-    t_stat, p_value = stats.ttest_ind(log_n_counts, log_d_counts)
-    return p_value
+def mannwhitneyu_by_threshold(
+    df,
+    feature_name: str,
+    threshold_feature: str,
+    threshold: int,
+    alternative: str = "two-sided",
+    ):
+    '''
+
+    '''
+    if threshold_feature not in df.columns:
+        raise KeyError(f"'{threshold_feature}' not found in DataFrame.")
+    if feature_name not in df.columns:
+        raise KeyError(f"'{feature_name}' not found in DataFrame.")
+
+    high_mask = df[threshold_feature] >= threshold
+    low_mask  = df[threshold_feature] < threshold
+    x_high = df.loc[high_mask, feature_name].to_numpy()
+    y_low  = df.loc[low_mask,  feature_name].to_numpy()
+
+    n_high, n_low = len(x_high), len(y_low)
+    if n_high == 0 or n_low == 0:
+        raise ValueError("one of the groups has no observations with this threshold.")
+
+    res = stats.mannwhitneyu(x_high, y_low, alternative=alternative, method="auto")
+    U = float(res.statistic)
+    p = float(res.pvalue)
+
+    U_min = min(U, n_high * n_low - U)
+    cliffs_delta = 1 - 2 * (U_min / (n_high * n_low))
+
+    return {
+        "feature_name": feature_name,
+        "threshold_feature": threshold_feature,
+        "threshold": float(threshold),
+        "U": U,
+        "pvalue": p,
+        "n_high": n_high,
+        "n_low": n_low,
+        "median_high": float(np.median(x_high)),
+        "median_low": float(np.median(y_low)),
+        "cliffs_delta": float(cliffs_delta),
+    }
 
 ###############
 ### visuals ###
@@ -1662,15 +1914,15 @@ def compute_feature_freq_df(count_df: pd.DataFrame, feature_name: str) -> pd.Dat
 
     return freq_df[[feature_name, 'freq']]
 
-def subtract_freq_dfs(freq_df0: pd.DataFrame, freq_df1: pd.DataFrame, feature_name: str) -> pd.DataFrame:
+def subtract_freq_dfs(freq_name0: str, freq_df0: pd.DataFrame, freq_name1: str, freq_df1: pd.DataFrame, feature_name: str) -> pd.DataFrame:
     '''
 
     '''
     diff_freq_df = pd.DataFrame({
         feature_name: freq_df0[feature_name],
-        'freq0': freq_df0['freq'],
-        'freq1': freq_df1['freq'],
-        'freq_diff': freq_df0['freq'] - freq_df1['freq']
+        freq_name0: freq_df0['freq'],
+        freq_name1: freq_df1['freq'],
+        'difference': freq_df0['freq'] - freq_df1['freq']
     })
     return diff_freq_df
 
@@ -1765,10 +2017,10 @@ def add_site_motifs(df: pd.DataFrame, motif_length: int):
     '''
 
     '''
-    site0_motifs = []
     site1_motifs = []
     site2_motifs = []
     site3_motifs = []
+    site4_motifs = []
 
     valid_indices = []
     skipped_count = 0
@@ -1788,23 +2040,23 @@ def add_site_motifs(df: pd.DataFrame, motif_length: int):
             skipped_count += 1
             continue
 
-        site0_motif = seq[start0 - motif_length:start0]
-        site1_motif = seq[start0:start0 + motif_length]
-        site2_motif = seq[end0 - motif_length:end0]
-        site3_motif = seq[end0:end0 + motif_length]
+        site1_motif = seq[start0 - motif_length:start0]
+        site2_motif = seq[start0:start0 + motif_length]
+        site3_motif = seq[end0 - motif_length:end0]
+        site4_motif = seq[end0:end0 + motif_length]
 
-        site0_motifs.append(site0_motif)
         site1_motifs.append(site1_motif)
         site2_motifs.append(site2_motif)
         site3_motifs.append(site3_motif)
+        site4_motifs.append(site4_motif)
         valid_indices.append(idx)
 
     df = df.loc[valid_indices].copy().reset_index(drop=True)
 
-    df['site0_motif'] = site0_motifs
     df['site1_motif'] = site1_motifs
     df['site2_motif'] = site2_motifs
     df['site3_motif'] = site3_motifs
+    df['site4_motif'] = site4_motifs
 
     return df, skipped_count
 
@@ -1814,30 +2066,8 @@ def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, se
     '''
     motifs = generate_motifs(motif_length)
 
-    if data == 'in_vivo_mouse':
-        strains = get_strains(INM_DATASETS)
-    elif data == 'in_vitro':
-        strains = get_strains(INV_DATASETS)
-    elif data == 'in_vivo_human':
-        strains = get_strains(INH_DATASETS)
-    elif data == 'IAV':
-        strains = get_strains(IAV_DATASETS)
-    elif data == 'IBV':
-        strains = get_strains(IBV_DATASETS)
-    elif data == 'IAV_in_vivo_mouse':
-        strains = get_strains(list(set(IAV_DATASETS) & set(INM_DATASETS)))
-    elif data == 'IAV_in_vitro':
-        strains = get_strains(list(set(IAV_DATASETS) & set(INV_DATASETS)))
-    elif data == 'IAV_in_vivo_human':
-        strains = get_strains(list(set(IAV_DATASETS) & set(INH_DATASETS)))
-    elif data == 'IBV_in_vivo_mouse':
-        strains = get_strains(list(set(IBV_DATASETS) & set(INM_DATASETS)))
-    elif data == 'IBV_in_vitro':
-        strains = get_strains(list(set(IBV_DATASETS) & set(INV_DATASETS)))
-    elif data == 'IBV_in_vivo_human':
-        strains = get_strains(list(set(IBV_DATASETS) & set(INH_DATASETS)))
-    else:
-        strains = STRAINS
+    dataset_names = get_dataset_names(cutoff=40, selection=data)
+    strains = get_strains(dataset_names)
 
     if segment != 'all' and strain != 'all':
         full_seq = get_sequence(strain, segment)
@@ -1885,6 +2115,92 @@ def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, se
 
     comb_df['freq'] = comb_df['freq'] / (len(strains) * len(SEGMENTS))
     return comb_df
+
+def insert_pseudo_motif(
+    df: pd.DataFrame,
+    motif_length: int,
+    pseudo_motif: str,
+    motif_site: str,
+    feature_name: str,
+    feature_threshold: float,
+    proportion: float,
+    replace_all: bool = False
+    ):
+    '''
+
+    '''
+    assert 0 <= proportion <= 1, 'proportion need to be between 0 and 1'
+    assert len(pseudo_motif) == motif_length, 'pseudo_motif must have motif_length'
+
+    df_mod = df.copy()
+    skipped_count = 0
+    rng = np.random.default_rng(SEED)
+
+    candidates = df_mod[df_mod[feature_name] >= feature_threshold].copy()
+    candidate_indices = candidates.index.tolist()
+    n_modify = int(len(candidate_indices) * proportion)
+    selected_indices = rng.choice(candidate_indices, size=n_modify, replace=False)
+
+    if replace_all:
+        all_indices = df_mod.index.tolist()
+        other_indices = [i for i in all_indices if i not in selected_indices]
+    else:
+        other_indices = []
+
+    custom_coords = re.fullmatch(r'(\d+)_(\d+)', motif_site)
+
+    def get_pos(row):
+        seq = row['full_seq']
+        start0 = row['Start']
+        end0 = row['End'] - 1
+
+        if custom_coords:
+            s = int(custom_coords.group(1))
+            e = int(custom_coords.group(2))
+            if s < 0 or e >= len(seq) or e < s or (e - s + 1) != motif_length:
+                return None
+            return s
+        else:
+            if motif_site == 'site1_motif':
+                pos = start0 - motif_length
+            elif motif_site == 'site2_motif':
+                pos = start0
+            elif motif_site == 'site3_motif':
+                pos = end0 - motif_length
+            elif motif_site == 'site4_motif':
+                pos = end0
+            else:
+                return None
+            if pos < 0 or pos + motif_length > len(seq):
+                return None
+            return pos
+
+    def generate_random_motif():
+        return ''.join(rng.choice(['A', 'C', 'G', 'U'], size=motif_length,
+                                  p=[0.35, 0.195, 0.23, 0.225]))
+
+    for idx in selected_indices:
+        row = df_mod.loc[idx]
+        seq = row['full_seq']
+        pos = get_pos(row)
+        if pos is None:
+            skipped_count += 1
+            continue
+        new_seq = seq[:pos] + pseudo_motif + seq[pos + motif_length:]
+        df_mod.at[idx, 'full_seq'] = new_seq
+
+    for idx in other_indices:
+        row = df_mod.loc[idx]
+        seq = row['full_seq']
+        pos = get_pos(row)
+        if pos is None:
+            skipped_count += 1
+            continue
+        random_motif = generate_random_motif()
+        new_seq = seq[:pos] + random_motif + seq[pos + motif_length:]
+        df_mod.at[idx, 'full_seq'] = new_seq
+
+    return df_mod, skipped_count
 
 ######################
 ### direct repeats ###

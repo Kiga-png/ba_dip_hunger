@@ -18,10 +18,10 @@ import RNA
 
 sys.path.insert(0, "..")
 from utils import get_dataset_names, load_all
-from utils import manage_specifiers, load_all_preprocessed
-from utils import rename_feature, filter_for_feature, filter_against_feature, add_feature_percentile_rank, add_log_feature, add_norm_feature
+from utils import manage_separate_specifiers, load_all_preprocessed
+from utils import rename_feature, filter_for_feature, filter_against_feature, add_feature_percentile_rank, add_log_feature, add_norm_feature, add_separate_ngs_features
 from utils import manage_intersects
-from utils import add_dvg_sequence, add_dvg_length
+from utils import add_dvg_sequence, add_dvg_length, add_cg_content, add_region_lengths
 
 from utils import generate_motifs, add_site_motifs, add_lin_reg_rows, compute_full_seq_motif_freq_df
 from utils import compute_percentile_rank_count_df, compute_seq_feature_count_df, compute_feature_count_df, compute_feature_freq_df, subtract_freq_dfs
@@ -31,7 +31,7 @@ from utils import add_direct_repeat_len, cap_direct_repeat_len
 from utils import add_loop_count, add_max_loop
 
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
-from utils import COLORS, STRAINS, A_STRAINS, B_STRAINS
+from utils import COLORS, STRAINS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, 'visuals')
@@ -43,17 +43,19 @@ RESULTSPATH = os.path.join(RESULTSPATH, 'visuals')
 
 ### heatmap ###
 
-def run_site_motif_heatmap_analysis(dfs: list, top_n: int = 5, data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
+def run_site_motif_heatmap_analysis(dfs: list, top_n: int = 5, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
     max_motif_length = 7
 
-    df = pd.concat(dfs, ignore_index=True)
-    df, data, strain, segment = manage_specifiers(df, data, strain, segment)
-    df, intersects = manage_intersects(df, intersects)
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
 
-    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
+    df = pd.concat(dfs, ignore_index=True)
+    df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
+
+    df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
     plot_names = ['site_before_deletion', 'site_deletion_start', 'site_deletion_end', 'site_after_deletion']
 
     all_mean_freq_diffs = [[None for _ in range(max_motif_length)] for _ in range(4)]
@@ -73,17 +75,19 @@ def run_site_motif_heatmap_analysis(dfs: list, top_n: int = 5, data: str = '', s
     create_metric_spine_plot('site_mean_frequency_difference', 'motif_length', '-', plot_names, all_mean_freq_diffs, 'mean frequency difference (%)', dvg_count, data, strain, segment, intersects)
     create_metric_spine_plot('site_top_frequency_difference', 'motif_length', '-', plot_names, all_top_freq_diffs, 'top frequency difference (%)', dvg_count, data, strain, segment, intersects)
 
-def run_reg_site_motif_heatmap_analysis(dfs: list, top_n: int = 5, data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
+def run_reg_site_motif_heatmap_analysis(dfs: list, top_n: int = 5, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
     max_motif_length = 7
 
-    df = pd.concat(dfs, ignore_index=True)
-    df, data, strain, segment = manage_specifiers(df, data, strain, segment)
-    df, intersects = manage_intersects(df, intersects)
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
 
-    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
+    df = pd.concat(dfs, ignore_index=True)
+    df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
+
+    df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
     reg_plot_names = ['reg_site_before_deletion', 'reg_site_deletion_start', 'reg_site_deletion_end', 'reg_site_after_deletion']
 
     all_mean_coefficients = [[None for _ in range(max_motif_length)] for _ in range(4)]
@@ -103,47 +107,53 @@ def run_reg_site_motif_heatmap_analysis(dfs: list, top_n: int = 5, data: str = '
     create_metric_spine_plot('reg_site_mean_coefficients', 'motif_length', '-', reg_plot_names, all_mean_coefficients, 'mean regression coefficients (-)', dvg_count, data, strain, segment, intersects)
     create_metric_spine_plot('reg_site_top_coefficients', 'motif_length', '-', reg_plot_names, all_top_coefficients, 'top regression coefficients (-)', dvg_count, data, strain, segment, intersects)
 
-def run_repeat_heatmap_analysis(dfs: list, cap_length: int = 5, data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
+def run_repeat_heatmap_analysis(dfs: list, cap_length: int = 5, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+
     df = pd.concat(dfs, ignore_index=True)
-    df, data, strain, segment = manage_specifiers(df, data, strain, segment)
-    df, intersects = manage_intersects(df, intersects)
+    df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
 
-    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
+    df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
     dvg_count = df.shape[0]
     heatmap_name = 'direct_repeat'
 
     make_repeat_heatmap_analysis(df, heatmap_name, dvg_count, cap_length, data, strain, segment, intersects)
 
-def run_mfe_heatmap_analysis(dfs: list, data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
+def run_mfe_heatmap_analysis(dfs: list, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+
     df = pd.concat(dfs, ignore_index=True)
-    df, data, strain, segment = manage_specifiers(df, data, strain, segment)
-    df, intersects = manage_intersects(df, intersects)
+    df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
 
-    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
+    df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
     dvg_count = df.shape[0]
     heatmap_name = 'MFE'
 
     make_mfe_heatmap_analysis(df, heatmap_name, dvg_count, data, strain, segment, intersects)
 
-### other ###
+### freq ###
 
-def run_dvg_motif_freq_analysis(dfs: list, top_n: int = 5, data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
+def run_dvg_motif_freq_analysis(dfs: list, top_n: int = 5, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
     max_motif_length = 7
 
-    df = pd.concat(dfs, ignore_index=True)
-    df, data, strain, segment = manage_specifiers(df, data, strain, segment)
-    df, intersects = manage_intersects(df, intersects)
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
 
-    df = add_feature_percentile_rank(df, 'NGS_read_count', 'NGS_percentile_rank')
+    df = pd.concat(dfs, ignore_index=True)
+    df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
+
+    df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
     dvg_count = df.shape[0]
     df = add_dvg_sequence(df)
 
@@ -168,30 +178,104 @@ def run_dvg_motif_freq_analysis(dfs: list, top_n: int = 5, data: str = '', strai
     create_metric_spine_plot('dvg_mean_frequency_difference', 'motif_length', '-', plot_names, all_mean_freq_diffs, 'mean frequency difference (%)', dvg_count, data, strain, segment, intersects)
     create_metric_spine_plot('dvg_top_frequency_difference', 'motif_length', '-', plot_names, all_top_freq_diffs, 'top frequency difference (%)', dvg_count, data, strain, segment, intersects)
 
-def run_ngs_count_distribution_analysis(dfs: list, data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
+### distribution ###
+
+def run_ngs_count_distribution_analysis(dfs: list, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
+    feature = 'norm_log_NGS_read_count'
+
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+
     df = pd.concat(dfs, ignore_index=True)
-    df, data, strain, segment = manage_specifiers(df, data, strain, segment)
-    df, intersects = manage_intersects(df, intersects)
+    df = manage_intersects(df, intersects, feature)
 
-    feature = "NGS_read_count"
-    log_feature = 'log_' + feature
-    norm_log_feature = 'norm_log_' + feature
+    create_feature_distribution_plot(df, feature, '-', True, data, strain, segment, intersects)
 
-    df = add_log_feature(df, feature, log_feature)
-    df = add_norm_feature(df, log_feature, norm_log_feature)
+### correlation ###
 
-    create_feature_distribution_plot(df, norm_log_feature, '-', True, data, strain, segment, intersects)
-
-def run_dvg_length_mfe_correlation_analysis(dfs: list, data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
+def run_ngs_count_dvg_pri_features_correlation_analysis(dfs: list, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
+    feature = 'norm_log_NGS_read_count'
+
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+
     df = pd.concat(dfs, ignore_index=True)
-    df, data, strain, segment = manage_specifiers(df, data, strain, segment)
-    df, intersects = manage_intersects(df, intersects)
+    df = manage_intersects(df, intersects, feature)
+
+    df = add_dvg_sequence(df)
+    df = add_dvg_length(df)
+    df = add_cg_content(df)
+    df = add_region_lengths(df)
+
+    # dvg length #
+    create_feature_correlation_plot(df, feature, '-', 'dvg_length', 'nucleotides', data, strain, segment, intersects)
+    # deletion_length #
+    create_feature_correlation_plot(df, feature, '-', 'deletion_length', 'nucleotides', data, strain, segment, intersects)
+    # 5_end_length #
+    create_feature_correlation_plot(df, feature, '-', '5_end_length', 'nucleotides', data, strain, segment, intersects)
+    # 3_end_length #
+    create_feature_correlation_plot(df, feature, '-', '3_end_length', 'nucleotides', data, strain, segment, intersects)
+    # cg content #
+    create_feature_correlation_plot(df, feature, '-', 'cg_content', '%', data, strain, segment, intersects)
+
+def run_ngs_count_dvg_sec_features_correlation_analysis(dfs: list, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+    '''
+
+    '''
+    feature = 'norm_log_NGS_read_count'
+
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+
+    df = pd.concat(dfs, ignore_index=True)
+    df = manage_intersects(df, intersects, feature)
+
+    # MFE #
+    create_feature_correlation_plot(df, feature, '-', 'MFE', 'kcal/mol', data, strain, segment, intersects)
+    # loop count #
+    add_loop_count(df, 'structure', 'loop_count')
+    create_feature_correlation_plot(df, feature, '-', 'loop_count', '-', data, strain, segment, intersects)
+    # max loop #
+    add_max_loop(df, 'structure', 'max_loop')
+    create_feature_correlation_plot(df, feature, '-', 'max_loop', 'nucleotides', data, strain, segment, intersects)
+
+def run_ngs_count_site_sec_features_correlation_analysis(dfs: list, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+    '''
+
+    '''
+    feature = 'norm_log_NGS_read_count'
+
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+
+    df = pd.concat(dfs, ignore_index=True)
+    df = manage_intersects(df, intersects, feature)
+
+    for i in range(1, 5):
+        # MFE #
+        create_feature_correlation_plot(df, feature, '-', f'MFE_site{i}_motif', 'kcal/mol', data, strain, segment, intersects)
+        # loop count #
+        add_loop_count(df, f'structure_site{i}_motif', f'loop_count_site{i}_motif')
+        create_feature_correlation_plot(df, feature, '-', f'loop_count_site{i}_motif', '-', data, strain, segment, intersects)
+        # max loop #
+        add_max_loop(df, f'structure_site{i}_motif', f'max_loop_site{i}_motif')
+        create_feature_correlation_plot(df, feature, '-', f'max_loop_site{i}_motif', 'nucleotides', data, strain, segment, intersects)
+
+def run_dvg_length_mfe_correlation_analysis(dfs: list, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+    '''
+
+    '''
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+
+    df = pd.concat(dfs, ignore_index=True)
+    df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
 
     df = add_dvg_length(df)
 
@@ -199,14 +283,18 @@ def run_dvg_length_mfe_correlation_analysis(dfs: list, data: str = '', strain: s
     norm_feature = 'norm_' + feature
     df = add_norm_feature(df, feature, norm_feature)
 
-    create_feature_correlation_plot(df, norm_feature, "-", "MFE", "kcal/mol", data, strain, segment, intersects)
+    create_feature_correlation_plot(df, norm_feature, "nucleotides", "MFE", "kcal/mol", data, strain, segment, intersects)
 
-def run_sec_structure_plots(dfs: list, data: str = '', strain: str = '', segment: str = ''):
+### other ###
+
+def run_sec_structure_plots(dfs: list, data: str = 'all', strain: str = 'all', segment: str = 'all'):
     '''
 
     '''
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+
     df = pd.concat(dfs, ignore_index=True)
-    df, data, strain, segment = manage_specifiers(df, data, strain, segment)
 
     df = add_dvg_sequence(df)
     sequences = df['dvg_sequence'].head(5)
@@ -239,7 +327,7 @@ def run_sec_structure_plots(dfs: list, data: str = '', strain: str = '', segment
             print(f'[WARNING] RNAplot output not found for sequence {idx+1}')
 
         os.remove(temp_input)
-  
+
 ###############
 ### general ###
 ###############
@@ -356,17 +444,20 @@ def create_freq_bar_plot(
     '''
 
     '''
+    freq0 = freq_df.columns[1]
+    freq1 = freq_df.columns[2]
+
     df_plot = pd.melt(
         freq_df,
         id_vars=field,
-        value_vars=['freq0', 'freq1'],
+        value_vars=[freq0, freq1],
         var_name='type',
         value_name='frequency'
     )
 
     custom_colors = {
-        'freq0': COLORS[4],
-        'freq1': COLORS[0]
+        freq0: COLORS[4],
+        freq1: COLORS[0]
     }
 
     plt.figure(figsize=(18, 6))
@@ -376,7 +467,7 @@ def create_freq_bar_plot(
     plt.xlabel(f'{field} ({field_specifier})')
     plt.ylabel('relative frequency (%)')
 
-    title_name = f'{field} barplot ({bar_name})'
+    title_name = f'{field} bar plot ({bar_name})'
     if feature_name:
         title_name += f' - {feature_name}: {feature}'
     if metric_name:
@@ -433,7 +524,7 @@ def create_metric_spine_plot(
         plt.plot(x_smooth, y_smooth, label=metric_names[i], color=color)
         plt.scatter(x, y, color=color, s=30)
 
-    title_name = f'{field} spineplot ({spine_name})'
+    title_name = f'{field} spine plot ({spine_name})'
     title_name += f'\ndata: {data}'
     title_name += f', strain: {strain}'
     title_name += f', segment: {segment}'
@@ -518,7 +609,7 @@ def create_feature_distribution_plot(
         loc='upper right',
         bbox_to_anchor=(0.98, 0.95),
         borderaxespad=0.,
-        title='legend'
+        title='type'
     )
 
     stats_text = (
@@ -545,7 +636,7 @@ def create_feature_distribution_plot(
     save_path = os.path.join(save_path, intersects)
     os.makedirs(save_path, exist_ok=True)
 
-    fname = f'distribution_{feature_name}'
+    fname = f'{feature_name}_distribution'
     fname += '.png'
 
     plt.tight_layout()
@@ -561,8 +652,9 @@ def create_feature_correlation_plot(
     data: str,
     strain: str,
     segment: str,
-    intersects: str
-):
+    intersects: str,
+    show_regression: bool = True
+    ):
     '''
 
     '''
@@ -583,21 +675,21 @@ def create_feature_correlation_plot(
         label='data points'
     )
 
-    reg_line = sns.regplot(
-        data=values,
-        x=feature_x,
-        y=feature_y,
-        scatter=False,
-        color=COLORS[0]
-    )
-
-    reg_line.lines[0].set_label('regression line')
+    if show_regression:
+        reg_line = sns.regplot(
+            data=values,
+            x=feature_x,
+            y=feature_y,
+            scatter=False,
+            color=COLORS[0]
+        )
+        reg_line.lines[0].set_label('regression line')
 
     title = f'correlation between {feature_x} and {feature_y}'
     title += f'\ndata: {data}'
     title += f', strain: {strain}'
     title += f', segment: {segment}'
-    title_name += f', {intersects} intersects'
+    title += f', {intersects} intersects'
     title += f' (n={n})'
     plt.title(title)
 
@@ -611,14 +703,10 @@ def create_feature_correlation_plot(
         title='legend'
     )
 
-    save_path = os.path.join(RESULTSPATH, 'correlation', data)
-    save_path = os.path.join(save_path, strain)
-    save_path = os.path.join(save_path, segment)
-    save_path = os.path.join(save_path, intersects)
+    save_path = os.path.join(RESULTSPATH, 'correlation', data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
-    fname = f'correlation_{feature_x}_vs_{feature_y}'
-    fname += ".png"
+    fname = f'{feature_x}_vs_{feature_y}_correlation.png'
 
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, fname), dpi=300)
@@ -634,7 +722,7 @@ def make_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, dvg_
     '''
 
     '''
-    motif_sites = ['site0_motif', 'site1_motif', 'site2_motif', 'site3_motif']
+    motif_sites = ['site1_motif', 'site2_motif', 'site3_motif', 'site4_motif']
 
     motifs = generate_motifs(motif_length)
     full_seq_motif_freq_df = compute_full_seq_motif_freq_df(motif_length, data, strain, segment)
@@ -642,22 +730,22 @@ def make_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, dvg_
 
     mean_freq_diffs = []
     top_freq_diffs = []
-    for i in range(0, 4):
-        motif_count_df = compute_feature_count_df(df, motif_sites[i], motifs)
+    for i, motif_site in zip(range(0, 4), motif_sites):
+        motif_count_df = compute_feature_count_df(df, motif_site, motifs)
         motif_freq_df = compute_feature_freq_df(motif_count_df, motif_sites[i])
-        motif_freq_df = rename_feature(motif_freq_df, motif_sites[i], 'motif')
-        comb_freq_df = subtract_freq_dfs(motif_freq_df, full_seq_motif_freq_df, 'motif')
+        motif_freq_df = rename_feature(motif_freq_df, motif_site, 'motif')
+        comb_freq_df = subtract_freq_dfs('site', motif_freq_df, 'full_sequence', full_seq_motif_freq_df, 'motif')
 
-        comb_freq_df = comb_freq_df.sort_values(by='freq_diff', ascending=False).head(top_n)
-        mean_freq_diff = round(comb_freq_df['freq_diff'].mean(), 5)
+        comb_freq_df = comb_freq_df.sort_values(by='difference', ascending=False).head(top_n)
+        mean_freq_diff = round(comb_freq_df['difference'].mean(), 5)
         mean_freq_diffs.append(mean_freq_diff)
-        top_freq_diff = round(comb_freq_df['freq_diff'].iloc[0], 5)
+        top_freq_diff = round(comb_freq_df['difference'].iloc[0], 5)
         top_freq_diffs.append(top_freq_diff)
         filtered_motifs = comb_freq_df['motif'].tolist()
 
         create_freq_bar_plot(heatmap_names[i], 'motif', f'top {top_n}', comb_freq_df, dvg_count, data, strain, segment, intersects, 'motif_length', motif_length, 'mean frequency difference', mean_freq_diff, 'top frequency difference', top_freq_diff)
 
-        motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_sites[i], filtered_motifs)
+        motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_site, filtered_motifs)
         motif_count_df = compute_feature_count_heatmap_sum_df(motif_count_heatmap_df, 'motif')
         motif_freq_heatmap_df = compute_feature_freq_heatmap_df(motif_count_heatmap_df, percentile_rank_count_df)
         create_freq_heatmap_plot(heatmap_names[i], 'motif', f'top {top_n}', motif_freq_heatmap_df, motif_count_df, percentile_rank_count_df, dvg_count, data, strain, segment, intersects, 'motif_length', motif_length, 'mean frequency difference', mean_freq_diffs[i], 'top frequency difference', top_freq_diffs[i])
@@ -668,15 +756,15 @@ def make_reg_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, 
     '''
 
     '''
-    motif_sites = ['site0_motif', 'site1_motif', 'site2_motif', 'site3_motif']
+    motif_sites = ['site1_motif', 'site2_motif', 'site3_motif', 'site4_motif']
 
     motifs = generate_motifs(motif_length)
     percentile_rank_count_df = compute_percentile_rank_count_df(df)
 
     mean_coefficients = []
     top_coefficients = []
-    for i in range(0, 4):
-        motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_sites[i], motifs)
+    for i, motif_site in zip(range(0, 4), motif_sites):
+        motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_site, motifs)
         motif_count_df = compute_feature_count_heatmap_sum_df(motif_count_heatmap_df, 'motif')
         motif_freq_heatmap_df = compute_feature_freq_heatmap_df(motif_count_heatmap_df, percentile_rank_count_df)
         reg_motif_freq_heatmap_df = add_lin_reg_rows(motif_freq_heatmap_df)
@@ -690,7 +778,7 @@ def make_reg_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, 
         top_coefficients.append(top_coefficient)
         filtered_motifs = trans_reg_motif_freq_heatmap_df.index.tolist()
 
-        motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_sites[i], filtered_motifs)
+        motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_site, filtered_motifs)
         motif_count_df = compute_feature_count_heatmap_sum_df(motif_count_heatmap_df, 'motif')
         motif_freq_heatmap_df = compute_feature_freq_heatmap_df(motif_count_heatmap_df, percentile_rank_count_df)
         create_freq_heatmap_plot(heatmap_names[i], 'motif', f'top {top_n}', motif_freq_heatmap_df, motif_count_df, percentile_rank_count_df, dvg_count, data, strain, segment, intersects, 'motif_length', motif_length, 'mean regression coefficient', mean_coefficient, 'top regression coefficient', top_coefficient)
@@ -709,7 +797,8 @@ def make_dvg_motif_freq_analysis(df: pd.DataFrame, plot_name: str, dvg_count: in
     '''
     motifs = generate_motifs(motif_length)
 
-    high_df = filter_for_feature(df, 'NGS_percentile_rank', 20)
+    print(df["NGS_percentile_rank"].dtype)
+    high_df = filter_for_feature(df, 'NGS_percentile_rank', 10)
     high_dvg_count = high_df.shape[0]
     for _, row in high_df.iterrows():
         high_seq_motif_count_df = compute_seq_feature_count_df(row['dvg_sequence'], 'motif', motifs)
@@ -720,10 +809,10 @@ def make_dvg_motif_freq_analysis(df: pd.DataFrame, plot_name: str, dvg_count: in
         seq_motif_count_df = compute_seq_feature_count_df(row['dvg_sequence'], 'motif', motifs)
         motif_freq_df = compute_feature_freq_df(seq_motif_count_df, 'motif')
 
-    comb_freq_df = subtract_freq_dfs(high_motif_freq_df, motif_freq_df, 'motif')
-    comb_freq_df = comb_freq_df.sort_values(by='freq_diff', ascending=False).head(top_n)
-    mean_freq_diff = round(comb_freq_df['freq_diff'].mean(), 5)
-    top_freq_diff = round(comb_freq_df['freq_diff'].iloc[0], 5)
+    comb_freq_df = subtract_freq_dfs('high_NGS_rank', high_motif_freq_df, 'all_NGS_ranks', motif_freq_df, 'motif')
+    comb_freq_df = comb_freq_df.sort_values(by='difference', ascending=False).head(top_n)
+    mean_freq_diff = round(comb_freq_df['difference'].mean(), 5)
+    top_freq_diff = round(comb_freq_df['difference'].iloc[0], 5)
         
     create_freq_bar_plot(plot_name, 'motif', f'top {top_n}', comb_freq_df, dvg_count, data, strain, segment, intersects, 'motif_length', motif_length, 'mean frequency difference', mean_freq_diff, 'top frequency difference', top_freq_diff)
 
@@ -742,17 +831,18 @@ def make_repeat_heatmap_analysis(df: pd.DataFrame, heatmap_name: str, dvg_count:
     repeat_count_df = compute_feature_count_heatmap_sum_df(repeat_count_heatmap_df, 'direct_repeat_length')
     repeat_freq_heatmap_df = compute_feature_freq_heatmap_df(repeat_count_heatmap_df, percentile_rank_count_df)
 
-    create_freq_heatmap_plot(heatmap_name, 'direct_repeat_length', '-', repeat_freq_heatmap_df, repeat_count_df, percentile_rank_count_df, dvg_count, data, strain, segment, intersects)
+    create_freq_heatmap_plot(heatmap_name, 'direct_repeat_length', 'nucleotides', repeat_freq_heatmap_df, repeat_count_df, percentile_rank_count_df, dvg_count, data, strain, segment, intersects)
 
 def make_mfe_heatmap_analysis(df: pd.DataFrame, heatmap_name: str, dvg_count: int, data: str, strain: str, segment: str, intersects: str):
     '''
 
     '''
+    df = add_feature_percentile_rank(df, 'MFE', 'MFE_percentile_rank')
+    df = rename_feature(df, 'MFE_percentile_rank', 'MFE_rank')
 
     percentile_rank_count_df = compute_percentile_rank_count_df(df)
 
-    mfe_count_heatmap_df = compute_feature_count_heatmap_df(df, 'MFE_percentile_rank')
-    mfe_count_heatmap_df = rename_feature(mfe_count_heatmap_df, 'MFE_percentile_rank', 'MFE_rank')
+    mfe_count_heatmap_df = compute_feature_count_heatmap_df(df, 'MFE_rank')
     mfe_count_df = compute_feature_count_heatmap_sum_df(mfe_count_heatmap_df, 'MFE_rank')
     mfe_freq_heatmap_df = compute_feature_freq_heatmap_df(mfe_count_heatmap_df, percentile_rank_count_df)
 
@@ -770,70 +860,48 @@ if __name__ == "__main__":
     ### SELECTION ###
     #################
 
-    ### SINGLE ###
-
-    # index = 20
-
-    # dfnames = get_dataset_names(cutoff=40)
-    # dfnames = [dfnames[index]]
-    # dfs, _ = load_all(dfnames, False)
-
-    # data = dfnames[0]
-    # strain = DATASET_STRAIN_DICT[data]
-    # segment = ''
-    # intersects = ''
-
-    ### MULTI ###
-
-    # data = 'IBV'
-    # strain = ''
-    # segment = ''
-    # intersects = ''
-
-    # dfnames = get_dataset_names(cutoff=40, selection=data)
-    # dfs, _ = load_all(dfnames, False)
-
-    ### PREPROCESS SINGLE ###
+    ### DATASETS SINGLE ###
 
     # folder = 'datasets'
-    # subfolder = 'sec_full'
+    # subfolder = 'sec'
 
-    # index = 20
-
-    # dfnames = get_dataset_names(cutoff=40)
-    # dfnames = [dfnames[index]]
-    # dfs = load_all_preprocessed(dfnames, folder, subfolder)
-
-    # data = dfnames[0]
+    # data = 'Alnaji2021'
     # strain = DATASET_STRAIN_DICT[data]
-    # segment = ''
-    # intersects = ''
+    # segment = 'all'
+    # intersects = 'all'
+
+    # dfnames = [data]
+    # dfs = load_all_preprocessed(dfnames, folder, subfolder)
     
-    ### PREPROCESS MULTI ###
+    ### DATASETS MULTI ###
 
-    # folder = 'datasets'
-    # subfolder = 'sec_full'
+    folder = 'datasets'
+    subfolder = 'pseudo_pri_full'
 
-    # data = 'IBV'
-    # strain = ''
-    # segment = ''
-    # intersects = ''
+    data = 'IAV'
+    strain = 'PR8'
+    segment = 'PB1'
+    intersects = 'mean'
 
-    # # dfnames = get_dataset_names(cutoff=40, selection=data)
-    # dfs = load_all_preprocessed(dfnames, folder, subfolder)
+    dfnames = get_dataset_names(cutoff=40, selection=data)
+    dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
     ###################
     ### run scripts ###
     ###################
 
-    # run_site_motif_heatmap_analysis(dfs, 5, data, strain, segment, intersects)
+    run_site_motif_heatmap_analysis(dfs, 5, data, strain, segment, intersects)
     # run_reg_site_motif_heatmap_analysis(dfs, 5, data, strain, segment, intersects)
     # run_repeat_heatmap_analysis(dfs, 5, data, strain, segment, intersects)
 
-    run_dvg_motif_freq_analysis(dfs, 20, data, strain, segment, intersects)
+    # run_dvg_motif_freq_analysis(dfs, 20, data, strain, segment, intersects)
     # run_ngs_count_distribution_analysis(dfs, data, strain, segment, intersects)
-    # run_sec_structure_plots(dfs, data, strain, segment, intersects)
+    # run_sec_structure_plots(dfs, data, strain, segment)
+    run_ngs_count_dvg_pri_features_correlation_analysis(dfs, data, strain, segment, intersects)
 
-    ### requires preprocessing ###
+    ### requires sec feature preprocessing ###
+    
     # run_mfe_heatmap_analysis(dfs, data, strain, segment, intersects)
     # run_dvg_length_mfe_correlation_analysis(dfs, data, strain, segment, intersects)
+    # run_ngs_count_dvg_sec_features_correlation_analysis(dfs, data, strain, segment, intersects)
+    # run_ngs_count_site_sec_features_correlation_analysis(dfs, data, strain, segment, intersects)
