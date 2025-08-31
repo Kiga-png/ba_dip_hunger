@@ -21,13 +21,13 @@ import re
 sys.path.insert(0, "..")
 from utils import get_dataset_names, load_all
 from utils import manage_separate_specifiers, load_all_preprocessed, save_df
-from utils import rename_feature, filter_for_feature, filter_against_feature, add_feature_percentile_rank, add_log_feature, add_norm_feature, add_separate_ngs_features
+from utils import rename_feature, split_by_threshold, add_feature_percentile_rank, add_log_feature, add_norm_feature, add_separate_ngs_features
 from utils import manage_intersects
 from utils import add_dvg_sequence, add_dvg_length, add_cg_content, add_region_lengths
-from utils import mannwhitneyu_by_threshold
+from utils import mannwhitneyu_for_feature
 
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
-from utils import COLORS, STRAINS
+from utils import COLORS, RANK_THRESHOLD
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, 'statistics')
@@ -50,7 +50,7 @@ def run_pri_mannwhitneyu(dfs: list, fname: str, data: str = 'all', strain: str =
     df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
 
     df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
-    stats = make_pri_mannwhitneyu(df, data, strain, segment, intersects)
+    stats = make_pri_mannwhitneyu(df)
     save_df(stats, fname, RESULTSPATH, 'mannwhitneyu', 'pri', data, strain, segment, intersects)
 
 ###############
@@ -59,7 +59,7 @@ def run_pri_mannwhitneyu(dfs: list, fname: str, data: str = 'all', strain: str =
 
 ### statistics ###
 
-def make_pri_mannwhitneyu(df: pd.DataFrame, data: str, strain: str, segment: str, intersects: str):
+def make_pri_mannwhitneyu(df: pd.DataFrame):
     '''
 
     '''
@@ -68,11 +68,13 @@ def make_pri_mannwhitneyu(df: pd.DataFrame, data: str, strain: str, segment: str
     df = add_cg_content(df)
     df = add_region_lengths(df)
 
+    true_df, false_df = split_by_threshold(df, 'NGS_percentile_rank', RANK_THRESHOLD)
+
     features = [col for col in df.columns if re.search(r"motif\d+", col)] + ["Start", "End", "dvg_length", "deletion_length", "5_end_length", "3_end_length", "cg_content"]
 
     stats = []
     for feature in features:
-        feature_stats = mannwhitneyu_by_threshold(df, feature, 'NGS_percentile_rank', 20)
+        feature_stats = mannwhitneyu_for_feature(true_df, false_df, feature)
         stats.append(feature_stats)
 
     return pd.DataFrame(stats)
@@ -126,4 +128,3 @@ if __name__ == "__main__":
     ### requires pri feature preprocessing ###
 
     run_pri_mannwhitneyu(dfs, dfname, data, strain, segment, intersects)
-    run_pseudo_pri_mannwhitneyu(dfs, dfname, data, strain, segment, intersects)

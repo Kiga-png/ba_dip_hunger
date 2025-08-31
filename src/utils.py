@@ -3,12 +3,17 @@
 '''
 import os
 import re
+import math
 
 import itertools as it
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as stats
+
+import traceback
+import inspect
+import builtins
 
 import RNA
 
@@ -27,16 +32,50 @@ RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
 CMAP = "Accent"
 CUTOFF = 15
 N_SAMPLES = 35000
+
 SEED = 42
+RANK_THRESHOLD = 20
+DECIMALS = 2
 
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
 
-VIVO_M_DATASETS = ["Wang2023", "Penn2022", "Lui2019"]
+# system type #
+VIVO_MOUSE_DATASETS = ["Wang2023", "Penn2022", "Lui2019"]
 VITRO_DATASETS = ["Alnaji2021", "Pelz2021", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07" ,"Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Alnaji2019_BLEE", "Sheng2018"]
-VIVO_H_DATASETS = ["Berry2021_A", "Berry2021_B", "Berry2021_B_Yam", "Southgate2019", "Valesano2020_Yam", "Valesano2020_Vic"]
-VIVO_DATASETS = VIVO_M_DATASETS + VIVO_H_DATASETS
+VIVO_HUMAN_DATASETS = ["Berry2021_A", "Berry2021_B", "Berry2021_B_Yam", "Southgate2019", "Valesano2020_Yam", "Valesano2020_Vic"]
+VIVO_DATASETS = VIVO_MOUSE_DATASETS + VIVO_HUMAN_DATASETS
 
-IAV_DATASETS = ["Alnaji2021", "Pelz2021", "Wang2023", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07", "Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Berry2021_A", "Penn2022", "Lui2019"]
+# LibraryLayout #
+PAIRED_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023', 'Wang2020', 'Kupke2020', 'VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Mendes2021', 'Boussier2020', 'Alnaji2019_Perth', 'Berry2021_A', 'Penn2022', 'Alnaji2019_BLEE', 'Berry2021_B', 'Valesano2020_Vic', 'Berry2021_B_Yam', 'Southgate2019', 'Valesano2020_Yam']
+SINGLE_DATASETS = ['Zhuravlev2020', 'Sheng2018']
+SINGLE_and_PAIRED_DATASETS = ['Lui2019']
+
+# LibrarySelection #
+RT_PCR_DATASETS = ['VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Alnaji2019_Perth', 'Berry2021_A', 'Alnaji2019_BLEE', 'Berry2021_B', 'Valesano2020_Vic', 'Berry2021_B_Yam', 'Southgate2019', 'Valesano2020_Yam']
+PCR_DATASETS = ['Alnaji2021', 'Pelz2021']
+POLYA_DATASETS = ['Zhuravlev2020', 'Sheng2018']
+CDNA_DATASETS = ['Wang2020', 'Mendes2021']
+WGA_DATASETS = ['Penn2022']
+OTHER_DATASETS = ['Wang2023']
+POLYA_and_PCR_DATASETS = ['Kupke2020']
+PCR_and_CDNA_DATASETS = ['Lui2019']
+_DATASETS = ['Boussier2020']
+
+# LibrarySource #
+VIRAL_RNA_DATASETS = ['VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Alnaji2019_Perth', 'Berry2021_A', 'Penn2022', 'Alnaji2019_BLEE', 'Berry2021_B', 'Valesano2020_Vic', 'Berry2021_B_Yam', 'Valesano2020_Yam']
+GENOMIC_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023']
+TRANSCRIPTOMIC_DATASETS = ['Wang2020', 'Zhuravlev2020', 'Mendes2021', 'Sheng2018']
+OTHER_DATASETS = ['Southgate2019']
+TRANSCRIPTOMIC_SINGLE_CELL_and_VIRAL_RNA_DATASETS = ['Kupke2020']
+VIRAL_RNA_and_OTHER_DATASETS = ['Lui2019']
+_DATASETS = ['Boussier2020']
+
+# subtype #
+H1N1_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023', 'Wang2020', 'Zhuravlev2020', 'Kupke2020', 'VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Mendes2021', 'Boussier2020']
+H3N2_DATASETS = ['Alnaji2019_Perth', 'Berry2021_A']
+H5N1_DATASETS = ['Penn2022']
+H7N9_DATASETS = ['Lui2019']
+IAV_DATASETS = H1N1_DATASETS + H3N2_DATASETS + H5N1_DATASETS + H7N9_DATASETS
 IBV_DATASETS = ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018", "Berry2021_B_Yam", "Southgate2019","Valesano2020_Yam"]
 
 STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui", "BLEE", "Victoria", "Brisbane", "Yamagata"]
@@ -726,31 +765,33 @@ def get_dataset_names(cutoff: int=0, selection: str="")-> list:
     names = df[df["Size"] >= cutoff]["Dataset"].to_list()
 
     # make selection based on in vivo/cells etc.
-    if selection == "in_vivo_mouse":
-        select_names = VIVO_M_DATASETS
-    elif selection == "in_vitro":
+    if selection == "in vivo mouse":
+        select_names = VIVO_MOUSE_DATASETS
+    elif selection == "in vitro":
         select_names = VITRO_DATASETS
-    elif selection == "in_vivo_human":
-        select_names = VIVO_H_DATASETS
+    elif selection == "in vivo human":
+        select_names = VIVO_HUMAN_DATASETS
+    elif selection == "in vivo":
+        select_names = VIVO_DATASETS
     elif selection == "IAV":
         select_names = IAV_DATASETS
     elif selection == "IBV":
         select_names = IBV_DATASETS
-    elif selection == "IAV_in_vivo_mouse":
-        select_names = list(set(IAV_DATASETS) & set(VIVO_M_DATASETS))
-    elif selection == "IAV_in_vitro":
+    elif selection == "IAV (in vivo mouse)":
+        select_names = list(set(IAV_DATASETS) & set(VIVO_MOUSE_DATASETS))
+    elif selection == "IAV (in vitro)":
         select_names = list(set(IAV_DATASETS) & set(VITRO_DATASETS))
-    elif selection == "IAV_in_vivo_human":
-        select_names = list(set(IAV_DATASETS) & set(VIVO_H_DATASETS))
-    elif selection == "IAV_in_vivo":
+    elif selection == "IAV (in vivo human)":
+        select_names = list(set(IAV_DATASETS) & set(VIVO_HUMAN_DATASETS))
+    elif selection == "IAV (in vivo)":
         select_names = list(set(IAV_DATASETS) & set(VIVO_DATASETS))
-    elif selection == "IBV_in_vivo_mouse":
-        select_names = list(set(IBV_DATASETS) & set(VIVO_M_DATASETS))
-    elif selection == "IBV_in_vitro":
+    elif selection == "IBV (in vivo mouse)":
+        select_names = list(set(IBV_DATASETS) & set(VIVO_MOUSE_DATASETS))
+    elif selection == "IBV (in vitro)":
         select_names = list(set(IBV_DATASETS) & set(VITRO_DATASETS))
-    elif selection == "IBV_in_vivo_human":
-        select_names = list(set(IBV_DATASETS) & set(VIVO_H_DATASETS))
-    elif selection == "IBV_in_vivo":
+    elif selection == "IBV (in vivo human)":
+        select_names = list(set(IBV_DATASETS) & set(VIVO_HUMAN_DATASETS))
+    elif selection == "IBV (in vivo)":
         select_names = list(set(IBV_DATASETS) & set(VIVO_DATASETS))
     else:
         select_names = names
@@ -1290,14 +1331,32 @@ def get_dip_sequence(delvg_id: str, strain: str)-> Tuple[str, str, str]:
 ### NEW WORK ###
 ################
 
-CUSTOM_COLORS = [
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
-    "#e377c2", "#ff1493", "#bcbd22", "#17becf", "#393b79", "#ff9896",
-    "#98df8a", "#c5b0d5", "#c49c94", "#f7b6d2", "#dbdb8d", "#9edae5",
-    "#ffbb78", "#aec7e8"
+COLORS = [
+     '#ff6666', # 0
+     '#ff9160', # 1
+     '#ffbd55', # 2
+     '#ffde5b', # 3
+     '#ffff66', # 4
+     '#cef458', # 5
+     '#9de24f', # 6
+     '#93d986', # 7
+     '#87cefa', # 8
+     '#a7a6eb', # 9
+     '#cda4de' # 10
     ]
 
-COLORS = ["#ff6666", "#ffbd55", "#ffff66", "#9de24f", "#87cefa"]
+COLOR_TEMPLATES = {
+    1: [8],
+    2: [0, 8],
+    3: [0, 4, 8],
+    4: [0, 3, 6, 9],
+    5: [0, 3, 5, 8, 10],
+    6: [0, 2, 4, 6, 8, 10],
+    7: [0, 2, 3, 4, 6, 8, 10],
+    8: [0, 2, 3, 4, 6, 8, 9, 10],
+    9: [0, 1, 2, 3, 4, 6, 8, 9, 10],
+    10: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10],
+}
 
 ###############
 ### general ###
@@ -1314,6 +1373,15 @@ def get_strains(datasets: list):
             seen.add(strain)
             strains.append(strain)
     return strains
+
+def clean_data_string(string: str):
+    '''
+    
+    '''
+    clean_string = re.sub(r'[^A-Za-z0-9 ]+', '', string)
+    clean_string = clean_string.replace(" ", "_")
+
+    return clean_string
 
 def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
     '''
@@ -1399,6 +1467,9 @@ def save_df(df: pd.DataFrame, fname: str, save_path: str, folder: str = '', subf
 ### length features ###
 
 def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
     def compute_dvg_sequence(row):
         full_seq = row['full_seq']
         start = row['Start']
@@ -1413,31 +1484,23 @@ def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
         return ''.join(seq_list)
 
     df['marked_dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+
     return df
 
-def add_cg_content(df: pd.DataFrame):
-    def calculate_gc_content(seq):
-        if not isinstance(seq, str) or len(seq) == 0:
-            return 0.0
-        gc_count = seq.count('G') + seq.count('C')
-        return (gc_count / len(seq))
+def add_full_seq_length(df: pd.DataFrame):
+    """
 
-    df['cg_content'] = df['dvg_sequence'].apply(calculate_gc_content)
+    """
+    df['full_seq_length'] = df['full_seq'].apply(len)
+
     return df
 
 def add_dvg_length(df: pd.DataFrame):
+    """
+
+    """
     df['dvg_length'] = df['dvg_sequence'].apply(len)
-    return df
 
-def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
-    def compute_dvg_sequence(row):
-        full_seq = row['full_seq']
-        start = row['Start']
-        end = row['End']
-
-        return full_seq[:start] + full_seq[end:]
-
-    df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
     return df
 
 def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
@@ -1446,7 +1509,29 @@ def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
     """
     df["5_end_length"] = df["Start"]
     df["3_end_length"] = df["full_seq"].str.len() - df["End"]
+
+    return df
+
+def add_deletion_length(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
     df["deletion_length"] = df["End"] - df["Start"] - 1
+
+    return df
+
+def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
+    def compute_dvg_sequence(row):
+        full_seq = row['full_seq']
+        start = row['Start']
+        end = row['End']
+
+        return full_seq[:start] + full_seq[end:]
+
+    df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
 
     return df
 
@@ -1463,18 +1548,6 @@ def add_dataset_keys(dfs):
         updated_dfs.append(df_copy)
     return updated_dfs
 
-def add_dataset_names(dfnames: list, dfs: list) -> list:
-    '''
-    
-    '''
-    updated_dfs = []
-    for dfname, df in zip(dfnames, dfs):
-        df = df.copy()
-        df['dataset_name'] = dfname
-        updated_dfs.append(df)
-
-    return updated_dfs
-
 def add_metadata_features(dfnames: list, dfs: list) -> list:
     '''
     
@@ -1483,7 +1556,7 @@ def add_metadata_features(dfnames: list, dfs: list) -> list:
     read_path = os.path.join(RESULTSPATH, 'metadata', fname)
     meta_df = pd.read_csv(read_path)
 
-    meta_features = ['system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype']
+    meta_features = ['names', 'system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype']
 
     updated_dfs = []
     for dfname, df in zip(dfnames, dfs):
@@ -1492,12 +1565,21 @@ def add_metadata_features(dfnames: list, dfs: list) -> list:
 
         for meta_feature in meta_features:
             value = meta_df.loc[meta_df['names'] == dfname, meta_feature].iloc[0]
-            value = value if not pd.isna(value) else "UNKNOWN"
+            value = 'unclassified' if isinstance(value, str) and value.strip() == '' else value
             df[meta_feature] = value
 
         updated_dfs.append(df)
+    
+    renamed_dfs = []
+    for df in updated_dfs:
+        df = rename_feature(df, 'names', 'dataset_name')
+        df = rename_feature(df, 'system type', 'system_type')
+        df = rename_feature(df, 'LibraryLayout', 'library_layout')
+        df = rename_feature(df, 'LibrarySelection', 'library_selection')
+        df = rename_feature(df, 'LibrarySource', 'library_source')
+        renamed_dfs.append(df)
 
-    return updated_dfs
+    return renamed_dfs
 
 ### intersects ###
 
@@ -1651,19 +1733,21 @@ def rename_feature(df: pd.DataFrame, old_name: str, new_name: str) -> pd.DataFra
 
     return df.rename(columns={old_name: new_name})
 
-def filter_for_feature(df: pd.DataFrame, feature_name: str, filter_number: int):
+def split_by_feature(df: pd.DataFrame, feature_name: str, feature_value):
     '''
-    
-    '''
-    df = df[df[feature_name] == filter_number]
-    return df
 
-def filter_against_feature(df: pd.DataFrame, feature_name: str, filter_number: int):
     '''
-    
+    df_true = df[df[feature_name] == feature_value]
+    df_false = df[df[feature_name] != feature_value]
+    return df_true, df_false
+
+def split_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float):
     '''
-    df = df[df[feature_name] != filter_number]
-    return df
+
+    '''
+    df_true = df[df[feature_name] >= threshold]
+    df_false = df[df[feature_name] < threshold]
+    return df_true, df_false
 
 def add_feature_percentile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int = 20):
     df = df.copy()
@@ -1675,14 +1759,40 @@ def add_feature_percentile_rank(df: pd.DataFrame, feature_name: str, rank_name: 
     ) + 1
     return df
 
-def add_log_feature(df: pd.DataFrame, feature_name: str, log_name: str):
-    df[log_name] = np.log10(df[feature_name])
+def add_log_feature(df: pd.DataFrame, feature_name: str, new_name: str, log_type: str = "log10"):
+    """
+
+    """
+    if log_type == "none":
+        df[new_name] = df[feature_name]
+    elif log_type == "log10":
+        df[new_name] = np.log10(df[feature_name])
+    elif log_type == "log2":
+        df[new_name] = np.log2(df[feature_name])
+    else:
+        raise ValueError(f"invalid log_type '{log_type}'. choose from 'none', 'log10', 'log2'.")
     return df
 
-def add_norm_feature(df: pd.DataFrame, feature_name: str, norm_name: str):
-    max = df[feature_name].max()
-    min = df[feature_name].min()
-    df[norm_name] = (df[feature_name] - min) / (max - min)
+def add_norm_feature(df: pd.DataFrame, feature_name: str, new_name: str, norm_type: str = "minmax"):
+    """
+
+    """
+    if norm_type == "minmax":
+        fmin = df[feature_name].min()
+        fmax = df[feature_name].max()
+        df[new_name] = (df[feature_name] - fmin) / (fmax - fmin) if fmax != fmin else 0.0
+
+    elif norm_type == "zscore":
+        mean = df[feature_name].mean()
+        std = df[feature_name].std()
+        df[new_name] = (df[feature_name] - mean) / std if std != 0 else 0.0
+
+    elif norm_type == "none":
+        df[new_name] = df[feature_name]
+
+    else:
+        raise ValueError(f"invalid norm_type '{norm_type}'. choose from 'minmax', 'zscore', 'none'.")
+    
     return df
 
 def add_separate_ngs_features(dfs: list, separated: bool):
@@ -1738,6 +1848,196 @@ def balance_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float) 
 
     return df_balanced
 
+### adv pri features ###
+
+def add_gc_content(df: pd.DataFrame):
+    """
+    Adds 'gc_content' = (G+C)/length for each dvg_sequence.
+    """
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) == 0:
+            return 0.0
+        return (seq.count('G') + seq.count('C')) / len(seq)
+    df['GC_content'] = df['dvg_sequence'].apply(calc)
+    return df
+
+def add_au_content(df: pd.DataFrame):
+    """
+    Adds 'au_content' = (A+U)/length for each dvg_sequence.
+    """
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) == 0:
+            return 0.0
+        return (seq.count('A') + seq.count('U')) / len(seq)
+    df['AU_content'] = df['dvg_sequence'].apply(calc)
+    return df
+
+def add_upa_content(df: pd.DataFrame):
+    """
+    Adds 'upa_content' = count of 'UA' or 'AU' dinucleotides / total dinucleotides.
+    UpA under-representation can reflect host pressure.
+    """
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) < 2:
+            return 0.0
+        di = len(seq) - 1
+        return (seq.count('UA') + seq.count('AU')) / di
+    df['UpA_content'] = df['dvg_sequence'].apply(calc)
+    return df
+
+def add_cpg_content(df: pd.DataFrame):
+    """
+    Adds 'cpg_content' = count of 'CG' dinucleotides / total dinucleotides.
+    Relevant for innate immune recognition.
+    """
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) < 2:
+            return 0.0
+        return seq.count('CG') / (len(seq) - 1)
+    df['CpG_content'] = df['dvg_sequence'].apply(calc)
+    return df
+
+def add_gc_skew(df: pd.DataFrame):
+    """
+    Adds 'gc_skew' = (G - C) / (G + C) per sequence.
+    """
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) == 0:
+            return 0.0
+        g, c = seq.count('G'), seq.count('C')
+        return (g - c) / (g + c) if (g + c) else 0.0
+    df['GC_skew'] = df['dvg_sequence'].apply(calc)
+    return df
+
+def add_sequence_entropy(df: pd.DataFrame):
+    """
+    Adds 'sequence_entropy' = Shannon entropy over A,C,G,U.
+    """
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) == 0:
+            return 0.0
+        p = [seq.count(b)/len(seq) for b in 'ACGU']
+        return -sum(pi*math.log2(pi) for pi in p if pi > 0)
+    df['sequence_entropy'] = df['dvg_sequence'].apply(calc)
+    return df
+
+def add_poly_run_features(df: pd.DataFrame, base: str, min_len=4):
+    """
+    Adds:
+      - f'poly{base}_max_run': longest consecutive run length of `base`
+      - f'poly{base}_tracts': number of runs with length >= min_len
+    Useful for poly-U/A tracts (replication/termination signals).
+    """
+    import re
+    run_col = f'poly_{base}_max_run'
+    n_col = f'poly_{base}_tracts'
+    pat = re.compile(f'{base}+' if isinstance(base, str) else 'U+')
+    def calc_max(seq):
+        if not isinstance(seq, str): return 0
+        m = pat.findall(seq)
+        return max((len(x) for x in m), default=0)
+    def calc_n(seq):
+        if not isinstance(seq, str): return 0
+        return sum(1 for x in pat.findall(seq) if len(x) >= min_len)
+    df[run_col] = df['dvg_sequence'].apply(calc_max)
+    df[n_col] = df['dvg_sequence'].apply(calc_n)
+    return df
+
+def add_palindrome_density(df: pd.DataFrame, k: int, step=1):
+    """
+    Adds 'palindrome_density' = palindromic k-mer count / number of windows.
+    Palindromes can seed hairpins.
+    """
+    def is_pal(s):
+        return s == s[::-1].translate(str.maketrans('ACGU','UGCA'))
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) < k:
+            return 0.0
+        windows = 0
+        pals = 0
+        for i in range(0, len(seq) - k + 1, step):
+            kmer = seq[i:i+k]
+            windows += 1
+            if is_pal(kmer):
+                pals += 1
+        return pals / windows if windows else 0.0
+    df['palindrome_density'] = df['dvg_sequence'].apply(calc)
+    return df
+
+def add_orf_features(df: pd.DataFrame):
+    """
+    Adds:
+      - 'longest_orf_len_nt': longest ORF length in nt across 3 frames
+      - 'orf_count_aa_ge20': count of ORFs >= 20 aa
+    Uses AUG start and UAA/UAG/UGA stops (on RNA).
+    """
+    stops = {'UAA','UAG','UGA'}
+    def scan(seq):
+        if not isinstance(seq, str) or len(seq) < 3:
+            return (0, 0)
+        best = 0
+        count20 = 0
+        for frame in range(3):
+            i = frame
+            while i+2 < len(seq):
+                codon = seq[i:i+3]
+                if codon == 'AUG':  # start
+                    j = i+3
+                    while j+2 < len(seq):
+                        c = seq[j:j+3]
+                        if c in stops:
+                            orf_len = j+3 - i
+                            best = max(best, orf_len)
+                            if orf_len // 3 >= 20:
+                                count20 += 1
+                            i = j  # continue after stop
+                            break
+                        j += 3
+                i += 3
+        return (best, count20)
+    res = df['dvg_sequence'].apply(scan)
+    df['longest_ORF_len'] = res.apply(lambda x: x[0])
+    df['ORF_count'] = res.apply(lambda x: x[1])
+    return df
+
+def add_kmer_richness(df: pd.DataFrame, k: int):
+    """
+    Adds 'kmer_richness_k{K}' = unique k-mers / possible windows.
+    Higher values suggest diverse sequence composition.
+    """
+    col = f'kmer_richness'
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) < k:
+            return 0.0
+        seen = set(seq[i:i+k] for i in range(len(seq)-k+1))
+        return len(seen) / (len(seq)-k+1)
+    df[col] = df['dvg_sequence'].apply(calc)
+    return df
+
+def add_codon_usage_bias(df: pd.DataFrame):
+    """
+    Adds 'codon_usage_entropy' over 61 sense codons (RNA alphabet; T->U).
+    Lower entropy can indicate codon bias.
+    """
+    import math
+    stops = {'UAA','UAG','UGA'}
+    def calc(seq):
+        if not isinstance(seq, str) or len(seq) < 3:
+            return 0.0
+        counts = {}
+        total = 0
+        for frame in (0,1,2):
+            for i in range(frame, len(seq)-2, 3):
+                cod = seq[i:i+3]
+                if len(cod) == 3 and cod not in stops and all(c in 'ACGU' for c in cod):
+                    counts[cod] = counts.get(cod, 0) + 1
+                    total += 1
+        if total == 0: return 0.0
+        p = [c/total for c in counts.values()]
+        return -sum(pi*math.log2(pi) for pi in p)
+    df['codon_usage_entropy'] = df['dvg_sequence'].apply(calc)
+    return df
+
 ### sec features ###
 
 def add_marked_structure(df: pd.DataFrame) -> pd.DataFrame:
@@ -1789,45 +2089,827 @@ def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, 
 
     return df
 
-def add_loop_count(df: pd.DataFrame, structure_name: str, count_name: str) -> pd.DataFrame:
+### sym feature ###
+
+def _longest_symmetry_len(s: str) -> int:
     '''
 
     '''
-    df[count_name] = df[structure_name].apply(lambda s: len(re.findall(r'\.+', s)))
+    n = len(s)
+    if n == 0:
+        return 0
 
+    def match(a, b):
+        return (a == '.' and b == '.') or (a == '(' and b == ')') or (a == ')' and b == '(')
+
+    def expand(left, right):
+        # expand while s[left] mirrors s[right]
+        while left >= 0 and right < n and match(s[left], s[right]):
+            left -= 1
+            right += 1
+        # after breaking, last valid window is (left+1, right-1)
+        return right - left - 1  # length
+
+    best = 1  # any single char is symmetric with itself if it's '.'
+    # Note: single '(' or ')' alone doesn't mirror to itself; but for odd centers we need
+    # to ensure length 1 only counts if '.'; to keep it simple and strict, we can set best = 0
+    # and rely on expansions. We'll handle single '.' properly via odd-center expansion below.
+    best = 0
+
+    for center in range(n):
+        # odd-length center at 'center'
+        # Only valid if s[center] mirrors itself (i.e., '.')
+        if s[center] == '.':
+            best = max(best, 1)
+        # even-length center between center and center+1
+        # Try both expansions:
+
+        # odd-length expansion around (center, center)
+        # This only grows if neighbors mirror; single '.' handled above
+        l = r = center
+        # Start with length 1 if '.' else 0; then expand outward
+        cur_len = 1 if s[center] == '.' else 0
+        if cur_len == 1:
+            # already counted single dot; now try to expand further
+            l -= 1
+            r += 1
+            while l >= 0 and r < n and match(s[l], s[r]):
+                cur_len += 2
+                l -= 1
+                r += 1
+            best = max(best, cur_len)
+
+        # even-length expansion around (center, center+1)
+        if center + 1 < n and match(s[center], s[center+1]):
+            l, r = center, center + 1
+            cur_len = 0
+            while l >= 0 and r < n and match(s[l], s[r]):
+                cur_len += 2
+                l -= 1
+                r += 1
+            best = max(best, cur_len)
+
+    return best
+
+def add_max_symmetry(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    out = df.copy()
+    out["max_symmetry"] = out["structure"].astype(str).apply(_longest_symmetry_len)
+    out["full_symmetry"] = out.apply(
+        lambda row: row["max_symmetry"] == len(str(row["structure"])), axis=1
+        )
+    return out
+
+### adv sec features ###
+
+def _pairs_from_dotbracket(s: str):
+    """
+    
+    """
+    if not isinstance(s, str):
+        return []
+    stack = []
+    pairs = []
+    for i, ch in enumerate(s):
+        if ch == "(":
+            stack.append(i)
+        elif ch == ")":
+            if stack:
+                j = stack.pop()
+                pairs.append((j, i))
+            else:
+                # unbalanced right paren; ignore
+                pass
+    pairs.sort()
+    return pairs
+
+def _stems_from_pairs(pairs):
+    """
+    
+    """
+    if not pairs:
+        return []
+    stems = []
+    cur_len = 1
+    for (i1, j1), (i2, j2) in zip(pairs, pairs[1:]):
+        if i2 == i1 + 1 and j2 == j1 - 1:  # stacked
+            cur_len += 1
+        else:
+            stems.append(cur_len)
+            cur_len = 1
+    stems.append(cur_len)
+    return stems
+
+def _hairpin_loop_sizes(s: str, pairs):
+    """
+    Hairpin loop = a base pair (i,j) whose enclosed region has no other pairs.
+    Size = number of dots between i and j.
+    """
+    sizes = []
+    for i, j in pairs:
+        inner = s[i+1:j]
+        if inner and ("(" not in inner and ")" not in inner):
+            sizes.append(len(inner))
+    return sizes
+
+def _external_unpaired_count(s: str):
+    """
+    Dots not enclosed by any pair (i.e., in the external loop).
+    """
+    pairs = _pairs_from_dotbracket(s)
+    covered = set()
+    for i, j in pairs:
+        covered.update(range(i, j+1))
+    return sum(1 for k, ch in enumerate(s) if ch == "." and k not in covered)
+
+def _pair_spans(pairs):
+    """
+    For each pair (i,j) return j-i (span/arc length).
+    """
+    return [(j - i) for i, j in pairs]
+
+def add_bp_count(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    df["bp_count"] = df["structure"].apply(
+        lambda s: s.count("(") if isinstance(s, str) else None
+    )
     return df
 
-def add_max_loop(df: pd.DataFrame, structure_name: str, max_name: str) -> pd.DataFrame:
+def add_bp_density(df: pd.DataFrame) -> pd.DataFrame:
     '''
 
     '''
-    df[max_name] = df[structure_name].apply(
-        lambda s: max((len(match) for match in re.findall(r'\.+', s)), default=0)
-        )
+    def f(s):
+        if not isinstance(s, str) or len(s) == 0:
+            return None
+        # each "(" corresponds to one base pair; density over length
+        return s.count("(") / len(s)
+    df["bp_density"] = df["structure"].apply(f)
+    return df
+
+def add_unpaired_count(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    df["unpaired_count"] = df["structure"].apply(
+        lambda s: s.count(".") if isinstance(s, str) else None
+    )
+    return df
+
+def add_unpaired_density(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    def f(s):
+        if not isinstance(s, str) or len(s) == 0:
+            return None
+        return s.count(".") / len(s)
+    df["unpaired_density"] = df["structure"].apply(f)
+    return df
+
+def add_stem_count(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    '''
+    df["stem_count"] = df["structure"].apply(
+        lambda s: len(_stems_from_pairs(_pairs_from_dotbracket(s))) if isinstance(s, str) else None
+    )
+    return df
+
+def add_stem_length_stats(df: pd.DataFrame) -> pd.DataFrame:
+    ''' 
     
+    '''
+    def f(s):
+        if not isinstance(s, str):
+            return (None, None, None)
+
+        stems = _stems_from_pairs(_pairs_from_dotbracket(s))
+        if not stems:
+            return (0, 0.0, 0)
+        
+        if isinstance(stems[0], list):
+            stems = [len(seg) for seg in stems]
+
+        return (max(stems), sum(stems) / len(stems), min(stems))
+
+    out = df["structure"].apply(f)
+    df["stem_len_max"]  = out.str[0]
+    df["stem_len_mean"] = out.str[1]
+    df["stem_len_min"]  = out.str[2]
+    return df
+
+def add_hairpin_count(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    df["hairpin_count"] = df["structure"].apply(
+        lambda s: len(_hairpin_loop_sizes(s, _pairs_from_dotbracket(s))) if isinstance(s, str) else None
+    )
+    return df
+
+def add_hairpin_size_stats(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    def f(s):
+        if not isinstance(s, str):
+            return (None, None, None)
+        sizes = _hairpin_loop_sizes(s, _pairs_from_dotbracket(s))
+        if not sizes:
+            return (0, None, None)
+        return (sum(sizes)/len(sizes), min(sizes), max(sizes))
+    out = df["structure"].apply(f)
+    df["hairpin_size_mean"] = out.apply(lambda t: t[0])
+    df["hairpin_size_min"]  = out.apply(lambda t: t[1])
+    df["hairpin_size_max"]  = out.apply(lambda t: t[2])
+    return df
+
+def add_external_unpaired_density(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    def f(s):
+        if not isinstance(s, str) or len(s) == 0:
+            return None
+        ext = _external_unpaired_count(s)
+        return ext / len(s)
+    df["external_unpaired_density"] = df["structure"].apply(f)
+    return df
+
+def add_pair_span_stats(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    def f(s):
+        if not isinstance(s, str):
+            return (None, None, None)
+        spans = _pair_spans(_pairs_from_dotbracket(s))
+        if not spans:
+            return (0, None, None)
+        return (sum(spans)/len(spans), min(spans), max(spans))
+    out = df["structure"].apply(f)
+    df["pair_span_mean"] = out.apply(lambda t: t[0])  # average distance between paired bases
+    df["pair_span_min"]  = out.apply(lambda t: t[1])
+    df["pair_span_max"]  = out.apply(lambda t: t[2])
+    return df
+
+def add_free_end_lengths(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    def f(s):
+        if not isinstance(s, str) or len(s) == 0:
+            return (None, None)
+        # 5' free tail = leading dots before first '(' or ')'
+        left = 0
+        for ch in s:
+            if ch == ".":
+                left += 1
+            else:
+                break
+        # 3' free tail = trailing dots after last '(' or ')'
+        right = 0
+        for ch in reversed(s):
+            if ch == ".":
+                right += 1
+            else:
+                break
+        return (left, right)
+    out = df["structure"].apply(f)
+    df["free_5prime_len"] = out.apply(lambda t: t[0])
+    df["free_3prime_len"] = out.apply(lambda t: t[1])
+    return df
+
+def add_branch_point_count(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+
+    '''
+    # proxy for multiloops: count positions where a run of '(' ends and immediately
+    # later another '(' appears after at least one dot inside the same enclosure.
+    # Not a perfect multiloop detector, but useful as a "branchiness" index.
+    import re
+    pattern = re.compile(r"\((?:[^()]*\([^()]*\))+[^()]*\)")
+    def f(s):
+        if not isinstance(s, str):
+            return None
+        # count non-overlapping complex enclosures with >=2 internal stems
+        return len(pattern.findall(s))
+    df["branch_point_count"] = df["structure"].apply(f)
+    return df
+
+### debug ###
+
+# 1) Validation that throws detailed errors
+def _validate_dotbracket_or_raise(val, row_idx, col="structure"):
+    if not isinstance(val, str):
+        raise TypeError(
+            f"[{col}] row {row_idx}: expected str, got {type(val).__name__} — value={repr(val)}"
+        )
+    if len(val) == 0:
+        raise ValueError(f"[{col}] row {row_idx}: empty string")
+    bad = set(val) - set(".()")
+    if bad:
+        raise ValueError(
+            f"[{col}] row {row_idx}: invalid characters {sorted(bad)} — value={repr(val)}"
+        )
+
+# 2) A debug wrapper that iterates row-by-row and reports the *first* failing row clearly
+def add_stem_length_stats_DEBUG(df: pd.DataFrame, col: str = "structure") -> pd.DataFrame:
+    stem_len_max, stem_len_mean, stem_len_min = [], [], []
+
+    # sanity: confirm we’re using the builtin sum
+    assert builtins.sum is sum, "sum() has been shadowed; rename your variable 'sum' elsewhere."
+
+    # sanity: show which _stems_from_pairs is in scope (file + line)
+    try:
+        _src_file = inspect.getsourcefile(_stems_from_pairs)
+        _src_line = inspect.getsourcelines(_stems_from_pairs)[1]
+        print(f"[DEBUG] Using _stems_from_pairs from {_src_file}:{_src_line}")
+    except Exception:
+        pass
+
+    for idx, s in df[col].items():
+        try:
+            # strict validate: only strings with .()
+            if not isinstance(s, str):
+                raise TypeError(f"[{col}] row {idx}: expected str, got {type(s).__name__} value={repr(s)[:120]}")
+
+            bad = set(s) - set(".()")
+            if bad:
+                raise ValueError(f"[{col}] row {idx}: invalid chars {sorted(bad)} value={repr(s)[:120]}")
+
+            pairs = _pairs_from_dotbracket(s)
+            stems = _stems_from_pairs(pairs)
+
+            # <-- NEW: prove element types inside stems
+            elem_types = [type(x).__name__ for x in stems]
+            if any(not isinstance(x, (int, float)) for x in stems):
+                # show first few problematic elements verbosely
+                offenders = [(i, type(x).__name__, repr(x)[:120]) for i, x in enumerate(stems) if not isinstance(x, (int, float))][:10]
+                raise TypeError(
+                    f"[stems] row {idx}: expected flat list of ints, got element types={elem_types[:20]} "
+                    f"offenders(sample)={offenders}"
+                )
+
+            if not stems:
+                stem_len_max.append(0)
+                stem_len_mean.append(0.0)
+                stem_len_min.append(0)
+                continue
+
+            # original risky line (now safe if we passed the check above)
+            stem_len_max.append(max(stems))
+            stem_len_mean.append(sum(stems) / len(stems))
+            stem_len_min.append(min(stems))
+
+        except Exception as e:
+            tb = traceback.format_exc()
+            raise RuntimeError(
+                f"add_stem_length_stats failed at row {idx} in column '{col}'.\n"
+                f"structure preview: {repr(s)[:200]}{'... (truncated)' if isinstance(s, str) and len(s) > 200 else ''}\n"
+                f"Error: {type(e).__name__}: {e}\n"
+                f"Traceback (most recent call last):\n{tb}"
+            ) from e
+
+    out = df.copy()
+    out["stem_len_max"]  = stem_len_max
+    out["stem_len_mean"] = stem_len_mean
+    out["stem_len_min"]  = stem_len_min
+    return out
+
+# 3) A bulk checker you can run *before* the computation to collect ALL issues
+def audit_structure_column(df: pd.DataFrame, col: str = "structure") -> pd.DataFrame:
+    """
+    Returns a dataframe of all rows that don't look like valid dot-bracket strings.
+    Useful if you want the full list instead of failing at the first error.
+    """
+    problems = []
+    for idx, s in df[col].items():
+        try:
+            _validate_dotbracket_or_raise(s, idx, col=col)
+        except Exception as e:
+            problems.append({
+                "row_index": idx,
+                "value_type": type(s).__name__,
+                "structure_value": repr(s),
+                "reason": f"{type(e).__name__}: {e}",
+            })
+    return pd.DataFrame(problems)
+
+# 4) Optional: a *very* strict version of your original function that preserves pandas-apply,
+#    but wraps the call and includes the index in the error.
+def add_stem_length_stats_STRICT(df: pd.DataFrame, col: str = "structure") -> pd.DataFrame:
+    def f(idx, s):
+        _validate_dotbracket_or_raise(s, idx, col=col)
+        stems = _stems_from_pairs(_pairs_from_dotbracket(s))
+        if not stems:
+            return (0, 0.0, 0)
+        return (max(stems), sum(stems)/len(stems), min(stems))
+
+    # Wrap to inject index into exceptions
+    def wrapper(t):
+        idx, s = t
+        try:
+            return f(idx, s)
+        except Exception as e:
+            preview = repr(s)
+            raise RuntimeError(
+                f"add_stem_length_stats_STRICT failed at row {idx} ({col}={preview}): {e}"
+            ) from e
+
+    out = pd.Series(list(map(wrapper, df[col].items())), index=df.index)
+    df = df.copy()
+    df["stem_len_max"]  = out.str[0]
+    df["stem_len_mean"] = out.str[1]
+    df["stem_len_min"]  = out.str[2]
+    return df
+
+### adv hybrid features ###
+
+def _pairs_from_dotbracket(s: str):
+    """
+    Return list of base-pair tuples (i, j), 0-based, i<j.
+    """
+    if not isinstance(s, str):
+        return []
+    stack, pairs = [], []
+    for i, ch in enumerate(s):
+        if ch == "(":
+            stack.append(i)
+        elif ch == ")":
+            if stack:
+                j = stack.pop()
+                pairs.append((j, i))
+    pairs.sort()
+    return pairs
+
+def _stems_from_pairs(pairs):
+    """
+    Group consecutive stacked pairs into stems; return list of lists of pairs.
+    """
+    if not pairs:
+        return []
+    stems = [[pairs[0]]]
+    for (i1, j1), (i2, j2) in zip(pairs, pairs[1:]):
+        if i2 == i1 + 1 and j2 == j1 - 1:
+            stems[-1].append((i2, j2))
+        else:
+            stems.append([(i2, j2)])
+    return stems
+
+def _hairpin_loop_indices(structure: str, pairs):
+    """
+    Return list of index-lists for hairpin loops (unpaired indices between i and j when no inner pairs).
+    """
+    loops = []
+    for i, j in pairs:
+        inner = structure[i+1:j]
+        if inner and ("(" not in inner and ")" not in inner):
+            loops.append(list(range(i+1, j)))
+    return loops
+
+def _inside_any_pair_mask(n, pairs):
+    """Mask of indices that lie inside at least one (i,j) inclusive interval."""
+    mask = [False]*n
+    for i, j in pairs:
+        for k in range(i, j+1):
+            mask[k] = True
+    return mask
+
+def _category_masks(structure: str):
+    """
+    Return dict of boolean masks (lists) over indices:
+    paired, unpaired, external_unpaired, hairpin_unpaired, internal_unpaired
+    """
+    n = len(structure)
+    pairs = _pairs_from_dotbracket(structure)
+    paired = [False]*n
+    for i, j in pairs:
+        paired[i] = True
+        paired[j] = True
+    unpaired = [not p for p in paired]
+
+    inside_mask = _inside_any_pair_mask(n, pairs)
+    hairpin_sets = [set(idx_list) for idx_list in _hairpin_loop_indices(structure, pairs)]
+    hairpin_unpaired = [False]*n
+    for S in hairpin_sets:
+        for k in S:
+            hairpin_unpaired[k] = True
+
+    internal_unpaired = [unpaired[k] and inside_mask[k] and not hairpin_unpaired[k] for k in range(n)]
+    external_unpaired = [unpaired[k] and not inside_mask[k] for k in range(n)]
+
+    return dict(
+        paired=paired,
+        unpaired=unpaired,
+        external_unpaired=external_unpaired,
+        hairpin_unpaired=hairpin_unpaired,
+        internal_unpaired=internal_unpaired,
+        pairs=pairs
+    )
+
+def _safe_upper(s):
+    return s.upper() if isinstance(s, str) else s
+
+def add_gc_overall(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Add overall GC fraction of dvg_sequence (GC / length), NaN-safe.
+    '''
+    def f(seq):
+        if not isinstance(seq, str) or len(seq) == 0:
+            return None
+        seq = _safe_upper(seq)
+        gc = seq.count("G") + seq.count("C")
+        return gc / len(seq)
+    df["GC_overall"] = df["dvg_sequence"].apply(f)
+    return df
+
+def add_gc_paired_unpaired(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Add GC fraction among paired bases and among unpaired bases (from dot-bracket).
+    '''
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
+            return (None, None)
+        masks = _category_masks(struct)
+        paired_idx   = [i for i, b in enumerate(masks["paired"]) if b]
+        unpaired_idx = [i for i, b in enumerate(masks["unpaired"]) if b]
+
+        def content_gc(idxs):
+            if not idxs:
+                return None
+            s = sum(1 for i in idxs if seq[i] in ("G","C"))
+            return s / len(idxs)
+
+        return (content_gc(paired_idx), content_gc(unpaired_idx))
+    out = df.apply(f, axis=1)
+    df["GC_paired"]   = out.apply(lambda t: t[0])
+    df["GC_unpaired"] = out.apply(lambda t: t[1])
+    return df
+
+def add_canonical_pair_stats(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Count and fraction of canonical pairs: GC, AU, GU, and noncanonical among all pairs.
+    '''
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
+            return (0, 0, 0, 0, None, None, None, None)
+        pairs = _pairs_from_dotbracket(struct)
+        c_gc = c_au = c_gu = c_non = 0
+        for i, j in pairs:
+            a, b = seq[i], seq[j]
+            pair = a + b
+            if pair in ("GC","CG"):
+                c_gc += 1
+            elif pair in ("AU","UA"):
+                c_au += 1
+            elif pair in ("GU","UG"):
+                c_gu += 1
+            else:
+                c_non += 1
+        tot = len(pairs)
+        if tot == 0:
+            return (0,0,0,0, None, None, None, None)
+        return (c_gc, c_au, c_gu, c_non, c_gc/tot, c_au/tot, c_gu/tot, c_non/tot)
+    out = df.apply(f, axis=1)
+    df["pair_GC_count"] = out.apply(lambda t: t[0])
+    df["pair_AU_count"] = out.apply(lambda t: t[1])
+    df["pair_GU_count"] = out.apply(lambda t: t[2])
+    df["pair_noncanon_count"] = out.apply(lambda t: t[3])
+    df["pair_GC_content"] = out.apply(lambda t: t[4])
+    df["pair_AU_content"] = out.apply(lambda t: t[5])
+    df["pair_GU_content"] = out.apply(lambda t: t[6])
+    df["pair_noncanon_content"] = out.apply(lambda t: t[7])
+    return df
+
+def add_stem_end_pair_enrichment(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    For each stem, look at both terminal base pairs and report the fraction that are GC/AU/GU.
+    '''
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
+            return (None, None, None)
+        stems = _stems_from_pairs(_pairs_from_dotbracket(struct))
+        end_pairs = []
+        for stem in stems:
+            if not stem:
+                continue
+            end_pairs.append(stem[0])
+            if len(stem) > 1:
+                end_pairs.append(stem[-1])
+        if not end_pairs:
+            return (None, None, None)
+        gc = au = gu = 0
+        for i, j in end_pairs:
+            pair = seq[i] + seq[j]
+            if pair in ("GC","CG"): gc += 1
+            elif pair in ("AU","UA"): au += 1
+            elif pair in ("GU","UG"): gu += 1
+        tot = len(end_pairs)
+        return (gc/tot, au/tot, gu/tot)
+    out = df.apply(f, axis=1)
+    df["stem_end_GC_content"] = out.apply(lambda t: t[0])
+    df["stem_end_AU_content"] = out.apply(lambda t: t[1])
+    df["stem_end_GU_content"] = out.apply(lambda t: t[2])
+    return df
+
+def add_hairpin_closing_pair_content(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Among hairpin loops, what fraction are closed by GC/AU/GU/noncanonical?
+    '''
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
+            return (None, None, None, None)
+        pairs = _pairs_from_dotbracket(struct)
+        hp_pairs = []
+        for i, j in pairs:
+            inner = struct[i+1:j]
+            if inner and ("(" not in inner and ")" not in inner):
+                hp_pairs.append((i, j))
+        if not hp_pairs:
+            return (None, None, None, None)
+        c_gc = c_au = c_gu = c_non = 0
+        for i, j in hp_pairs:
+            pair = seq[i] + seq[j]
+            if pair in ("GC","CG"): c_gc += 1
+            elif pair in ("AU","UA"): c_au += 1
+            elif pair in ("GU","UG"): c_gu += 1
+            else: c_non += 1
+        tot = len(hp_pairs)
+        return (c_gc/tot, c_au/tot, c_gu/tot, c_non/tot)
+    out = df.apply(f, axis=1)
+    df["hairpin_close_GC_content"]  = out.apply(lambda t: t[0])
+    df["hairpin_close_AU_content"]  = out.apply(lambda t: t[1])
+    df["hairpin_close_GU_content"]  = out.apply(lambda t: t[2])
+    df["hairpin_close_noncanon_content"] = out.apply(lambda t: t[3])
+    return df
+
+def add_tetraloop_motif_counts(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Count classic stable tetraloops in hairpins: GNRA, UNCG, CUUG (case-insensitive).
+    '''
+    # GNRA = G N R A (R = A/G)
+    gnra = re.compile(r"^G[ACGU][AG]A$", re.IGNORECASE)
+    uncg = re.compile(r"^U[ACGU]CG$", re.IGNORECASE)
+    cuug = re.compile(r"^CUUG$", re.IGNORECASE)
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
+            return (0, 0, 0)
+        pairs = _pairs_from_dotbracket(struct)
+        loops = _hairpin_loop_indices(struct, pairs)
+        c_gnra = c_uncg = c_cuug = 0
+        for idxs in loops:
+            loop_seq = "".join(seq[i] for i in idxs)
+            if len(loop_seq) == 4:
+                if gnra.match(loop_seq): c_gnra += 1
+                if uncg.match(loop_seq): c_uncg += 1
+                if cuug.match(loop_seq): c_cuug += 1
+        return (c_gnra, c_uncg, c_cuug)
+    out = df.apply(f, axis=1)
+    df["motif_GNRA_count"] = out.apply(lambda t: t[0])
+    df["motif_UNCG_count"] = out.apply(lambda t: t[1])
+    df["motif_CUUG_count"] = out.apply(lambda t: t[2])
+    return df
+
+def add_loop_au_content(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    AU fraction in (a) all unpaired, (b) hairpin loops, (c) internal/multi/bulge, (d) external.
+    '''
+    def content_au(seq, idxs):
+        if not idxs:
+            return None
+        n = len(idxs)
+        au = sum(1 for i in idxs if seq[i] in ("A","U"))
+        return au / n
+
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
+            return (None, None, None, None)
+        masks = _category_masks(struct)
+        all_unp = [i for i,b in enumerate(masks["unpaired"]) if b]
+        hairpin  = [i for i,b in enumerate(masks["hairpin_unpaired"]) if b]
+        internal = [i for i,b in enumerate(masks["internal_unpaired"]) if b]
+        external = [i for i,b in enumerate(masks["external_unpaired"]) if b]
+        return (
+            content_au(seq, all_unp),
+            content_au(seq, hairpin),
+            content_au(seq, internal),
+            content_au(seq, external),
+        )
+    out = df.apply(f, axis=1)
+    df["AU_unpaired_content"] = out.apply(lambda t: t[0])
+    df["AU_hairpin_content"]  = out.apply(lambda t: t[1])
+    df["AU_internal_content"] = out.apply(lambda t: t[2])
+    df["AU_external_content"] = out.apply(lambda t: t[3])
+    return df
+
+def add_tail_gc_content(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    GC fraction in 5' and 3' single-stranded tails (leading/trailing dots).
+    '''
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
+            return (None, None)
+        # 5' tail
+        left = 0
+        for ch in struct:
+            if ch == ".": left += 1
+            else: break
+        # 3' tail
+        right = 0
+        for ch in reversed(struct):
+            if ch == ".": right += 1
+            else: break
+        def gc_content(subseq):
+            if len(subseq) == 0: return None
+            return (subseq.count("G")+subseq.count("C"))/len(subseq)
+        return (gc_content(seq[:left]), gc_content(seq[len(seq)-right:]))
+    out = df.apply(f, axis=1)
+    df["GC_5prime_tail"] = out.apply(lambda t: t[0])
+    df["GC_3prime_tail"] = out.apply(lambda t: t[1])
+    return df
+
+# TODO #
+def add_exposed_kmer_counts(df: pd.DataFrame, k: int = 3) -> pd.DataFrame:
+    '''
+    Count k-mers (k=3 by default) that occur entirely in unpaired regions (accessibility proxy).
+    Adds a dict per row mapping k-mer -> count.
+    '''
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct) or len(seq) < k:
+            return None
+        masks = _category_masks(struct)
+        unp = masks["unpaired"]
+        hits = {}
+        for i in range(len(seq)-k+1):
+            if all(unp[i:i+k]):
+                km = seq[i:i+k]
+                hits[km] = hits.get(km, 0) + 1
+        return hits
+    col = f"exposed_{k}mer_counts"
+    df[col] = df.apply(f, axis=1)
+    return df
+
+def add_start_codon_accessibility(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    If dvg_sequence contains AUG, report (aug_total, aug_unpaired, aug_unpaired_content) based on structure.
+    '''
+    def f(row):
+        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct) or len(seq) < 3:
+            return (0, 0, None)
+        masks = _category_masks(struct)
+        unp = masks["unpaired"]
+        idxs = [m.start() for m in re.finditer(r"(?=AUG)", seq)]
+        if not idxs:
+            return (0, 0, None)
+        unp_count = sum(1 for i in idxs if all(unp[i:i+3]))
+        return (len(idxs), unp_count, unp_count/len(idxs))
+    out = df.apply(f, axis=1)
+    df["AUG_total"] = out.apply(lambda t: t[0])
+    df["AUG_unpaired"] = out.apply(lambda t: t[1])
+    df["AUG_unpaired_content"] = out.apply(lambda t: t[2])
     return df
 
 ### statistics ###
 
-def mannwhitneyu_by_threshold(
-    df,
+def p_to_stars(p: float) -> str:
+    """
+
+    """
+    if p < 0.001:
+        return "***"
+    elif p < 0.01:
+        return "**"
+    elif p < 0.05:
+        return "*"
+    else:
+        return "ns"
+
+def mannwhitneyu_for_feature(
+    true_df: pd.DataFrame,
+    false_df: pd.DataFrame,
     feature_name: str,
-    threshold_feature: str,
-    threshold: int,
     alternative: str = "two-sided",
     ):
     '''
 
     '''
-    if threshold_feature not in df.columns:
-        raise KeyError(f"'{threshold_feature}' not found in DataFrame.")
-    if feature_name not in df.columns:
-        raise KeyError(f"'{feature_name}' not found in DataFrame.")
 
-    high_mask = df[threshold_feature] >= threshold
-    low_mask  = df[threshold_feature] < threshold
-    x_high = df.loc[high_mask, feature_name].to_numpy()
-    y_low  = df.loc[low_mask,  feature_name].to_numpy()
+    x_high = true_df[feature_name].to_numpy()
+    y_low  = false_df[feature_name].to_numpy()
 
     n_high, n_low = len(x_high), len(y_low)
     if n_high == 0 or n_low == 0:
@@ -1842,8 +2924,6 @@ def mannwhitneyu_by_threshold(
 
     return {
         "feature_name": feature_name,
-        "threshold_feature": threshold_feature,
-        "threshold": float(threshold),
         "U": U,
         "pvalue": p,
         "n_high": n_high,
@@ -1856,6 +2936,23 @@ def mannwhitneyu_by_threshold(
 ###############
 ### visuals ###
 ###############
+
+### color ###
+
+def pick_colors(colors: list, n_needed: int, templates: dict=COLOR_TEMPLATES):
+    """
+
+    """
+    n_colors = len(colors)
+    
+    if n_needed >= n_colors:
+        return [colors[i % n_colors] for i in range(n_needed)]
+    
+    if templates and n_needed in templates:
+        return [colors[i] for i in templates[n_needed]]
+    
+    step = n_colors / n_needed
+    return [colors[int(i * step)] for i in range(n_needed)]
 
 ### general ###
 
@@ -2208,14 +3305,14 @@ def insert_pseudo_motif(
 
 ### direct repeats ###
 
-def cap_direct_repeat_len(df: pd.DataFrame, cap: int = 5):
+def cap_direct_repeat_length(df: pd.DataFrame, cap: int = 5):
     for index, row in df.iterrows():
         direct_repeat_length = row["direct_repeat_length"]
         if direct_repeat_length > cap:
             df.loc[index, "direct_repeat_length"] = cap
     return df
 
-def add_direct_repeat_len(df: pd.DataFrame):
+def add_direct_repeat_length(df: pd.DataFrame):
     for index, row in df.iterrows():
         seq = row["full_seq"]
         start = row["Start"]

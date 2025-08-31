@@ -11,7 +11,7 @@ from utils import manage_specifiers, load_all_preprocessed, merge_missing_featur
 from utils import balance_by_threshold
 
 from utils import RESULTSPATH, SEED, DATASET_STRAIN_DICT
-from utils import COLORS
+from utils import COLORS, DECIMALS
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
@@ -31,11 +31,12 @@ import shap
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, "networks")
 
-VERSION = 0
+VERSION = 2
 KMER_SIZE = 3
 THRESHOLD = 0.5
 
-SHAP_CAT = True
+MARKED = 0
+SHAP_CAT = 1
 
 ###########
 ### CNN ###
@@ -59,6 +60,13 @@ fname = f'motif_length_{motif_length}'
 read_path = os.path.join(RESULTSPATH, folder, subfolder, data, strain, segment, intersects)
 df = pd.read_csv(os.path.join(read_path, f'{fname}.csv'), keep_default_na=False, na_values=[])
 
+if MARKED:
+    key_sequence = "marked_dvg_sequence"
+    key_structure = "marked_structure"
+else:
+    key_sequence = "dvg_sequence"
+    key_structure = "structure"
+
 ### otional ###
 # df = balance_by_threshold(df, 'norm_log_NGS_read_count', THRESHOLD)
 
@@ -75,7 +83,7 @@ def kmer_tokenize(seq, k):
     return [seq[i:i + k] for i in range(len(seq) - k + 1) if 'X' not in seq[i:i + k]]
 
 vocab = set()
-df["kmer_seq"] = df["marked_dvg_sequence"].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+df["kmer_seq"] = df[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
 df["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
 vocab = sorted(vocab)
 token2idx = {k: i + 1 for i, k in enumerate(vocab)}
@@ -90,7 +98,7 @@ X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=
 
 ### sec structure ###
 vocab2 = set()
-df["kmer_str"] = df['marked_structure'].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
 df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
 vocab2 = sorted(vocab2)
 token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
@@ -105,10 +113,11 @@ X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=
 ### categorical features ###
 categorical_cols = []
 
-categorical_cols += ["Segment", "Strain"]
-categorical_cols += ['system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype']
+# categorical_cols += ["Segment", "Strain"]
+categorical_cols += ['system_type', 'library_layout', 'library_selection', 'library_source', 'subtype']
 categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
+# categorical_cols += ["full_symmetry"]
 # categorical_cols += [col for col in df.columns if re.search(r"motif\d+", col)]
 # categorical_cols += ["structure_site1_motif", "structure_site2_motif", "structure_site3_motif", "structure_site4_motif"]
 
@@ -125,10 +134,42 @@ X_cat = encoder.fit_transform(df[categorical_cols])
 ### numerical features ###
 numerical_cols = []
 
-numerical_cols += ["dvg_length", "deletion_length", "5_end_length", "3_end_length", "cg_content"]
-numerical_cols += ["MFE", "loop_count", "max_loop"]
+# numerical_cols += ["Start", "End"]
+# numerical_cols += ["full_seq_length"]
+# numerical_cols += ["dvg_length"]
+numerical_cols += ["deletion_length"]
+numerical_cols += ["5_end_length", "3_end_length"]
 
+numerical_cols += ["GC_content", "AU_content"]
+# numerical_cols += ["UpA_content", "CpG_content"]
+# numerical_cols += ["GC_skew", "sequence_entropy"]
+# numerical_cols += ["poly_U_max_run", "poly_U_tracts", "poly_A_max_run", "poly_A_tracts"]
+# numerical_cols += ["palindrome_density"]
+# numerical_cols += ["longest_ORF_len", "ORF_count"]
+# numerical_cols += ["kmer_richness", "codon_usage_entropy"]
+
+numerical_cols += ["direct_repeat_length"]
+
+# numerical_cols += ["MFE"]
+# numerical_cols += ["bp_count", "bp_density", "unpaired_count", "unpaired_density", "external_unpaired_density"]
+# numerical_cols += ["stem_count", "stem_len_max", "stem_len_mean", "stem_len_min"]
+# numerical_cols += ["hairpin_count", "hairpin_size_mean", "hairpin_size_min", "hairpin_size_max"]
+# numerical_cols += ["pair_span_mean", "pair_span_min", "pair_span_max"]
+# numerical_cols += ["free_5prime_len", "free_3prime_len"]
+# numerical_cols += ["branch_point_count"]
+# numerical_cols += ["max_symmetry"]
+
+### NOT recommended ###
 # numerical_cols += ["MFE_site1_motif", "MFE_site2_motif", "MFE_site3_motif", "MFE_site4_motif"]
+
+# numerical_cols += ["GC_overall", "GC_paired", "GC_unpaired"]
+# numerical_cols += ["pair_GC_count", "pair_AU_count", "pair_GU_count", "pair_noncanon_count", "pair_GC_content", "pair_AU_content", "pair_GU_content", "pair_noncanon_content"]
+# numerical_cols += ["stem_end_GC_content", "stem_end_AU_content", "stem_end_GU_content"]
+# numerical_cols += ["hairpin_close_GC_content", "hairpin_close_AU_content", "hairpin_close_GU_content", "hairpin_close_noncanon_content"]
+# numerical_cols += ["motif_GNRA_count", "motif_UNCG_count", "motif_CUUG_count"]
+# numerical_cols += ["AU_unpaired_content", "AU_hairpin_content", "AU_internal_content", "AU_external_content"]
+# numerical_cols += ["GC_5prime_tail", "GC_3prime_tail"]
+# numerical_cols += ["AUG_total", "AUG_unpaired", "AUG_unpaired_content"]
 
 scaler = StandardScaler()
 X_num = scaler.fit_transform(df[numerical_cols])
@@ -208,22 +249,23 @@ print("✔ preprocessing artifacts saved")
 ###############
 
 ### ROC & F1 ###
-plt.style.use("seaborn")
-plt.rc("font", size=12)
+plt.style.use('seaborn-darkgrid')
+plt.rc('font', size=12)
 
 model.load_weights(final_model_path)
 
 y_pred_proba = model.predict([X_seq_test, X_str_test, X_other_test]).ravel()
 fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
 auc_score = roc_auc_score(y_test, y_pred_proba)
+auc_score = round(auc_score, DECIMALS)
 
-roc_color = COLORS[4]
+roc_color = COLORS[8]
 
 y_pred_label = (y_pred_proba >= 0.5).astype(int)
 f1 = f1_score(y_test, y_pred_label)
-f1 = round(f1, 5)
+f1 = round(f1, DECIMALS)
 
-title_name = f'ROC curve plot (F1 = {f1})'
+title_name = f'ROC - curve plot (F1={f1})'
 title_name += f'\ndata: {data}'
 title_name += f', strain: {strain}'
 title_name += f', segment: {segment}'
@@ -232,7 +274,7 @@ dvg_count = df.shape[0]
 title_name += f' (n={dvg_count})'
 
 plt.figure()
-plt.plot(fpr, tpr, label=f"ROC curve (AUC = {auc_score:.5f})", linewidth=2, color=roc_color)
+plt.plot(fpr, tpr, label=f"ROC curve (AUC={auc_score})", linewidth=2, color=roc_color)
 plt.plot([0, 1], [0, 1], linestyle="--", linewidth=1.5, color="grey")
 plt.xlabel("false positive rate")
 plt.ylabel("true positive rate")
@@ -295,10 +337,9 @@ importance_df = (
       .head(20)
 )
 
-bar_color = COLORS[4]
-edge_color = COLORS[4]
+bar_color = COLORS[8]
 
-title_name = 'top 20 SHAP importances via RandomForest'
+title_name = 'top 20 SHAP importances via RandomForest - bar plot'
 title_name += f'\ndata: {data}'
 title_name += f', strain: {strain}'
 title_name += f', segment: {segment}'
@@ -307,9 +348,9 @@ dvg_count = df.shape[0]
 title_name += f' (n={dvg_count})'
 
 plt.figure(figsize=(10, 6))
-plt.barh(importance_df["feature"], importance_df["importance"], color=bar_color, edgecolor=edge_color, linewidth=1)
+plt.barh(importance_df["feature"], importance_df["importance"], color=bar_color, edgecolor='white', linewidth=1)
 plt.xlabel("mean |SHAP value|")
-plt.ylabel("numerical feature (-)")
+plt.ylabel("features")
 plt.title(title_name)
 plt.gca().invert_yaxis()
 plt.tight_layout()

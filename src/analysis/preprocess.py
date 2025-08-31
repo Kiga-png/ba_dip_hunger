@@ -100,6 +100,7 @@ def preprocess_pseudo_motif_features(motif_length: int, data: str = 'all', strai
 
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
+    dfs = add_metadata_features(dfnames, dfs)
     df = pd.concat(dfs, ignore_index=True)
 
     folder = 'combined'
@@ -118,6 +119,7 @@ def preprocess_pseudo_intersect_features(motif_length: int, data: str = 'all', s
 
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
+    dfs = add_metadata_features(dfnames, dfs)
     df = pd.concat(dfs, ignore_index=True)
 
     folder = 'combined'
@@ -297,29 +299,29 @@ if __name__ == '__main__':
 
     ### DATASETS SINGLE ###
 
-    folder = 'datasets'
-    subfolder = 'sec'
-
-    data = 'Alnaji2021'
-    strain = DATASET_STRAIN_DICT[data]
-    segment = 'all'
-    intersects = 'median'
-
-    dfnames = [data]
-    dfs = load_all_preprocessed(dfnames, folder, subfolder)
-    
-    ### DATASETS MULTI ###
-
     # folder = 'datasets'
     # subfolder = 'sec'
 
-    # data = 'IAV'
-    # strain = 'PR8'
-    # segment = 'PA'
+    # data = 'Alnaji2021'
+    # strain = DATASET_STRAIN_DICT[data]
+    # segment = 'all'
     # intersects = 'median'
 
-    # dfnames = get_dataset_names(cutoff=40, selection=data)
+    # dfnames = [data]
     # dfs = load_all_preprocessed(dfnames, folder, subfolder)
+    
+    ### DATASETS MULTI ###
+
+    folder = 'datasets'
+    subfolder = 'sec'
+
+    data = 'IAV'
+    strain = 'PR8'
+    segment = 'PB1'
+    intersects = 'median'
+
+    dfnames = get_dataset_names(cutoff=40, selection=data)
+    dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
     ###################
     ### run scripts ###
