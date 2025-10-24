@@ -10,10 +10,13 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as stats
+from typing import List, Tuple
 
 import traceback
 import inspect
 import builtins
+
+import random
 
 import RNA
 
@@ -37,6 +40,9 @@ SEED = 42
 RANK_THRESHOLD = 20
 DECIMALS = 2
 
+LOGARITHM = "log2"
+NORMALIZATION = "robust"
+
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
 
 # system type #
@@ -59,16 +65,15 @@ WGA_DATASETS = ['Penn2022']
 OTHER_DATASETS = ['Wang2023']
 POLYA_and_PCR_DATASETS = ['Kupke2020']
 PCR_and_CDNA_DATASETS = ['Lui2019']
-_DATASETS = ['Boussier2020']
+RT_PCR_and_CDNA_DATASETS = ['Boussier2020']
 
 # LibrarySource #
 VIRAL_RNA_DATASETS = ['VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Alnaji2019_Perth', 'Berry2021_A', 'Penn2022', 'Alnaji2019_BLEE', 'Berry2021_B', 'Valesano2020_Vic', 'Berry2021_B_Yam', 'Valesano2020_Yam']
 GENOMIC_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023']
-TRANSCRIPTOMIC_DATASETS = ['Wang2020', 'Zhuravlev2020', 'Mendes2021', 'Sheng2018']
+TRANSCRIPTOMIC_DATASETS = ['Wang2020', 'Zhuravlev2020', 'Mendes2021', 'Sheng2018', 'Boussier2020']
 OTHER_DATASETS = ['Southgate2019']
 TRANSCRIPTOMIC_SINGLE_CELL_and_VIRAL_RNA_DATASETS = ['Kupke2020']
 VIRAL_RNA_and_OTHER_DATASETS = ['Lui2019']
-_DATASETS = ['Boussier2020']
 
 # subtype #
 H1N1_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023', 'Wang2020', 'Zhuravlev2020', 'Kupke2020', 'VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Mendes2021', 'Boussier2020']
@@ -1331,6 +1336,31 @@ def get_dip_sequence(delvg_id: str, strain: str)-> Tuple[str, str, str]:
 ### NEW WORK ###
 ################
 
+STRAIN_SUBTYPE_DICT = dict({
+    # H1N1
+    "PR8": "H1N1",
+    "Cal07": "H1N1",
+    "NC": "H1N1",
+    "WSN_Mendes_rev": "H1N1",
+    "WSN": "H1N1",
+
+    # H3N2
+    "Perth": "H3N2",
+    "Connecticut": "H3N2",
+
+    # H5N1
+    "Turkey": "H5N1",
+
+    # H7N9
+    "Anhui": "H7N9",
+
+    # B
+    "BLEE": "B",
+    "Victoria": "B",
+    "Brisbane": "B",
+    "Yamagata": "B"
+})
+
 COLORS = [
      '#ff6666', # 0
      '#ff9160', # 1
@@ -1552,11 +1582,13 @@ def add_metadata_features(dfnames: list, dfs: list) -> list:
     '''
     
     '''
+    resultpath, _ = os.path.split(RESULTSPATH)
+
     fname = f'metadata.csv'
-    read_path = os.path.join(RESULTSPATH, 'metadata', fname)
+    read_path = os.path.join(resultpath, 'preprocess', 'metadata', fname)
     meta_df = pd.read_csv(read_path)
 
-    meta_features = ['names', 'system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype']
+    meta_features = ['system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype', 'cells', 'cellular localization', 'cellular resolution', 'time point', 'max time']
 
     updated_dfs = []
     for dfname, df in zip(dfnames, dfs):
@@ -1565,18 +1597,21 @@ def add_metadata_features(dfnames: list, dfs: list) -> list:
 
         for meta_feature in meta_features:
             value = meta_df.loc[meta_df['names'] == dfname, meta_feature].iloc[0]
-            value = 'unclassified' if isinstance(value, str) and value.strip() == '' else value
+            value = dfname if isinstance(value, str) and value.strip() == '' else value
             df[meta_feature] = value
 
         updated_dfs.append(df)
     
     renamed_dfs = []
     for df in updated_dfs:
-        df = rename_feature(df, 'names', 'dataset_name')
         df = rename_feature(df, 'system type', 'system_type')
         df = rename_feature(df, 'LibraryLayout', 'library_layout')
         df = rename_feature(df, 'LibrarySelection', 'library_selection')
         df = rename_feature(df, 'LibrarySource', 'library_source')
+        df = rename_feature(df, 'cellular localization', 'cellular_localization')
+        df = rename_feature(df, 'cellular resolution', 'cellular_resolution')
+        df = rename_feature(df, 'time point', 'time_point')
+        df = rename_feature(df, 'max time', 'max_time')
         renamed_dfs.append(df)
 
     return renamed_dfs
@@ -1749,7 +1784,38 @@ def split_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float):
     df_false = df[df[feature_name] < threshold]
     return df_true, df_false
 
+def split_by_number(df: pd.DataFrame, split_number: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+
+    """
+
+    if split_number < 0:
+        raise ValueError(f"`split_number` must be non-negative; got {split_number}.")
+    if split_number > len(df):
+        raise ValueError(f"`split_number` ({split_number}) cannot exceed df length ({len(df)}).")
+
+    if split_number == 0:
+        return df.iloc[0:0].copy(), df.copy()
+
+    tmp_col = "__tmp_row_id__"
+    while tmp_col in df.columns:
+        tmp_col += "_"
+
+    tmp = df.copy()
+    tmp[tmp_col] = range(len(tmp))
+
+    sampled_df = tmp.sample(n=split_number, replace=False, random_state=SEED)
+    remaining_df = tmp.loc[~tmp[tmp_col].isin(sampled_df[tmp_col])]
+
+    sampled_df = sampled_df.drop(columns=[tmp_col])
+    remaining_df = remaining_df.drop(columns=[tmp_col])
+
+    return sampled_df, remaining_df
+
 def add_feature_percentile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int = 20):
+    """
+
+    """
     df = df.copy()
     df[rank_name] = pd.qcut(
         df[feature_name],
@@ -1759,41 +1825,63 @@ def add_feature_percentile_rank(df: pd.DataFrame, feature_name: str, rank_name: 
     ) + 1
     return df
 
-def add_log_feature(df: pd.DataFrame, feature_name: str, new_name: str, log_type: str = "log10"):
+def add_log_feature(df: pd.DataFrame, feature_name: str, new_name: str, log_type: str=LOGARITHM):
     """
 
     """
     if log_type == "none":
         df[new_name] = df[feature_name]
     elif log_type == "log10":
-        df[new_name] = np.log10(df[feature_name])
+        df[new_name] = np.log10(df[feature_name] + 1)
     elif log_type == "log2":
-        df[new_name] = np.log2(df[feature_name])
+        df[new_name] = np.log2(df[feature_name] + 1)
     else:
         raise ValueError(f"invalid log_type '{log_type}'. choose from 'none', 'log10', 'log2'.")
     return df
 
-def add_norm_feature(df: pd.DataFrame, feature_name: str, new_name: str, norm_type: str = "minmax"):
+def add_norm_feature(df: pd.DataFrame, feature_name: str, new_name: str, norm_type: str=NORMALIZATION):
     """
 
     """
-    if norm_type == "minmax":
-        fmin = df[feature_name].min()
-        fmax = df[feature_name].max()
-        df[new_name] = (df[feature_name] - fmin) / (fmax - fmin) if fmax != fmin else 0.0
+    series = df[feature_name]
 
-    elif norm_type == "zscore":
-        mean = df[feature_name].mean()
-        std = df[feature_name].std()
-        df[new_name] = (df[feature_name] - mean) / std if std != 0 else 0.0
+    if norm_type == "min-max":
+        fmin, fmax = series.min(), series.max()
+        df[new_name] = (series - fmin) / (fmax - fmin) if fmax != fmin else 0.0
+
+    elif norm_type == "z-score":
+        mean, std = series.mean(), series.std()
+        df[new_name] = (series - mean) / std if std != 0 else 0.0
+
+    elif norm_type == "robust":
+        median, q1, q3 = series.median(), series.quantile(0.25), series.quantile(0.75)
+        iqr = q3 - q1
+        df[new_name] = (series - median) / iqr if iqr != 0 else 0.0
+
+    elif norm_type == "euclidean":
+        l2_norm = np.sqrt((series ** 2).sum())
+        df[new_name] = series / l2_norm if l2_norm != 0 else 0.0
 
     elif norm_type == "none":
-        df[new_name] = df[feature_name]
+        df[new_name] = seriesfd
 
     else:
-        raise ValueError(f"invalid norm_type '{norm_type}'. choose from 'minmax', 'zscore', 'none'.")
+        raise ValueError(f"invalid norm_type '{norm_type}'. "
+                         "choose from 'min-max', 'z-score', 'robust', 'euclidean','none'.")
     
     return df
+
+def get_feature_modification_name(log_type: str=LOGARITHM, norm_type: str=NORMALIZATION):
+    """
+
+    """
+    if log_type != "none" and norm_type != "none":
+        return f"{norm_type}-normalized {log_type}-transformed"
+    if norm_type != "none":
+        return f"{norm_type}-normalized"
+    if log_type != "none":
+        return f"{log_type}-transformed"
+    return ""
 
 def add_separate_ngs_features(dfs: list, separated: bool):
     '''
@@ -2401,133 +2489,6 @@ def add_branch_point_count(df: pd.DataFrame) -> pd.DataFrame:
     df["branch_point_count"] = df["structure"].apply(f)
     return df
 
-### debug ###
-
-# 1) Validation that throws detailed errors
-def _validate_dotbracket_or_raise(val, row_idx, col="structure"):
-    if not isinstance(val, str):
-        raise TypeError(
-            f"[{col}] row {row_idx}: expected str, got {type(val).__name__} — value={repr(val)}"
-        )
-    if len(val) == 0:
-        raise ValueError(f"[{col}] row {row_idx}: empty string")
-    bad = set(val) - set(".()")
-    if bad:
-        raise ValueError(
-            f"[{col}] row {row_idx}: invalid characters {sorted(bad)} — value={repr(val)}"
-        )
-
-# 2) A debug wrapper that iterates row-by-row and reports the *first* failing row clearly
-def add_stem_length_stats_DEBUG(df: pd.DataFrame, col: str = "structure") -> pd.DataFrame:
-    stem_len_max, stem_len_mean, stem_len_min = [], [], []
-
-    # sanity: confirm we’re using the builtin sum
-    assert builtins.sum is sum, "sum() has been shadowed; rename your variable 'sum' elsewhere."
-
-    # sanity: show which _stems_from_pairs is in scope (file + line)
-    try:
-        _src_file = inspect.getsourcefile(_stems_from_pairs)
-        _src_line = inspect.getsourcelines(_stems_from_pairs)[1]
-        print(f"[DEBUG] Using _stems_from_pairs from {_src_file}:{_src_line}")
-    except Exception:
-        pass
-
-    for idx, s in df[col].items():
-        try:
-            # strict validate: only strings with .()
-            if not isinstance(s, str):
-                raise TypeError(f"[{col}] row {idx}: expected str, got {type(s).__name__} value={repr(s)[:120]}")
-
-            bad = set(s) - set(".()")
-            if bad:
-                raise ValueError(f"[{col}] row {idx}: invalid chars {sorted(bad)} value={repr(s)[:120]}")
-
-            pairs = _pairs_from_dotbracket(s)
-            stems = _stems_from_pairs(pairs)
-
-            # <-- NEW: prove element types inside stems
-            elem_types = [type(x).__name__ for x in stems]
-            if any(not isinstance(x, (int, float)) for x in stems):
-                # show first few problematic elements verbosely
-                offenders = [(i, type(x).__name__, repr(x)[:120]) for i, x in enumerate(stems) if not isinstance(x, (int, float))][:10]
-                raise TypeError(
-                    f"[stems] row {idx}: expected flat list of ints, got element types={elem_types[:20]} "
-                    f"offenders(sample)={offenders}"
-                )
-
-            if not stems:
-                stem_len_max.append(0)
-                stem_len_mean.append(0.0)
-                stem_len_min.append(0)
-                continue
-
-            # original risky line (now safe if we passed the check above)
-            stem_len_max.append(max(stems))
-            stem_len_mean.append(sum(stems) / len(stems))
-            stem_len_min.append(min(stems))
-
-        except Exception as e:
-            tb = traceback.format_exc()
-            raise RuntimeError(
-                f"add_stem_length_stats failed at row {idx} in column '{col}'.\n"
-                f"structure preview: {repr(s)[:200]}{'... (truncated)' if isinstance(s, str) and len(s) > 200 else ''}\n"
-                f"Error: {type(e).__name__}: {e}\n"
-                f"Traceback (most recent call last):\n{tb}"
-            ) from e
-
-    out = df.copy()
-    out["stem_len_max"]  = stem_len_max
-    out["stem_len_mean"] = stem_len_mean
-    out["stem_len_min"]  = stem_len_min
-    return out
-
-# 3) A bulk checker you can run *before* the computation to collect ALL issues
-def audit_structure_column(df: pd.DataFrame, col: str = "structure") -> pd.DataFrame:
-    """
-    Returns a dataframe of all rows that don't look like valid dot-bracket strings.
-    Useful if you want the full list instead of failing at the first error.
-    """
-    problems = []
-    for idx, s in df[col].items():
-        try:
-            _validate_dotbracket_or_raise(s, idx, col=col)
-        except Exception as e:
-            problems.append({
-                "row_index": idx,
-                "value_type": type(s).__name__,
-                "structure_value": repr(s),
-                "reason": f"{type(e).__name__}: {e}",
-            })
-    return pd.DataFrame(problems)
-
-# 4) Optional: a *very* strict version of your original function that preserves pandas-apply,
-#    but wraps the call and includes the index in the error.
-def add_stem_length_stats_STRICT(df: pd.DataFrame, col: str = "structure") -> pd.DataFrame:
-    def f(idx, s):
-        _validate_dotbracket_or_raise(s, idx, col=col)
-        stems = _stems_from_pairs(_pairs_from_dotbracket(s))
-        if not stems:
-            return (0, 0.0, 0)
-        return (max(stems), sum(stems)/len(stems), min(stems))
-
-    # Wrap to inject index into exceptions
-    def wrapper(t):
-        idx, s = t
-        try:
-            return f(idx, s)
-        except Exception as e:
-            preview = repr(s)
-            raise RuntimeError(
-                f"add_stem_length_stats_STRICT failed at row {idx} ({col}={preview}): {e}"
-            ) from e
-
-    out = pd.Series(list(map(wrapper, df[col].items())), index=df.index)
-    df = df.copy()
-    df["stem_len_max"]  = out.str[0]
-    df["stem_len_mean"] = out.str[1]
-    df["stem_len_min"]  = out.str[2]
-    return df
-
 ### adv hybrid features ###
 
 def _pairs_from_dotbracket(s: str):
@@ -2932,6 +2893,176 @@ def mannwhitneyu_for_feature(
         "median_low": float(np.median(y_low)),
         "cliffs_delta": float(cliffs_delta),
     }
+
+### prediction ###
+
+def _normal_int(mu: float, sigma: float) -> int:
+    """
+    Sample ~ N(mu, sigma), rounded to int, no clamping.
+    """
+    return int(round(random.gauss(mu, sigma)))
+
+def generate_candidates(
+    candidates_number: int,
+    strain: str,
+    segment: str,
+    full_seq_len: int,
+    ) -> List[Tuple[str, str, int, int, str, str, str, str]]:
+    """
+
+    """
+    # Ensure global SEED is available and reproducibility uses it
+    try:
+        _ = SEED  # noqa: F821
+    except NameError as e:
+        raise NameError("global SEED must be defined before calling generate_candidates.") from e
+    random.seed(SEED)
+
+    if full_seq_len < 2:
+        raise ValueError("full_seq_len must be at least 2.")
+    if candidates_number < 0:
+        raise ValueError("candidates_number must be non-negative.")
+
+    # Metadata options
+    system_types = ["in vitro", "in vivo mouse", "in human"]
+    library_layout = ["PAIRED", "SINGLE", "SINGLE & PAIRED"]
+    library_selection = ["PCR", "RT-PCR", "cDNA", "PolyA", "WGA",
+                         "PCR & cDNA", "RT-PCR & cDNA", "PolyA & PCR", "other"]
+    library_source = ["GENOMIC", "TRANSCRIPTOMIC", "VIRAL RNA",
+                      "TRANSCRIPTOMIC SINGLE CELL & VIRAL RNA", "OTHER", "VIRAL RNA & OTHER"]
+
+    # Pre-cycle each metadata feature to length candidates_number
+    metadata_features = [system_types, library_layout, library_selection, library_source]
+    cycle_metadata_features: List[List[str]] = []
+    for meta in metadata_features:
+        cycle_metadata_features.append([meta[i % len(meta)] for i in range(candidates_number)])
+
+    # Heuristics for spread around the target means (scale with full_seq_len)
+    start_mean = full_seq_len / 10.0
+    end_mean   = full_seq_len - (full_seq_len / 10.0)
+    # Standard deviations: gentle spread around the means
+    start_std = max(1.0, full_seq_len / 20.0)
+    end_std   = max(1.0, full_seq_len / 20.0)
+
+    results: List[Tuple[str, str, int, int, str, str, str, str]] = []
+
+    for i in range(candidates_number):
+        # START: bounded-normal via clamping
+        start_raw = _normal_int(start_mean, start_std)
+        start = max(1, min(max(1, full_seq_len - 1), start_raw))
+
+        # END: rejection on *unclamped* draws until > start, then clamp
+        max_resamples = 64
+        end = None
+        for _ in range(max_resamples):
+            e_raw = _normal_int(end_mean, end_std)
+            if e_raw > start:
+                # now clamp to sequence bounds
+                end = max(2, min(full_seq_len, e_raw))
+                # after clamping, end will still be > start because start <= full_seq_len - 1
+                break
+
+        if end is None:
+            # Extremely unlikely fallback: draw uniformly from feasible range
+            # (maintains end > start)
+            if start >= full_seq_len:
+                start = max(1, full_seq_len - 1)
+            end = random.randint(start + 1, full_seq_len)
+
+        results.append((
+            strain,
+            segment,
+            start,
+            end,
+            cycle_metadata_features[0][i],
+            cycle_metadata_features[1][i],
+            cycle_metadata_features[2][i],
+            cycle_metadata_features[3][i],
+        ))
+
+    return results
+
+def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
+    """
+    Build a DataFrame from candidate deletion specs.
+
+    Supports either:
+      (strain, seg, start, end)
+    or
+      (strain, seg, start, end, system_type, library_layout, library_selection, library_source)
+    """
+    records = []
+    for cand in candidates:
+        if len(cand) == 4:
+            strain, seg, start, end = cand
+            system_type = "other"
+            library_layout = "other"
+            library_selection = "other"
+            library_source = "other"
+        elif len(cand) == 8:
+            (strain, seg, start, end,
+             system_type, library_layout, library_selection, library_source) = cand
+        else:
+            raise ValueError(
+                "Each candidate must be a 4-tuple "
+                "(strain, seg, start, end) or an 8-tuple "
+                "(strain, seg, start, end, system_type, library_layout, library_selection, library_source)."
+            )
+
+        seq = get_sequence(strain, seg)
+
+        start_idx = start - 1
+        stop_idx = end
+
+        left = seq[:start_idx]
+        deleted = seq[start_idx:stop_idx]
+        right = seq[stop_idx:]
+
+        around = left[-isize*2:] + right[:isize*2]
+
+        key = f"{seg}_{start}_{end}"
+
+        records.append({
+            "Segment": seg,
+            "Start": start,
+            "End": end,
+            "NGS_read_count": 0,
+            "key": key,
+            "Strain": strain,
+            "system_type": system_type,
+            "library_layout": library_layout,
+            "library_selection": library_selection,
+            "library_source": library_source,
+            "isize": isize,
+            "full_seq": seq,
+            "deleted_sequence": deleted,
+            "seq_around_deletion_junction": around,
+        })
+
+    cols = [
+        "Segment", "Start", "End", "NGS_read_count", "key",
+        "Strain", "system_type", "library_layout", "library_selection", "library_source",
+        "isize", "full_seq", "deleted_sequence", "seq_around_deletion_junction"
+        ]
+    df = pd.DataFrame.from_records(records, columns=cols)
+    df = df.astype({
+        "Segment": "string",
+        "Start": "int64",
+        "End": "int64",
+        "NGS_read_count": "int64",
+        "key": "string",
+        "Strain": "string",
+        "system_type": "string",
+        "library_layout": "string",
+        "library_selection": "string",
+        "library_source": "string",
+        "isize": "int64",
+        "full_seq": "string",
+        "deleted_sequence": "string",
+        "seq_around_deletion_junction": "string",
+    })
+
+    return df
 
 ###############
 ### visuals ###

@@ -21,7 +21,7 @@ import RNA
 sys.path.insert(0, "..")
 from utils import get_dataset_names, load_all
 from utils import manage_separate_specifiers, load_all_preprocessed, clean_data_string
-from utils import rename_feature, split_by_threshold, add_feature_percentile_rank, add_log_feature, add_norm_feature, add_separate_ngs_features
+from utils import rename_feature, split_by_threshold, add_feature_percentile_rank, get_feature_modification_name, add_separate_ngs_features
 from utils import manage_intersects
 from utils import add_dvg_sequence, add_dvg_length, add_full_seq_length, add_deletion_length, add_region_lengths
 
@@ -239,19 +239,23 @@ def run_ngs_histo_analysis(dfs: list, data: str = 'all', strain: str = 'all', se
     df = pd.concat(dfs, ignore_index=True)
     df = manage_intersects(df, intersects, feature)
 
+    modification = get_feature_modification_name()
+
     x_feature_name = 'norm_log_NGS_read_count'
-    x_axis_name = 'normalized log10 NGS count (reads)'
+    x_axis_name = f'{modification} NGS count (reads)'
 
     create_freq_histo_plot('NGS read count - histogram', df, x_feature_name, x_axis_name, True, 'ngs', 'NGS', 'histogram', data, strain, segment, intersects)
 
-### bar & scatter ###
+### bar, violin & scatter ###
 
 def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n: int, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
+    modification = get_feature_modification_name()
+
     x_feature_name = 'norm_log_NGS_read_count'
-    x_axis_name = 'normalized log10 NGS count (reads)'
+    x_axis_name = f'{modification} NGS count (reads)'
 
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
@@ -305,7 +309,7 @@ def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n
         ("CpG_content", "CpG content", "content of CpG (1/dinucleotide)", "dinucleotides"),
 
         ("GC_skew", "GC skew", "relative skew between G and C nucleotides", "composition"),
-        ("sequence_entropy", "sequence entropy", "Shannon entropy of nucleotide composition", "other"),
+        ("sequence_entropy", "sequence entropy", "Shannon entropy of nucleotide composition", "entropy"),
 
         ("poly_U_max_run", "poly-U maximum run length", "longest consecutive run of U (nucleotides)", "length"),
         ("poly_U_tracts", "poly-U tract count", "number of U tracts above threshold length", "length"),
@@ -357,23 +361,33 @@ def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n
     features = [
         ("direct_repeat_length", "direct repeat length", "length of direct repeats (nucleotides)", "repeats"),
 
-        ("subtype", "virus subtype", "viral subtype", "metadata"),
         ("system_type", "system type", "system type", "metadata"),
         ("library_selection", "library selection", "library selection", "metadata"),
+        
+        ("cells", "cells", "cells", "metadata"),
+        ("cellular_localization", "cellular localization", "cellular localization", "metadata"),
+        ("cellular_resolution", "cellular resolution", "cellular resolution", "metadata"),
+        ("time_point", "time point", "time point", "metadata")
     ]
 
     if strain == "all":
-        features.append(
-            ("Strain", "strain", "virus strain", "metadata")
-        )
+        features.append(("Strain", "strain", "virus strain", "metadata"))
+        features.append(("subtype", "subtype", "viral subtype", "metadata"))
 
     if segment == "all":
-        features.append(
-            ("Segment", "segment", "segment", "metadata")
-        )
+        features.append(("Segment", "segment", "segment", "metadata"))
 
     for y_feature_name, y_feature_title, y_axis_name, folder in features:
-            create_freq_bar_plot(f'{y_feature_title} - bar plot', df, y_feature_name, y_axis_name, dvg_count, 0, y_feature_name, folder, subfolder, data, strain, segment, intersects)
+        create_freq_bar_plot(f'{y_feature_title} - bar plot', df, y_feature_name, y_axis_name, dvg_count, 0, y_feature_name, folder, subfolder, data, strain, segment, intersects)
+
+    y_feature_name = 'norm_log_NGS_read_count'
+    y_axis_name = f'{modification} NGS count (reads)'
+
+    folder = 'pri'
+    subfolder = 'violinplots'
+
+    for x_feature_name, x_feature_title, x_axis_name, folder in features:
+        create_feature_violin_plot(f'{x_feature_title} - violin plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, dvg_count, 0, x_feature_name, folder, subfolder, data, strain, segment, intersects)
 
     print(f'categorical features completed')
 
@@ -381,8 +395,10 @@ def run_dvg_sec_features_analysis(dfnames: list, dfs: list, selector: str, data:
     '''
 
     '''
+    modification = get_feature_modification_name()
+
     x_feature_name = 'norm_log_NGS_read_count'
-    x_axis_name = 'normalized log10 NGS count (reads)'
+    x_axis_name = f'{modification} NGS count (reads)'
 
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
@@ -415,7 +431,7 @@ def run_dvg_sec_features_analysis(dfnames: list, dfs: list, selector: str, data:
     subfolder = 'scatterplot'
 
     features = [
-        ("MFE", "MFE", "minimum free energy (kcal/mol)", "other"),
+        ("MFE", "MFE", "minimum free energy (kcal/mol)", "MFE"),
 
         ("bp_count", "base pair count", "number of base pairs", "pairing"),
         ("bp_density", "base pair density", "base pair density (1/nucleotide)", "pairing"),
@@ -443,7 +459,7 @@ def run_dvg_sec_features_analysis(dfnames: list, dfs: list, selector: str, data:
 
         ("branch_point_count", "branch point count", "count of multiloop/branch points", "composition"),
 
-        ("max_symmetry", "max symmetry length", "max symmetry length (nucleotides)", "other"),
+        ("max_symmetry", "max symmetry length", "max symmetry length (nucleotides)", "composition"),
     ]
 
     for y_feature_name, y_feature_title, y_axis_name, folder in features:
@@ -457,11 +473,20 @@ def run_dvg_sec_features_analysis(dfnames: list, dfs: list, selector: str, data:
     dvg_count = df.shape[0]
 
     features = [
-        ("full_symmetry", "full symmetry", "full symmetry", "other"),
+        ("full_symmetry", "full symmetry", "full symmetry", "composition"),
     ]
 
     for y_feature_name, y_feature_title, y_axis_name, folder in features:
             create_freq_bar_plot(f'{y_feature_title} - bar plot', df, y_feature_name, y_axis_name, dvg_count, 0, y_feature_name, folder, subfolder, data, strain, segment, intersects)
+
+    y_feature_name = 'norm_log_NGS_read_count'
+    y_axis_name = f'{modification} NGS count (reads)'
+
+    folder = 'pri'
+    subfolder = 'violinplots'
+
+    for x_feature_name, x_feature_title, x_axis_name, folder in features:
+        create_feature_violin_plot(f'{x_feature_title} - violin plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, dvg_count, 0, x_feature_name, folder, subfolder, data, strain, segment, intersects)
 
     print(f'categorical features completed')
 
@@ -469,8 +494,10 @@ def run_dvg_hybrid_features_analysis(dfnames: list, dfs: list, selector: str, da
     '''
 
     '''
+    modification = get_feature_modification_name()
+
     x_feature_name = 'norm_log_NGS_read_count'
-    x_axis_name = 'normalized log10 NGS count (reads)'
+    x_axis_name = f'{modification} NGS count (reads)'
 
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
@@ -565,10 +592,33 @@ def run_length_mfe_analysis(dfnames: list, dfs: list, selector: str, data: str =
     folder = 'other'
     subfolder = 'scatterplot'
 
-    # MFE #
-    y_feature_name = 'MFE'
-    feature_name = 'minimum free energy'
-    create_feature_scatter_plot(f'{feature_name} - DVG length - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, f'{feature_name} (kcal/mol)', selector, True, y_feature_name, folder, subfolder, data, strain, segment, intersects)
+    features = [
+        ("MFE", "MFE", "minimum free energy (kcal/mol)", "other"),
+    ]
+
+    for y_feature_name, y_feature_title, y_axis_name, folder in features:
+        create_feature_scatter_plot(f'{y_feature_title} - NGS reads - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, y_feature_name, folder, subfolder, data, strain, segment, intersects)
+    
+    print(f'numerical features completed')
+
+def run_ngs_prediction_analysis(df: pd.DataFrame, selector: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+    '''
+
+    '''
+    modification = get_feature_modification_name()
+
+    x_feature_name = 'norm_log_NGS_read_count'
+    x_axis_name = f'{modification} NGS count (reads)'
+
+    folder = 'prediction'
+    subfolder = 'scatterplot'
+
+    features = [
+        ("NGS_prediction", "prediction", "class 1 prediction (probability)", "prediction"),
+    ]
+
+    for y_feature_name, y_feature_title, y_axis_name, folder in features:
+        create_feature_scatter_plot(f'{y_feature_title} - NGS reads - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, y_feature_name, folder, subfolder, data, strain, segment, intersects)
     
     print(f'numerical features completed')
 
@@ -623,7 +673,7 @@ def run_sec_structure_plots(dfs: list, data: str = 'all', strain: str = 'all', s
 
 def create_freq_heatmap_plot(
     plot_name: str,
-    feature_name: str,
+    x_feature_name: str,
     x_axis_name: str,
     freq_heatmap_df: pd.DataFrame,
     count_df: pd.DataFrame,
@@ -645,7 +695,7 @@ def create_freq_heatmap_plot(
     feature_order = list(pivot_df.columns)
     rank_order = list(pivot_df.index)
 
-    feature_count_series = count_df.set_index(feature_name)['count']
+    feature_count_series = count_df.set_index(x_feature_name)['count']
 
     feature_labels = [
         f'{feature}\n(n={feature_count_series.get(feature, 0)})'
@@ -703,7 +753,7 @@ def create_freq_heatmap_plot(
 
 def create_freq_diff_plot(
     plot_name: str,
-    feature_name: str,
+    x_feature_name: str,
     x_axis_name: str,
     freq_df: pd.DataFrame,
     dvg_count: int,
@@ -724,7 +774,7 @@ def create_freq_diff_plot(
 
     df_plot = pd.melt(
         freq_df,
-        id_vars=feature_name,
+        id_vars=x_feature_name,
         value_vars=[freq0, freq1],
         var_name='type',
         value_name='frequency'
@@ -745,7 +795,7 @@ def create_freq_diff_plot(
     plt.figure(figsize=(18, 6))
     sns.barplot(
     data=df_plot,
-    x=feature_name,
+    x=x_feature_name,
     y='frequency',
     hue='type',
     palette=custom_colors,
@@ -855,7 +905,7 @@ def create_spline_plot(
 def create_freq_histo_plot(
     plot_name: str,
     df: pd.DataFrame,
-    feature_name: str,
+    x_feature_name: str,
     x_axis_name: str,
     show_percentiles: bool,
     fname: str,
@@ -864,25 +914,32 @@ def create_freq_histo_plot(
     data: str,
     strain: str,
     segment: str,
-    intersects: str
+    intersects: str,
+    elbow_side: str = "right",    # "right", "left", or "both"
+    kde_bw_adjust: float = 1.0,   # >1 smoother, <1 wigglier
+    kde_grid: int = 512           # resolution for KDE & curvature
     ):
-    '''
+    """
 
-    '''
+    """
+
     plt.style.use('seaborn-darkgrid')
     plt.figure(figsize=(10, 6))
 
-    values = df[feature_name].dropna()
+    values = df[x_feature_name].dropna().to_numpy()
     n = len(values)
+    if n == 0:
+        raise ValueError(f"No data in column '{x_feature_name}' after dropping NaNs.")
 
     mean_val = np.mean(values)
-    var_val = np.var(values)
-    skew_val = stats.skew(values)
-    kurt_val = stats.kurtosis(values)
+    var_val = np.var(values, ddof=0)
+    skew_val = stats.skew(values, bias=True)
+    kurt_val = stats.kurtosis(values, fisher=True, bias=True)
 
+    # --- Histogram + Seaborn KDE (for visualization, in percent) ---
     sns.histplot(
         values,
-        bins=30,
+        bins=40,
         kde=True,
         stat='percent',
         color=COLORS[8],
@@ -890,14 +947,72 @@ def create_freq_histo_plot(
         label='distribution'
     )
 
-    plt.axvline(mean_val, color=COLORS[9], linestyle='-', linewidth=1, label='mean')
+    # --- Build our own KDE for elbow detection (numeric derivatives) ---
+    # Using scipy so we can control bandwidth and evaluate derivatives
+    kde = stats.gaussian_kde(values)
+    if kde_bw_adjust != 1.0:
+        base_cf = kde.covariance_factor()
+        kde.covariance_factor = lambda: base_cf * kde_bw_adjust
+        kde._compute_covariance()
+
+    x_min, x_max = np.min(values), np.max(values)
+    pad = 0.05 * (x_max - x_min if x_max > x_min else 1.0)
+    xs = np.linspace(x_min - pad, x_max + pad, kde_grid)
+    pdf = kde(xs)              # integrates to 1 over xs
+
+    # First & second numerical derivatives
+    # (spacing is uniform so np.gradient works well)
+    dx = xs[1] - xs[0]
+    pdf_prime = np.gradient(pdf, dx)
+    pdf_double = np.gradient(pdf_prime, dx)
+
+    # Curvature of y=f(x): kappa = |f''(x)| / (1 + (f'(x))^2)^(3/2)
+    curvature = np.abs(pdf_double) / np.power(1.0 + pdf_prime**2, 1.5)
+
+    # Choose search mask based on elbow_side
+    if elbow_side.lower() == "right":
+        mask = xs >= mean_val
+    elif elbow_side.lower() == "left":
+        mask = xs <= mean_val
+    elif elbow_side.lower() == "both":
+        mask = np.ones_like(xs, dtype=bool)
+    else:
+        raise ValueError("elbow_side must be 'right', 'left', or 'both'.")
+
+    # Avoid degenerate cases
+    if not np.any(mask) or np.all(pdf == pdf[0]):
+        elbow_x = float(mean_val)  # fallback
+        elbow_idx = np.argmin(np.abs(xs - elbow_x))
+    else:
+        masked_idx = np.where(mask)[0]
+        local_argmax = masked_idx[np.argmax(curvature[mask])]
+        elbow_idx = int(local_argmax)
+        elbow_x = float(xs[elbow_idx])
+
+    # --- Draw verticals: mean + elbow ---
+    plt.axvline(mean_val, color=COLORS[9], linestyle=':', linewidth=1.5, label='mean')
+
+    # Scale KDE to percent for annotation dot (same scale as stat='percent')
+    elbow_y_percent = pdf[elbow_idx] * 100.0
+    plt.axvline(
+        elbow_x,
+        color=COLORS[10],
+        linestyle='--',
+        linewidth=1.5,
+        label=f'max. curvature'
+    )
 
     if show_percentiles:
+        q80 = np.percentile(values, 80)
+        q85 = np.percentile(values, 85)
         q90 = np.percentile(values, 90)
         q95 = np.percentile(values, 95)
-        plt.axvline(q90, color=COLORS[1], linestyle='--', linewidth=1, label='90th percentile')
-        plt.axvline(q95, color=COLORS[0], linestyle='--', linewidth=1, label='95th percentile')
+        plt.axvline(q80, color=COLORS[3], linestyle='-', linewidth=1, label='80th percentile')
+        plt.axvline(q85, color=COLORS[2], linestyle='-', linewidth=1, label='85th percentile')
+        plt.axvline(q90, color=COLORS[1], linestyle='-', linewidth=1, label='90th percentile')
+        plt.axvline(q95, color=COLORS[0], linestyle='-', linewidth=1, label='95th percentile')
 
+    # --- Titles & labels ---
     title = f'{plot_name}'
     title += f'\ndata: {data}'
     title += f', strain: {strain}'
@@ -909,6 +1024,28 @@ def create_freq_histo_plot(
     plt.xlabel(f'{x_axis_name}')
     plt.ylabel('relative frequency (%)')
 
+    stats_text = (
+        f'mean: {mean_val:.{DECIMALS}f}\n'
+        f'variance: {var_val:.{DECIMALS}f}\n'
+        f'skewness: {skew_val:.{DECIMALS}f}\n'
+        f'kurtosis: {kurt_val:.{DECIMALS}f}\n\n'
+        f'max. curvature: {elbow_x:.{DECIMALS}f}\n\n'
+        f'80th percentile: {q80:.{DECIMALS}f}\n'
+        f'85th percentile: {q85:.{DECIMALS}f}\n'
+        f'90th percentile: {q90:.{DECIMALS}f}\n'
+        f'95th percentile: {q95:.{DECIMALS}f}'
+    )
+
+    props = dict(boxstyle='round', facecolor='white', alpha=0.7)
+    plt.gca().text(
+        0.80, 0.95, stats_text,
+        transform=plt.gca().transAxes,
+        fontsize=9,
+        verticalalignment='top',
+        horizontalalignment='left',
+        bbox=props
+    )
+
     plt.legend(
         loc='upper left',
         bbox_to_anchor=(1.02, 1),
@@ -917,31 +1054,16 @@ def create_freq_histo_plot(
         frameon=True
     )
 
-    stats_text = (
-        f'mean: {mean_val:.2f}\n'
-        f'variance: {var_val:.2f}\n'
-        f'skewness: {skew_val:.2f}\n'
-        f'kurtosis: {kurt_val:.2f}'
-    )
-    props = dict(boxstyle='round', facecolor='white', alpha=0.7)
-    plt.gca().text(
-        0.02, 0.95, stats_text,
-        transform=plt.gca().transAxes,
-        fontsize=9,
-        verticalalignment='top',
-        horizontalalignment='left',
-        bbox=props
-    )
+    # Keep your previous y-limit if desired; otherwise let Matplotlib autoscale
+    plt.ylim(0, 20)
 
-    plt.ylim(0, 25)
-
+    # --- Save ---
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
     fname += '.png'
-
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, fname), dpi=300)
     plt.close()
@@ -949,7 +1071,7 @@ def create_freq_histo_plot(
 def create_freq_bar_plot(
     plot_name: str,
     df: pd.DataFrame,
-    feature_name: str,
+    x_feature_name: str,
     x_axis_name: str,
     dvg_count: int,
     top_n: int,
@@ -965,18 +1087,13 @@ def create_freq_bar_plot(
     '''
 
     '''
-    import os
-    import numpy as np
-    import pandas as pd
-    import matplotlib.pyplot as plt
-
     plt.style.use('seaborn-darkgrid')
     plt.figure(figsize=(12, 7))
 
     true_df, false_df = split_by_threshold(df, 'NGS_percentile_rank', RANK_THRESHOLD)
 
-    true_counts  = true_df[feature_name].value_counts(dropna=False)
-    false_counts = false_df[feature_name].value_counts(dropna=False)
+    true_counts  = true_df[x_feature_name].value_counts(dropna=False)
+    false_counts = false_df[x_feature_name].value_counts(dropna=False)
     n_true, n_false = len(true_df), len(false_df)
 
     def pct(count, denom):
@@ -1008,13 +1125,13 @@ def create_freq_bar_plot(
     y_max_overall = 0.0
     pvals = []
     for i, cat in enumerate(top_cats):
-        tx = (true_df[feature_name]  == cat).astype(int).to_numpy()
-        fx = (false_df[feature_name] == cat).astype(int).to_numpy()
+        tx = (true_df[x_feature_name]  == cat).astype(int).to_numpy()
+        fx = (false_df[x_feature_name] == cat).astype(int).to_numpy()
 
         res = mannwhitneyu_for_feature(
-            pd.DataFrame({feature_name: tx}),
-            pd.DataFrame({feature_name: fx}),
-            feature_name=feature_name,
+            pd.DataFrame({x_feature_name: tx}),
+            pd.DataFrame({x_feature_name: fx}),
+            feature_name=x_feature_name,
             alternative="two-sided"
         )
         p = res["pvalue"]
@@ -1078,6 +1195,104 @@ def create_freq_bar_plot(
     plt.savefig(os.path.join(save_path, fname), dpi=300)
     plt.close()
 
+def create_feature_violin_plot(
+    plot_name: str,
+    df: pd.DataFrame,
+    x_feature_name: str,
+    x_axis_name: str,
+    y_feature_name: str,
+    y_axis_name: str,
+    dvg_count: int,
+    top_n: int,
+    fname: str,
+    folder: str,
+    subfolder: str,
+    data: str,
+    strain: str,
+    segment: str,
+    intersects: str,
+    feature_specifier: str = '',
+    ):
+    """
+
+    """
+    plt.style.use('seaborn-darkgrid')
+    sns.set_theme(style="whitegrid")
+
+    df_plot = df.copy()
+
+    df_plot[x_feature_name] = df_plot[x_feature_name].astype(object)
+    df_plot[x_feature_name] = df_plot[x_feature_name].where(df_plot[x_feature_name].notna(), 'NA')
+
+    if not np.issubdtype(df_plot[y_feature_name].dtype, np.number):
+        df_plot[y_feature_name] = pd.to_numeric(df_plot[y_feature_name], errors='coerce')
+
+    counts = df_plot[x_feature_name].value_counts(dropna=False)
+    if top_n and top_n > 0:
+        cat_order = counts.head(top_n).index.tolist()
+    else:
+        cat_order = sorted(counts.index.tolist(), key=lambda c: str(c).casefold())
+
+    df_plot = df_plot[df_plot[x_feature_name].isin(cat_order)].copy()
+    cat_counts = df_plot[x_feature_name].value_counts()
+    tick_labels = [f"{str(c)}\n(n={int(cat_counts.get(c, 0))})" for c in cat_order]
+
+    uniq = list(cat_order)
+    picked_colors = pick_colors(COLORS, len(uniq))
+    palette = dict(zip(uniq, picked_colors))
+
+    plt.figure(figsize=(12, 7))
+    ax = sns.violinplot(
+        data=df_plot,
+        x=x_feature_name,
+        y=y_feature_name,
+        order=cat_order,
+        cut=0,
+        inner=None,
+        linewidth=1.0,
+        palette=palette,
+        bw=0.2,
+        gridsize=200,
+        scale='width',
+    )
+
+    q = df_plot.groupby(x_feature_name, sort=False)[y_feature_name].quantile([0.25, 0.5, 0.75]).unstack()
+    x_pos = dict(zip(cat_order, ax.get_xticks()))
+    for cat in cat_order:
+        if cat not in q.index:
+            continue
+        q1, med, q3 = q.loc[cat, [0.25, 0.5, 0.75]]
+        if pd.isna(q1) or pd.isna(med) or pd.isna(q3):
+            continue
+        x0 = x_pos[cat]
+        ax.vlines(x0, q1, q3, color='black', linewidth=2.0, zorder=3)
+        ax.scatter([x0], [med], s=28, color='white', edgecolor='black', linewidth=0.7, zorder=4)
+
+    ax.set_xlabel(x_axis_name)
+    ax.set_ylabel(y_axis_name)
+
+    title_name  = f'{plot_name}'
+    title_name += f'\ndata: {data}'
+    title_name += f', strain: {strain}'
+    title_name += f', segment: {segment}'
+    title_name += f', {intersects} intersects'
+    title_name += f' (n={dvg_count})'
+    ax.set_title(title_name)
+
+    ax.set_xticklabels(tick_labels, rotation=0, ha='center')
+
+    plt.tight_layout()
+
+    clean_data = clean_data_string(data)
+    save_path = os.path.join(RESULTSPATH, folder, subfolder, clean_data, strain, segment, intersects)
+    if feature_specifier:
+        save_path = os.path.join(save_path, f'{feature_specifier}')
+    os.makedirs(save_path, exist_ok=True)
+
+    out_name = fname + '.png' if not fname.lower().endswith('.png') else fname
+    plt.savefig(os.path.join(save_path, out_name), dpi=300)
+    plt.close()
+
 def create_feature_scatter_plot(
     plot_name: str,
     df: pd.DataFrame,
@@ -1135,7 +1350,20 @@ def create_feature_scatter_plot(
             scatter=False,
             color='grey'
         )
-        reg_line.lines[0].set_label('regression line')
+
+        x_vals = values[x_feature_name].to_numpy()
+        y_vals = values[y_feature_name].to_numpy()
+        if len(x_vals) > 1 and np.nanstd(x_vals) > 0 and np.nanstd(y_vals) > 0:
+            coeffs = np.polyfit(x_vals, y_vals, 1)
+            slope, intercept = coeffs[0], coeffs[1]
+            reg_label = (
+                f"regression line\n"
+                f"coefficient={round(slope, DECIMALS)}\n"
+                f"intercept={round(intercept, DECIMALS)}"
+            )
+        else:
+            reg_label = "regression line"
+        reg_line.lines[0].set_label(reg_label)
 
     r2 = None
     if show_regression_line and not values.empty:
@@ -1356,6 +1584,7 @@ if __name__ == "__main__":
     #################
 
     top_n = 20
+    selector = 'system_type'
 
     ### DATASETS SINGLE ###
 
@@ -1375,15 +1604,26 @@ if __name__ == "__main__":
     folder = 'datasets'
     subfolder = 'sec'
 
-    selector = 'library_selection'
-
     data = 'IAV'
-    strain = 'all'
-    segment = 'all'
+    strain = 'PR8'
+    segment = 'PB1'
     intersects = 'median'
 
     dfnames = get_dataset_names(cutoff=40, selection=data)
     dfs = load_all_preprocessed(dfnames, folder, subfolder)
+
+    ### PREDICTION ###
+
+    # data = 'IAV'
+    # strain = 'PR8'
+    # segment = 'PB1'
+    # intersects = 'median'
+
+    # motif_length = 3
+    # fname = f'motif_length_{motif_length}'
+    # resultpath, _ = os.path.split(RESULTSPATH)
+    # read_path = os.path.join(resultpath, 'preprocess', 'combined', 'prediction', data, strain, segment, intersects)
+    # df = pd.read_csv(os.path.join(read_path, f'{fname}.csv'), keep_default_na=False, na_values=[])
 
     ###################
     ### run scripts ###
@@ -1394,10 +1634,11 @@ if __name__ == "__main__":
     # run_repeat_heatmap_analysis(dfs, top_n, data, strain, segment, intersects)
 
     # run_dvg_motif_freq_analysis(dfs, top_n, data, strain, segment, intersects)
-    # run_ngs_histo_analysis(dfs, data, strain, segment, intersects)
+    run_ngs_histo_analysis(dfs, data, strain, segment, intersects)
 
     # run_dvg_pri_features_analysis(dfnames, dfs, selector, top_n, data, strain, segment, intersects)
-    # run_length_mfe_analysis(dfnames, dfs, data, selector, strain, segment, intersects)
+    # run_length_mfe_analysis(dfnames, dfs, selector, data, strain, segment, intersects)
+    # run_ngs_prediction_analysis(df, selector, data, strain, segment, intersects)
 
     # run_sec_structure_plots(dfs, data, strain, segment)
 

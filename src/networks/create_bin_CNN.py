@@ -31,12 +31,17 @@ import shap
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, "networks")
 
-VERSION = 2
+VERSION = "0"
 KMER_SIZE = 3
-THRESHOLD = 0.5
+THRESHOLD = 0.43
 
-MARKED = 0
+MARKED = 1
+DROP_X = 0
 SHAP_CAT = 1
+STRUCTURE = 1
+BALANCE = 0
+
+BEST_MODEL = 0
 
 ###########
 ### CNN ###
@@ -49,7 +54,6 @@ subfolder = 'pri'
 data = 'IAV'
 
 strain = 'PR8'
-### for single dataset ###
 # strain = DATASET_STRAIN_DICT[data]
 
 segment = 'PB1'
@@ -67,28 +71,31 @@ else:
     key_sequence = "dvg_sequence"
     key_structure = "structure"
 
-### otional ###
-# df = balance_by_threshold(df, 'norm_log_NGS_read_count', THRESHOLD)
+if BALANCE:
+    df = balance_by_threshold(df, 'norm_log_NGS_read_count', THRESHOLD)
 
-NAME_MOD = f'bin_sec_CNN_v{VERSION}_motif_length_{motif_length}'
+NAME_MOD = f'{VERSION}_motif_length_{motif_length}'
 
-save_path = os.path.join(RESULTSPATH, 'model', subfolder, data, strain, segment, intersects)
-os.makedirs(save_path, exist_ok=True)
+save_path_model = os.path.join(RESULTSPATH, 'CNN', subfolder, data, strain, segment, intersects)
+os.makedirs(save_path_model, exist_ok=True)
 
 ### key parameter ####
 df["label"] = (df["norm_log_NGS_read_count"] > THRESHOLD).astype(int)
 
 ### k-mer token ###
 def kmer_tokenize(seq, k):
-    return [seq[i:i + k] for i in range(len(seq) - k + 1) if 'X' not in seq[i:i + k]]
+    if DROP_X:
+        return [seq[i:i + k] for i in range(len(seq) - k + 1) if 'X' not in seq[i:i + k]]
+    else:
+        return [seq[i:i + k] for i in range(len(seq) - k + 1)]
 
+### sequence to integer ###
 vocab = set()
 df["kmer_seq"] = df[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
 df["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
 vocab = sorted(vocab)
 token2idx = {k: i + 1 for i, k in enumerate(vocab)}
 
-### sequence to integer ###
 def encode_seq(kmers):
     return [token2idx[k] for k in kmers if k in token2idx]
 
@@ -97,24 +104,31 @@ maxlen = df["encoded_seq"].apply(len).max()
 X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=maxlen)
 
 ### sec structure ###
-vocab2 = set()
-df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
-vocab2 = sorted(vocab2)
-token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
+if STRUCTURE:
+    vocab2 = set()
+    df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+    df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
+    vocab2 = sorted(vocab2)
+    token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
 
-def encode_str(kmers):
-    return [token2idx2[k] for k in kmers if k in token2idx2]
+    def encode_str(kmers):
+        return [token2idx2[k] for k in kmers if k in token2idx2]
 
-df["encoded_str"] = df["kmer_str"].apply(encode_str)
-maxlen2 = df["encoded_str"].apply(len).max()
-X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
+    df["encoded_str"] = df["kmer_str"].apply(encode_str)
+    maxlen2 = df["encoded_str"].apply(len).max()
+    X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
+else:
+    vocab2 = []
+    token2idx2 = {}
+    maxlen2 = 0
+    X_str = None
 
 ### categorical features ###
 categorical_cols = []
 
 # categorical_cols += ["Segment", "Strain"]
 categorical_cols += ['system_type', 'library_layout', 'library_selection', 'library_source', 'subtype']
+# categorical_cols += ['cells', 'cellular_localization', 'cellular_resolution', 'time_point', 'max_time']
 categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
 # categorical_cols += ["full_symmetry"]
@@ -124,7 +138,6 @@ categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 ### test for dataset dependencies ###
 # categorical_cols += ["dataset_name"]
 
-### keep compatibility with different sklearn versions ###
 try:
     encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
 except TypeError:
@@ -140,7 +153,7 @@ numerical_cols = []
 numerical_cols += ["deletion_length"]
 numerical_cols += ["5_end_length", "3_end_length"]
 
-numerical_cols += ["GC_content", "AU_content"]
+# numerical_cols += ["GC_content", "AU_content"]
 # numerical_cols += ["UpA_content", "CpG_content"]
 # numerical_cols += ["GC_skew", "sequence_entropy"]
 # numerical_cols += ["poly_U_max_run", "poly_U_tracts", "poly_A_max_run", "poly_A_tracts"]
@@ -148,7 +161,7 @@ numerical_cols += ["GC_content", "AU_content"]
 # numerical_cols += ["longest_ORF_len", "ORF_count"]
 # numerical_cols += ["kmer_richness", "codon_usage_entropy"]
 
-numerical_cols += ["direct_repeat_length"]
+# numerical_cols += ["direct_repeat_length"]
 
 # numerical_cols += ["MFE"]
 # numerical_cols += ["bp_count", "bp_density", "unpaired_count", "unpaired_density", "external_unpaired_density"]
@@ -179,8 +192,13 @@ X_other = np.hstack([X_cat, X_num])
 y = df["label"].values
 
 ### train/test split ###
-X_seq_train, X_seq_test, X_str_train, X_str_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
-    X_seq, X_str, X_other, y, test_size=0.2, random_state=SEED
+if STRUCTURE:
+    X_seq_train, X_seq_test, X_str_train, X_str_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
+        X_seq, X_str, X_other, y, test_size=0.2, random_state=SEED
+    )
+else:
+    X_seq_train, X_seq_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
+        X_seq, X_other, y, test_size=0.2, random_state=SEED
     )
 
 ### model ###
@@ -190,48 +208,63 @@ x = layers.Conv1D(64, 5, activation='relu')(x)
 x = layers.MaxPooling1D(2)(x)
 x = layers.Flatten()(x)
 
-str_input = layers.Input(shape=(maxlen2,))
-x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=32)(str_input)
-x2 = layers.Conv1D(64, 5, activation='relu')(x2)
-x2 = layers.MaxPooling1D(2)(x2)
-x2 = layers.Flatten()(x2)
-
 other_input = layers.Input(shape=(X_other.shape[1],))
 
-concat = layers.concatenate([x, x2, other_input])
+if STRUCTURE:
+    str_input = layers.Input(shape=(maxlen2,))
+    x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=32)(str_input)
+    x2 = layers.Conv1D(64, 5, activation='relu')(x2)
+    x2 = layers.MaxPooling1D(2)(x2)
+    x2 = layers.Flatten()(x2)
+
+    concat = layers.concatenate([x, x2, other_input])
+    inputs = [seq_input, str_input, other_input]
+else:
+    concat = layers.concatenate([x, other_input])
+    inputs = [seq_input, other_input]
+
 dense = layers.Dense(64, activation='relu')(concat)
 dense = layers.Dropout(0.3)(dense)
 output = layers.Dense(1, activation='sigmoid')(dense)
 
-model = models.Model(inputs=[seq_input, str_input, other_input], outputs=output)
+model = models.Model(inputs=inputs, outputs=output)
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
 ### callbacks ###
-best_model_path = os.path.join(save_path, f"{NAME_MOD}_best_model.h5")
+best_model_path = os.path.join(save_path_model, f"{NAME_MOD}_best_model.h5")
 checkpoint_cb = callbacks.ModelCheckpoint(
     best_model_path, save_best_only=True, monitor="val_loss", mode="min"
 )
 
 ### train ###
-model.fit(
-    [X_seq_train, X_str_train, X_other_train], y_train,
-    validation_split=0.1,
-    epochs=10,
-    batch_size=64,
-    callbacks=[checkpoint_cb]
-)
+if STRUCTURE:
+    model.fit(
+        [X_seq_train, X_str_train, X_other_train], y_train,
+        validation_split=0.1,
+        epochs=10,
+        batch_size=64,
+        callbacks=[checkpoint_cb]
+    )
+else:
+    model.fit(
+        [X_seq_train, X_other_train], y_train,
+        validation_split=0.1,
+        epochs=10,
+        batch_size=64,
+        callbacks=[checkpoint_cb]
+    )
 
 ### save ###
-final_model_path = os.path.join(save_path, f"{NAME_MOD}_final_model.h5")
+final_model_path = os.path.join(save_path_model, f"{NAME_MOD}_final_model.h5")
 model.save(final_model_path)
 print(f"\n✔ models saved")
 
-scaler_path = os.path.join(save_path, f"{NAME_MOD}_scaler.save")
+scaler_path = os.path.join(save_path_model, f"{NAME_MOD}_scaler.save")
 joblib.dump(scaler, scaler_path)
 print(f"✔ scaler saved")
 
 ### artifacts ###
-preproc_path = os.path.join(save_path, f"{NAME_MOD}_preproc.joblib")
+preproc_path = os.path.join(save_path_model, f"{NAME_MOD}_preproc.joblib")
 joblib.dump({
     "encoder": encoder,
     "scaler": scaler,
@@ -241,6 +274,7 @@ joblib.dump({
     "maxlen2": int(maxlen2),
     "categorical_cols": categorical_cols,
     "numerical_cols": numerical_cols,
+    "STRUCTURE": int(STRUCTURE),
 }, preproc_path)
 print("✔ preprocessing artifacts saved")
 
@@ -248,13 +282,25 @@ print("✔ preprocessing artifacts saved")
 ### visuals ###
 ###############
 
+save_path_vis = os.path.join(RESULTSPATH, 'visuals', subfolder, data, strain, segment, intersects)
+os.makedirs(save_path_vis, exist_ok=True)
+
+if BEST_MODEL:
+    model_path = best_model_path
+else:
+    model_path = final_model_path
+
 ### ROC & F1 ###
 plt.style.use('seaborn-darkgrid')
 plt.rc('font', size=12)
 
-model.load_weights(final_model_path)
+model.load_weights(model_path)
 
-y_pred_proba = model.predict([X_seq_test, X_str_test, X_other_test]).ravel()
+if STRUCTURE:
+    y_pred_proba = model.predict([X_seq_test, X_str_test, X_other_test]).ravel()
+else:
+    y_pred_proba = model.predict([X_seq_test, X_other_test]).ravel()
+
 fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
 auc_score = roc_auc_score(y_test, y_pred_proba)
 auc_score = round(auc_score, DECIMALS)
@@ -282,13 +328,12 @@ plt.title(title_name)
 plt.legend(loc="lower right")
 plt.grid(True)
 
-roc_path = os.path.join(save_path, f"{NAME_MOD}_roc.png")
+roc_path = os.path.join(save_path_vis, f"{NAME_MOD}_roc.png")
 plt.savefig(roc_path, dpi=300, bbox_inches="tight")
 plt.close()
 print(f"\n✔ ROC curve saved")
 
 ### SHAP ###
-
 if SHAP_CAT:
     X_train_shap = X_other_train
     X_test_shap  = X_other_test
@@ -356,7 +401,7 @@ plt.gca().invert_yaxis()
 plt.tight_layout()
 plt.grid(True, axis="x")
 
-shap_path = os.path.join(save_path, f"{NAME_MOD}_shap.png")
+shap_path = os.path.join(save_path_vis, f"{NAME_MOD}_shap.png")
 plt.savefig(shap_path, dpi=300, bbox_inches="tight")
 plt.close()
 print("✔ SHAP bar chart saved")

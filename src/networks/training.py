@@ -9,10 +9,10 @@ import pandas as pd
 sys.path.insert(0, "..")
 
 from pathlib import Path
+from typing import Iterator, Tuple
 
 from utils import get_dataset_names, load_all
-from utils import load_all_preprocessed, save_df
-from utils import add_log_feature, add_norm_feature
+from utils import build_df, load_all_preprocessed, save_df
 
 from utils import add_dvg_sequence, add_marked_dvg_sequence, add_dvg_length, add_deletion_length, add_full_seq_length, add_region_lengths
 from utils import add_direct_repeat_length
@@ -83,7 +83,7 @@ def make_training_dfs():
     counter = 0
     for csv_path, fname, subfolder, data, strain, segment, intersects in iter_csv_files(str(combined_root)):
         df = pd.read_csv(csv_path, keep_default_na=False, na_values=[])
-        make_training_df(df, fname, subfolder, data, strain, segment, intersects)
+        make_training_df(df, fname, 'training', subfolder, data, strain, segment, intersects)
         counter += 1
 
     if counter == 0:
@@ -97,7 +97,7 @@ def make_training_dfs():
 
 ### input ###
 
-def make_training_df(df: pd.DataFrame, fname: str, subfolder: str, data: str, strain: str, segment: str, intersects: str):
+def make_training_df(df: pd.DataFrame, fname: str, folder: str, subfolder: str, data: str, strain: str, segment: str, intersects: str):
     '''
     
     '''
@@ -170,13 +170,13 @@ def make_training_df(df: pd.DataFrame, fname: str, subfolder: str, data: str, st
     ]
 
     df = df.drop(columns=[col for col in columns_to_drop if col in df.columns])
-    save_df(df, fname, RESULTSPATH, 'training', subfolder, data, strain, segment, intersects)
+    save_df(df, fname, RESULTSPATH, folder, subfolder, data, strain, segment, intersects)
 
 ### others ###
 
-def iter_csv_files(path: str):
+def iter_csv_files(path: str) -> Iterator[Tuple[Path, str, str, str, str, str, str]]:
     '''
-    
+
     '''
     root = Path(path)
     for csv_path in root.rglob("*.csv"):
@@ -188,7 +188,11 @@ def iter_csv_files(path: str):
         if len(parts) < 6:
             continue
 
-        subfolder, data, strain, segment, intersects = parts[0], parts[1], parts[2], parts[3], parts[4]
+        subfolder = parts[0]
+        if subfolder == "prediction":
+            continue
+
+        data, strain, segment, intersects = parts[1], parts[2], parts[3], parts[4]
         fname = Path(parts[-1]).stem
 
         yield csv_path, fname, subfolder, data, strain, segment, intersects

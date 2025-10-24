@@ -31,12 +31,16 @@ import shap
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, "networks")
 
-VERSION = 1
+VERSION = "0"
 KMER_SIZE = 3
-THRESHOLD = True
+THRESHOLD = True  # unused in regression, kept for compatibility
 
 MARKED = 1
+DROP_X = 0
 SHAP_CAT = 1
+STRUCTURE = 1 
+
+BEST_MODEL = 0
 
 ###########
 ### CNN ###
@@ -67,28 +71,28 @@ else:
     key_sequence = "dvg_sequence"
     key_structure = "structure"
 
-### otional ###
-# df = balance_by_threshold(df, 'norm_log_NGS_read_count', THRESHOLD)
+NAME_MOD = f'{VERSION}_motif_length_{motif_length}'
 
-NAME_MOD = f'reg_sec_CNN_v{VERSION}_motif_length_{motif_length}'
-
-save_path = os.path.join(RESULTSPATH, 'model', subfolder, data, strain, segment, intersects)
+save_path = os.path.join(RESULTSPATH, 'CNN', subfolder, data, strain, segment, intersects)
 os.makedirs(save_path, exist_ok=True)
 
-### key parameter ####
+### target (regression) ###
 y_cont = df["norm_log_NGS_read_count"].values
 
 ### k-mer token ###
 def kmer_tokenize(seq, k):
-    return [seq[i:i + k] for i in range(len(seq) - k + 1) if 'X' not in seq[i:i + k]]
+    if DROP_X:
+        return [seq[i:i + k] for i in range(len(seq) - k + 1) if 'X' not in seq[i:i + k]]
+    else:
+        return [seq[i:i + k] for i in range(len(seq) - k + 1)]
 
+### sequence to integer ###
 vocab = set()
 df["kmer_seq"] = df[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
 df["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
 vocab = sorted(vocab)
 token2idx = {k: i + 1 for i, k in enumerate(vocab)}
 
-### sequence to integer ###
 def encode_seq(kmers):
     return [token2idx[k] for k in kmers if k in token2idx]
 
@@ -96,26 +100,33 @@ df["encoded_seq"] = df["kmer_seq"].apply(encode_seq)
 maxlen = df["encoded_seq"].apply(len).max()
 X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=maxlen)
 
-### sec structure ###
-vocab2 = set()
-df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
-vocab2 = sorted(vocab2)
-token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
+### secondary structure (OPTIONAL) ###
+if STRUCTURE:
+    vocab2 = set()
+    df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+    df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
+    vocab2 = sorted(vocab2)
+    token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
 
-def encode_str(kmers):
-    return [token2idx2[k] for k in kmers if k in token2idx2]
+    def encode_str(kmers):
+        return [token2idx2[k] for k in kmers if k in token2idx2]
 
-df["encoded_str"] = df["kmer_str"].apply(encode_str)
-maxlen2 = df["encoded_str"].apply(len).max()
-X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
+    df["encoded_str"] = df["kmer_str"].apply(encode_str)
+    maxlen2 = df["encoded_str"].apply(len).max()
+    X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
+else:
+    vocab2 = []
+    token2idx2 = {}
+    maxlen2 = 0
+    X_str = None
 
 ### categorical features ###
 categorical_cols = []
 
 # categorical_cols += ["Segment", "Strain"]
 categorical_cols += ['system_type', 'library_layout', 'library_selection', 'library_source', 'subtype']
-categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
+# categorical_cols += ['cells', 'cellular_localization', 'cellular_resolution', 'time_point', 'max_time']
+# categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
 # categorical_cols += ["full_symmetry"]
 # categorical_cols += [col for col in df.columns if re.search(r"motif\d+", col)]
@@ -136,11 +147,11 @@ numerical_cols = []
 
 # numerical_cols += ["Start", "End"]
 # numerical_cols += ["full_seq_length"]
-# numerical_cols += ["dvg_length"]
-numerical_cols += ["deletion_length"]
-numerical_cols += ["5_end_length", "3_end_length"]
+numerical_cols += ["dvg_length"]
+# numerical_cols += ["deletion_length"]
+# numerical_cols += ["5_end_length", "3_end_length"]
 
-numerical_cols += ["GC_content", "AU_content"]
+# numerical_cols += ["GC_content", "AU_content"]
 # numerical_cols += ["UpA_content", "CpG_content"]
 # numerical_cols += ["GC_skew", "sequence_entropy"]
 # numerical_cols += ["poly_U_max_run", "poly_U_tracts", "poly_A_max_run", "poly_A_tracts"]
@@ -148,7 +159,7 @@ numerical_cols += ["GC_content", "AU_content"]
 # numerical_cols += ["longest_ORF_len", "ORF_count"]
 # numerical_cols += ["kmer_richness", "codon_usage_entropy"]
 
-numerical_cols += ["direct_repeat_length"]
+# numerical_cols += ["direct_repeat_length"]
 
 # numerical_cols += ["MFE"]
 # numerical_cols += ["bp_count", "bp_density", "unpaired_count", "unpaired_density", "external_unpaired_density"]
@@ -178,8 +189,13 @@ X_num = scaler.fit_transform(df[numerical_cols])
 X_other = np.hstack([X_cat, X_num])
 
 ### train/test split ###
-X_seq_train, X_seq_test, X_str_train, X_str_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
-    X_seq, X_str, X_other, y_cont, test_size=0.2, random_state=SEED
+if STRUCTURE:
+    X_seq_train, X_seq_test, X_str_train, X_str_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
+        X_seq, X_str, X_other, y_cont, test_size=0.2, random_state=SEED
+    )
+else:
+    X_seq_train, X_seq_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
+        X_seq, X_other, y_cont, test_size=0.2, random_state=SEED
     )
 
 ### model ###
@@ -189,20 +205,27 @@ x = layers.Conv1D(64, 5, activation='relu')(x)
 x = layers.MaxPooling1D(2)(x)
 x = layers.Flatten()(x)
 
-str_input = layers.Input(shape=(maxlen2,))
-x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=32)(str_input)
-x2 = layers.Conv1D(64, 5, activation='relu')(x2)
-x2 = layers.MaxPooling1D(2)(x2)
-x2 = layers.Flatten()(x2)
-
 other_input = layers.Input(shape=(X_other.shape[1],))
 
-concat = layers.concatenate([x, x2, other_input])
+if STRUCTURE:
+    # exact structure branch as before
+    str_input = layers.Input(shape=(maxlen2,))
+    x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=32)(str_input)
+    x2 = layers.Conv1D(64, 5, activation='relu')(x2)
+    x2 = layers.MaxPooling1D(2)(x2)
+    x2 = layers.Flatten()(x2)
+
+    concat = layers.concatenate([x, x2, other_input])
+    inputs = [seq_input, str_input, other_input]
+else:
+    concat = layers.concatenate([x, other_input])
+    inputs = [seq_input, other_input]
+
 dense = layers.Dense(64, activation='relu')(concat)
 dense = layers.Dropout(0.3)(dense)
 output = layers.Dense(1, activation='linear')(dense)
 
-model = models.Model(inputs=[seq_input, str_input, other_input], outputs=output)
+model = models.Model(inputs=inputs, outputs=output)
 model.compile(optimizer='adam', loss='mse', metrics=['mae'])
 
 ### callbacks ###
@@ -212,13 +235,22 @@ checkpoint_cb = callbacks.ModelCheckpoint(
 )
 
 ### train ###
-model.fit(
-    [X_seq_train, X_str_train, X_other_train], y_train,
-    validation_split=0.1,
-    epochs=10,
-    batch_size=64,
-    callbacks=[checkpoint_cb]
-)
+if STRUCTURE:
+    model.fit(
+        [X_seq_train, X_str_train, X_other_train], y_train,
+        validation_split=0.1,
+        epochs=10,
+        batch_size=64,
+        callbacks=[checkpoint_cb]
+    )
+else:
+    model.fit(
+        [X_seq_train, X_other_train], y_train,
+        validation_split=0.1,
+        epochs=10,
+        batch_size=64,
+        callbacks=[checkpoint_cb]
+    )
 
 ### save ###
 final_model_path = os.path.join(save_path, f"{NAME_MOD}_final_model.h5")
@@ -240,6 +272,7 @@ joblib.dump({
     "maxlen2": int(maxlen2),
     "categorical_cols": categorical_cols,
     "numerical_cols": numerical_cols,
+    "STRUCTURE": int(STRUCTURE),
 }, preproc_path)
 print("✔ preprocessing artifacts saved")
 
@@ -247,14 +280,25 @@ print("✔ preprocessing artifacts saved")
 ### visuals ###
 ###############
 
+save_path = os.path.join(RESULTSPATH, 'visuals', subfolder, data, strain, segment, intersects)
+os.makedirs(save_path, exist_ok=True)
+
+if BEST_MODEL:
+    model_path = best_model_path
+else:
+    model_path = final_model_path
+
 ### scatter & R2 ###
 plt.style.use('seaborn-darkgrid')
 plt.rc('font', size=12)
 
-# evaluate with the best checkpointed weights
-model.load_weights(final_model_path)
+model.load_weights(model_path)
 
-y_pred = model.predict([X_seq_test, X_str_test, X_other_test]).ravel()
+if STRUCTURE:
+    y_pred = model.predict([X_seq_test, X_str_test, X_other_test]).ravel()
+else:
+    y_pred = model.predict([X_seq_test, X_other_test]).ravel()
+
 r2 = r2_score(y_test, y_pred)
 r2 = round(r2, DECIMALS)
 
@@ -267,6 +311,8 @@ title_name += f', segment: {segment}'
 title_name += f', {intersects} intersects'
 dvg_count = df.shape[0]
 title_name += f' (n={dvg_count})'
+if not STRUCTURE:
+    title_name += ' [no structure]'
 
 plt.figure()
 plt.scatter(y_test, y_pred, s=12, alpha=0.7, edgecolors='white', color=scatter_color)
@@ -284,7 +330,6 @@ plt.close()
 print(f"\n✔ R² scatter plot saved")
 
 ### SHAP ###
-
 if SHAP_CAT:
     X_train_shap = X_other_train
     X_test_shap  = X_other_test
@@ -342,6 +387,8 @@ title_name += f', segment: {segment}'
 title_name += f', {intersects} intersects'
 dvg_count = df.shape[0]
 title_name += f' (n={dvg_count})'
+if not STRUCTURE:
+    title_name += ' [no structure]'
 
 plt.figure(figsize=(10, 6))
 plt.barh(importance_df["feature"], importance_df["importance"], color=bar_color, edgecolor='white', linewidth=1)
