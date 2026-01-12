@@ -39,8 +39,11 @@ N_SAMPLES = 35000
 SEED = 42
 RANK_THRESHOLD = 20
 DECIMALS = 2
+K_MER_LENGTH = 3
+PALINDROMIC_K_MER_LENGTH = 6
+DIRECT_REPEAT_LEGTH_CAP = 5
 
-LOGARITHM = "log2"
+LOGARITHM = "log10"
 NORMALIZATION = "robust"
 
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
@@ -120,440 +123,440 @@ DATASET_STRAIN_DICT = dict({
 
 ACCNUMDICT = dict({
     "Wang2023": dict({
-        "SRR16770171" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "1"}),
-        "SRR16770172" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "1"}),
-        "SRR16770173" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "1"}),
-        "SRR16770174" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "1"}),
-        "SRR16770175" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "1"}),
-        "SRR16770181" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770182" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770183" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770184" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770185" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770186" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770191" : dict({"IFNAR": "1", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770192" : dict({"IFNAR": "1", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770193" : dict({"IFNAR": "1", "IFNLR": "1", "Replicate": "1"}),
-        "SRR16770197" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "2"}),
-        "SRR16770198" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "2"}),
-        "SRR16770201" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "2"}),
-        "SRR16770200" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "2"}),
-        "SRR16770199" : dict({"IFNAR": "1", "IFNLR": "0", "Replicate": "2"}),
-        "SRR16770207" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "2"}),
-        "SRR16770208" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "2"}),
-        "SRR16770209" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "2"}),
-        "SRR16770210" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "2"}),
-        "SRR16770211" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "2"}),
-        "SRR16770212" : dict({"IFNAR": "0", "IFNLR": "1", "Replicate": "2"}),
-        "SRR16770219" : dict({"IFNAR": "1", "IFNLR": "1", "Replicate": "2"}),
-        "SRR16770218" : dict({"IFNAR": "1", "IFNLR": "1", "Replicate": "2"}),
-        "SRR16770217" : dict({"IFNAR": "1", "IFNLR": "1", "Replicate": "2"})
+        "SRR16770171": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770172": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770173": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770174": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770175": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770181": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770182": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770183": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770184": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770185": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770186": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770191": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770192": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770193": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770197": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770198": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770201": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770200": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770199": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770207": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770208": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770209": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770210": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770211": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770212": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770219": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770218": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770217": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"})
     }),
     "Wang2020": dict({
-        "SRR7722028" : dict({"Cell": "A549", "Time": "6", "Replicate": "1"}),
-        "SRR7722030" : dict({"Cell": "A549", "Time": "12", "Replicate": "1"}),
-        "SRR7722032" : dict({"Cell": "A549", "Time": "24", "Replicate": "1"}),
-        "SRR7722029" : dict({"Cell": "A549", "Time": "6", "Replicate": "2"}),
-        "SRR7722031" : dict({"Cell": "A549", "Time": "12", "Replicate": "2"}),
-        "SRR7722033" : dict({"Cell": "A549", "Time": "24", "Replicate": "2"}),
+        "SRR7722028": dict({"Cells": "A549", "Time": "6", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722030": dict({"Cells": "A549", "Time": "12", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722032": dict({"Cells": "A549", "Time": "24", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722029": dict({"Cells": "A549", "Time": "6", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722031": dict({"Cells": "A549", "Time": "12", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722033": dict({"Cells": "A549", "Time": "24", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
 
-        "SRR7722036" : dict({"Cell": "HBEpC", "Time": "6", "Replicate": "1"}),
-        "SRR7722038" : dict({"Cell": "HBEpC", "Time": "12", "Replicate": "1"}),
-        "SRR7722040" : dict({"Cell": "HBEpC", "Time": "24", "Replicate": "1"}),
-        "SRR7722037" : dict({"Cell": "HBEpC", "Time": "6", "Replicate": "2"}),
-        "SRR7722039" : dict({"Cell": "HBEpC", "Time": "12", "Replicate": "2"}),
-        "SRR7722041" : dict({"Cell": "HBEpC", "Time": "24", "Replicate": "2"})
+        "SRR7722036": dict({"Cells": "HBEpC", "Time": "6", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722038": dict({"Cells": "HBEpC", "Time": "12", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722040": dict({"Cells": "HBEpC", "Time": "24", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722037": dict({"Cells": "HBEpC", "Time": "6", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722039": dict({"Cells": "HBEpC", "Time": "12", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
+        "SRR7722041": dict({"Cells": "HBEpC", "Time": "24", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"})
     }),
     "Mendes2021": dict({
-        "SRR15720520": dict({"Status": "enriched", "Virus": "1", "Replicate": "1"}),
-        "SRR15720521": dict({"Status": "enriched", "Virus": "1", "Replicate": "2"}),
-        "SRR15720522": dict({"Status": "enriched", "Virus": "2", "Replicate": "1"}),
-        "SRR15720523": dict({"Status": "enriched", "Virus": "2", "Replicate": "2"}),
-        "SRR15720524": dict({"Status": "depleted", "Virus": "1", "Replicate": "1"}),
-        "SRR15720525": dict({"Status": "depleted", "Virus": "1", "Replicate": "2"}),
-        "SRR15720526": dict({"Status": "depleted", "Virus": "2", "Replicate": "1"}),
-        "SRR15720527": dict({"Status": "depleted", "Virus": "2", "Replicate": "2"})
+        "SRR15720520": dict({"Replicate": "e11", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"}),
+        "SRR15720521": dict({"Replicate": "e12", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"}),
+        "SRR15720522": dict({"Replicate": "e21", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"}),
+        "SRR15720523": dict({"Replicate": "e12", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"}),
+        "SRR15720524": dict({"Replicate": "d11", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"}),
+        "SRR15720525": dict({"Replicate": "d12", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"}),
+        "SRR15720526": dict({"Replicate": "d21", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"}),
+        "SRR15720527": dict({"Replicate": "d22", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"})
     }),
     "Pelz2021": dict({
-        "SRR15084925": dict({"Time": "seed"}),
-        "SRR15084924": dict({"Time": "0.5dpi"}),
-        "SRR15084913": dict({"Time": "1dpi"}),
-        "SRR15084908": dict({"Time": "1.4dpi"}),
-        "SRR15084907": dict({"Time": "3.5dpi"}),
-        "SRR15084906": dict({"Time": "4dpi"}),
-        "SRR15084905": dict({"Time": "4.5dpi"}),
-        "SRR15084904": dict({"Time": "5dpi"}),
-        "SRR15084903": dict({"Time": "5.5dpi"}),
-        "SRR15084902": dict({"Time": "8dpi"}),
-        "SRR15084923": dict({"Time": "9dpi"}),
-        "SRR15084922": dict({"Time": "9.4dpi"}),
-        "SRR15084921": dict({"Time": "12.4dpi"}),
-        "SRR15084919": dict({"Time": "13dpi"}),
-        "SRR15084918": dict({"Time": "13.5dpi"}),
-        "SRR15084917": dict({"Time": "16dpi"}),
-        "SRR15084916": dict({"Time": "17dpi"}),
-        "SRR15084915": dict({"Time": "17.5dpi"}),
-        "SRR15084914": dict({"Time": "18dpi"}),
-        "SRR15084912": dict({"Time": "19.5dpi"}),
-        "SRR15084911": dict({"Time": "20dpi"}),
-        "SRR15084910": dict({"Time": "20.4dpi"}),
-        "SRR15084909": dict({"Time": "21dpi"})
+        "SRR15084925": dict({"Time": "seed", "Localization:": "unknown", "Cells": "unknown", "Resolution": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "unknown"}),
+        "SRR15084924": dict({"Time": "12", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084913": dict({"Time": "24", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084908": dict({"Time": "34", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084907": dict({"Time": "84", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084906": dict({"Time": "96", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084905": dict({"Time": "108", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084904": dict({"Time": "120", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084903": dict({"Time": "132", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084902": dict({"Time": "192", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084923": dict({"Time": "216", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084922": dict({"Time": "226", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084921": dict({"Time": "298", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084919": dict({"Time": "312", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084918": dict({"Time": "324", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084917": dict({"Time": "384", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084916": dict({"Time": "408", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084915": dict({"Time": "420", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084914": dict({"Time": "432", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084912": dict({"Time": "468", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084911": dict({"Time": "480", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084910": dict({"Time": "490", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR15084909": dict({"Time": "504", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"})
     }),
     "Alnaji2019_Cal07": dict({
-        "SRR8754522": dict({"Lineage": "1", "Passage": "6"}),
-        "SRR8754523": dict({"Lineage": "2", "Passage": "6"}),
-        "SRR8754531": dict({"Lineage": "1", "Passage": "6_t"}),
-        "SRR8754532": dict({"Lineage": "1", "Passage": "3_t"}),
-        "SRR8754533": dict({"Lineage": "1", "Passage": "1_t"})
+        "SRR8754522": dict({"Replicate": "1", "Passage": "6", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754523": dict({"Replicate": "2", "Passage": "6", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754531": dict({"Replicate": "1", "Passage": "6_t", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754532": dict({"Replicate": "1", "Passage": "3_t", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754533": dict({"Replicate": "1", "Passage": "1_t", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"})
     }),
     "Alnaji2019_NC": dict({
-        "SRR8754513": dict({"Lineage": "2", "Passage": "1"}),
-        "SRR8754514": dict({"Lineage": "1", "Passage": "1"}),
-        "SRR8754527": dict({"Lineage": "1", "Passage": "6"}),
-        "SRR8754538": dict({"Lineage": "2", "Passage": "6"})
+        "SRR8754513": dict({"Replicate": "2", "Passage": "1", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754514": dict({"Replicate": "1", "Passage": "1", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754527": dict({"Replicate": "1", "Passage": "6", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754538": dict({"Replicate": "2", "Passage": "6", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"})
     }),
     "Alnaji2019_Perth": dict({
-        "SRR8754517": dict({"Lineage": "2", "Passage": "8"}),
-        "SRR8754524": dict({"Lineage": "1", "Passage": "4"}),
-        "SRR8754525": dict({"Lineage": "2", "Passage": "4"}),
-        "SRR8754526": dict({"Lineage": "1", "Passage": "8"})
+        "SRR8754517": dict({"Replicate": "2", "Passage": "8", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754524": dict({"Replicate": "1", "Passage": "4", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754525": dict({"Replicate": "2", "Passage": "4", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754526": dict({"Replicate": "1", "Passage": "8", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"})
     }),
     "Alnaji2019_BLEE": dict({
-        "SRR8754507": dict({"Lineage": "1", "Passage": "8"}),
-        "SRR8754508": dict({"Lineage": "2", "Passage": "7"}),
-        "SRR8754509": dict({"Lineage": "1", "Passage": "7"}),
-        "SRR8754516": dict({"Lineage": "2", "Passage": "8"})
+        "SRR8754507": dict({"Replicate": "1", "Passage": "8", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754508": dict({"Replicate": "2", "Passage": "7", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754509": dict({"Replicate": "1", "Passage": "7", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"}),
+        "SRR8754516": dict({"Replicate": "2", "Passage": "8", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"})
     }),
     "Lui2019": dict({
-        "SRR8949705": dict({}),
-        "SRR8945328": dict({}),
+        "SRR8949705": dict({"Cells": "Mouse", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.5, "Time": "24", "Replicate": "unknown", "Host:": "mouse"}),
+        "SRR8945328": dict({"Cells": "Mouse", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.5, "Time": "24", "Replicate": "unknown", "Host:": "mouse"}),
     }),
     "Penn2022": dict({
-        "ERR10231074": dict({"Time": "24hpi", "Mode": "High", "Lineage": "1"}),
-        "ERR10231075": dict({"Time": "48hpi", "Mode": "High", "Lineage": "1"}),
-        "ERR10231076": dict({"Time": "6hpi", "Mode": "High", "Lineage": "1"}),
-        "ERR10231077": dict({"Time": "96hpi", "Mode": "High", "Lineage": "1"}),
-        "ERR10231078": dict({"Time": "24hpi", "Mode": "High", "Lineage": "2"}),
-        "ERR10231079": dict({"Time": "48hpi", "Mode": "High", "Lineage": "2"}),
-        "ERR10231080": dict({"Time": "6hpi", "Mode": "High", "Lineage": "2"}),
-        "ERR10231081": dict({"Time": "96hpi", "Mode": "High", "Lineage": "2"}),
-        "ERR10231089": dict({"Time": "96hpi", "Mode": "Low", "Lineage": "2"}),
-        "ERR10231082": dict({"Time": "24hpi", "Mode": "Low", "Lineage": "1"}),
-        "ERR10231085": dict({"Time": "96hpi", "Mode": "Low", "Lineage": "1"}),
-        "ERR10231083": dict({"Time": "48hpi", "Mode": "Low", "Lineage": "1"}),
-        "ERR10231084": dict({"Time": "6hpi", "Mode": "Low", "Lineage": "1"}),
-        "ERR10231086": dict({"Time": "24hpi", "Mode": "Low", "Lineage": "2"}),
-        "ERR10231087": dict({"Time": "48hpi", "Mode": "Low", "Lineage": "2"}),
-        "ERR10231088": dict({"Time": "6hpi", "Mode": "Low", "Lineage": "2"})
+        "ERR10231074": dict({"Time": "24", "Mode": "High", "Lineage": "1", "Cells": "Mouse", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231075": dict({"Time": "48", "Mode": "High", "Lineage": "1", "Cells": "Mouse", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231076": dict({"Time": "6", "Mode": "High", "Lineage": "1", "Cells": "Mouse", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231077": dict({"Time": "96", "Mode": "High", "Lineage": "1", "Cells": "Mouse", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231078": dict({"Time": "24", "Mode": "High", "Lineage": "2", "Cells": "Mouse", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231079": dict({"Time": "48", "Mode": "High", "Lineage": "2", "Cells": "Mouse", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231080": dict({"Time": "6", "Mode": "High", "Lineage": "2", "Cells": "Mouse", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231081": dict({"Time": "96", "Mode": "High", "Lineage": "2", "Cells": "Mouse", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231089": dict({"Time": "96", "Mode": "Low", "Lineage": "2", "Cells": "Mouse", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231082": dict({"Time": "24", "Mode": "Low", "Lineage": "1", "Cells": "Mouse", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231085": dict({"Time": "96", "Mode": "Low", "Lineage": "1", "Cells": "Mouse", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231083": dict({"Time": "48", "Mode": "Low", "Lineage": "1", "Cells": "Mouse", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231084": dict({"Time": "6", "Mode": "Low", "Lineage": "1", "Cells": "Mouse", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231086": dict({"Time": "24", "Mode": "Low", "Lineage": "2", "Cells": "Mouse", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231087": dict({"Time": "48", "Mode": "Low", "Lineage": "2", "Cells": "Mouse", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231088": dict({"Time": "6", "Mode": "Low", "Lineage": "2", "Cells": "Mouse", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"})
     }),
     "Alnaji2021": dict({
-        "SRR14352106": dict({"Replicate": "C", "Time": "24hpi"}),
-        "SRR14352107": dict({"Replicate": "B", "Time": "24hpi"}),
-        "SRR14352108": dict({"Replicate": "A", "Time": "24hpi"}),
-        "SRR14352109": dict({"Replicate": "C", "Time": "6hpi"}),
-        "SRR14352110": dict({"Replicate": "B", "Time": "6hpi"}),
-        "SRR14352111": dict({"Replicate": "A", "Time": "6hpi"}),
-        "SRR14352112": dict({"Replicate": "C", "Time": "3hpi"}),
-        "SRR14352113": dict({"Replicate": "X", "Time": "0hpi"}),
-        "SRR14352116": dict({"Replicate": "B", "Time": "3hpi"}),
-        "SRR14352117": dict({"Replicate": "A", "Time": "3hpi"})
+        "SRR14352106": dict({"Replicate": "C", "Cells": "MDCK-SIAT1", "Time": "24", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
+        "SRR14352107": dict({"Replicate": "B", "Cells": "MDCK-SIAT1", "Time": "24", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
+        "SRR14352108": dict({"Replicate": "A", "Cells": "MDCK-SIAT1", "Time": "24", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
+        "SRR14352109": dict({"Replicate": "C", "Cells": "MDCK-SIAT1", "Time": "6", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
+        "SRR14352110": dict({"Replicate": "B", "Cells": "MDCK-SIAT1", "Time": "6", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
+        "SRR14352111": dict({"Replicate": "A", "Cells": "MDCK-SIAT1", "Time": "6", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
+        "SRR14352112": dict({"Replicate": "C", "Cells": "MDCK-SIAT1", "Time": "3", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
+        "SRR14352113": dict({"Replicate": "X", "Time": "0", "Resolution": "bulk", "Localization:": "unknown", "Cells": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR14352116": dict({"Replicate": "B", "Cells": "MDCK-SIAT1", "Time": "3", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
+        "SRR14352117": dict({"Replicate": "A", "Cells": "MDCK-SIAT1", "Time": "3", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"})
     }),
     "Kupke2020": dict({
-        "SRR10489473": dict({"Type": "singlecell"}),
-        "SRR10489474": dict({"Type": "singlecell"}),
-        "SRR10489475": dict({"Type": "singlecell"}),
-        "SRR10489476": dict({"Type": "singlecell"}),
-        "SRR10489477": dict({"Type": "singlecell"}),
-        "SRR10489478": dict({"Type": "singlecell"}),
-        "SRR10489479": dict({"Type": "singlecell"}),
-        "SRR10489480": dict({"Type": "singlecell"}),
-        "SRR10489481": dict({"Type": "singlecell"}),
-        "SRR10489482": dict({"Type": "singlecell"}),
-        "SRR10489483": dict({"Type": "singlecell"}),
-        "SRR10489484": dict({"Type": "singlecell"}),
-        "SRR10489485": dict({"Type": "singlecell"}),
-        "SRR10489486": dict({"Type": "singlecell"}),
-        "SRR10489487": dict({"Type": "singlecell"}),
-        "SRR10489488": dict({"Type": "singlecell"}),
-        "SRR10489489": dict({"Type": "singlecell"}),
-        "SRR10489490": dict({"Type": "singlecell"}),
-        "SRR10489491": dict({"Type": "singlecell"}),
-        "SRR10489492": dict({"Type": "singlecell"}),
-        "SRR10489493": dict({"Type": "singlecell"}),
-        "SRR10489494": dict({"Type": "singlecell"}),
-        "SRR10489495": dict({"Type": "singlecell"}),
-        "SRR10489496": dict({"Type": "singlecell"}),
-        "SRR10489497": dict({"Type": "singlecell"}),
-        "SRR10489498": dict({"Type": "singlecell"}),
-        "SRR10489499": dict({"Type": "singlecell"}),
-        "SRR10489500": dict({"Type": "singlecell"}),
-        "SRR10489501": dict({"Type": "singlecell"}),
-        "SRR10489502": dict({"Type": "singlecell"}),
-        "SRR10489503": dict({"Type": "singlecell"}),
-        "SRR10489504": dict({"Type": "singlecell"}),
-        "SRR10489505": dict({"Type": "singlecell"}),
-        "SRR10489506": dict({"Type": "singlecell"}),
-        "SRR10489507": dict({"Type": "singlecell"}),
-        "SRR10489508": dict({"Type": "singlecell"}),
-        "SRR10489509": dict({"Type": "singlecell"}),
-        "SRR10489510": dict({"Type": "singlecell"}),
-        "SRR10489511": dict({"Type": "singlecell"}),
-        "SRR10489512": dict({"Type": "singlecell"}),
-        "SRR10489513": dict({"Type": "singlecell"}),
-        "SRR10489514": dict({"Type": "singlecell"}),
-        "SRR10489515": dict({"Type": "singlecell"}),
-        "SRR10489516": dict({"Type": "singlecell"}),
-        "SRR10489517": dict({"Type": "singlecell"}),
-        "SRR10489518": dict({"Type": "singlecell"}),
-        "SRR10489519": dict({"Type": "singlecell"}),
-        "SRR10489520": dict({"Type": "singlecell"}),
-        "SRR10489521": dict({"Type": "singlecell"}),
-        "SRR10489522": dict({"Type": "singlecell"}),
-        "SRR10489523": dict({"Type": "singlecell"}),
-        "SRR10489524": dict({"Type": "singlecell"}),
-        "SRR10489525": dict({"Type": "singlecell"}),
-        "SRR10489526": dict({"Type": "singlecell"}),
-        "SRR10489527": dict({"Type": "singlecell"}),
-        "SRR10489528": dict({"Type": "singlecell"}),
-        "SRR10489529": dict({"Type": "singlecell"}),
-        "SRR10489530": dict({"Type": "singlecell"}),
-        "SRR10489531": dict({"Type": "singlecell"}),
-        "SRR10489532": dict({"Type": "singlecell"}),
-        "SRR10489533": dict({"Type": "singlecell"}),
-        "SRR10489534": dict({"Type": "singlecell"}),
-        "SRR10489535": dict({"Type": "singlecell"}),
-        "SRR10489536": dict({"Type": "singlecell"}),
-        "SRR10489537": dict({"Type": "singlecell"}),
-        "SRR10489538": dict({"Type": "singlecell"}),
-        "SRR10489539": dict({"Type": "singlecell"}),
-        "SRR10489540": dict({"Type": "singlecell"}),
-        "SRR10489541": dict({"Type": "singlecell"}),
-        "SRR10489542": dict({"Type": "singlecell"}),
-        "SRR10489543": dict({"Type": "singlecell"}),
-        "SRR10489544": dict({"Type": "singlecell"}),
-        "SRR10489545": dict({"Type": "singlecell"}),
-        "SRR10489546": dict({"Type": "singlecell"}),
-        "SRR10489547": dict({"Type": "singlecell"}),
-        "SRR10489548": dict({"Type": "singlecell"}),
-        "SRR10489549": dict({"Type": "singlecell"}),
-        "SRR10489550": dict({"Type": "singlecell"}),
-        "SRR10489551": dict({"Type": "singlecell"}),
-        "SRR10489552": dict({"Type": "singlecell"}),
-        "SRR10489553": dict({"Type": "singlecell"}),
-        "SRR10489554": dict({"Type": "singlecell"}),
-        "SRR10489555": dict({"Type": "singlecell"}),
-        "SRR10489556": dict({"Type": "singlecell"}),
-        "SRR10489557": dict({"Type": "singlecell"}),
-        "SRR10489558": dict({"Type": "singlecell"}),
-        "SRR10489559": dict({"Type": "singlecell"}),
-        "SRR10489560": dict({"Type": "singlecell"}),
-        "SRR10489561": dict({"Type": "singlecell"}),
-        "SRR10489562": dict({"Type": "singlecell"}),
-        "SRR10489563": dict({"Type": "singlecell"}),
-        "SRR10489564": dict({"Type": "singlecell"}),
-        "SRR10489565": dict({"Type": "singlecell"}),
-        "SRR10489566": dict({"Type": "singlecell"}),
-        "SRR10489567": dict({"Type": "singlecell"}),
-        "SRR10489568": dict({"Type": "singlecell"}),
-        "SRR10530642": dict({"Type": "pre"}),
-        "SRR10530643": dict({"Type": "post"})
+        "SRR10489473": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "0", "Host:": "dog"}),
+		"SRR10489474": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU1low_0", "Host:": "dog"}),
+		"SRR10489475": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU640high_0", "Host:": "dog"}),
+		"SRR10489476": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU24low_0", "Host:": "dog"}),
+		"SRR10489477": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU11low_0", "Host:": "dog"}),
+		"SRR10489478": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU470high_0", "Host:": "dog"}),
+		"SRR10489479": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU450high_0", "Host:": "dog"}),
+		"SRR10489480": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU23low_0", "Host:": "dog"}),
+		"SRR10489481": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU430high_0", "Host:": "dog"}),
+		"SRR10489482": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU570high_0", "Host:": "dog"}),
+		"SRR10489483": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU670high_0", "Host:": "dog"}),
+		"SRR10489484": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU720high_0", "Host:": "dog"}),
+		"SRR10489485": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU380high_0", "Host:": "dog"}),
+		"SRR10489486": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU680high_0", "Host:": "dog"}),
+		"SRR10489487": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU23low_1", "Host:": "dog"}),
+		"SRR10489488": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU390high_0", "Host:": "dog"}),
+		"SRR10489489": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU38low_0", "Host:": "dog"}),
+		"SRR10489490": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU380high_1", "Host:": "dog"}),
+		"SRR10489491": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU22low_0", "Host:": "dog"}),
+		"SRR10489492": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU650high_0", "Host:": "dog"}),
+		"SRR10489493": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU34low_0", "Host:": "dog"}),
+		"SRR10489494": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU19low_0", "Host:": "dog"}),
+		"SRR10489495": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU18low_0", "Host:": "dog"}),
+		"SRR10489496": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU390high_1", "Host:": "dog"}),
+		"SRR10489497": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU27low_0", "Host:": "dog"}),
+		"SRR10489498": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU410high_0", "Host:": "dog"}),
+		"SRR10489499": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU40low_0", "Host:": "dog"}),
+		"SRR10489500": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU900high_0", "Host:": "dog"}),
+		"SRR10489501": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU3low_0", "Host:": "dog"}),
+		"SRR10489502": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU450high_1", "Host:": "dog"}),
+		"SRR10489503": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU470high_1", "Host:": "dog"}),
+		"SRR10489504": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU1100high_0", "Host:": "dog"}),
+		"SRR10489505": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU360high_0", "Host:": "dog"}),
+		"SRR10489506": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU5low_0", "Host:": "dog"}),
+		"SRR10489507": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU690high_0", "Host:": "dog"}),
+		"SRR10489508": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU490high_0", "Host:": "dog"}),
+		"SRR10489509": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU580high_0", "Host:": "dog"}),
+		"SRR10489510": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU400high_0", "Host:": "dog"}),
+		"SRR10489511": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU380high_2", "Host:": "dog"}),
+		"SRR10489512": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU16low_0", "Host:": "dog"}),
+		"SRR10489513": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU360high_1", "Host:": "dog"}),
+		"SRR10489514": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU360high_2", "Host:": "dog"}),
+		"SRR10489515": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU360high_3", "Host:": "dog"}),
+		"SRR10489516": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU37low_0", "Host:": "dog"}),
+		"SRR10489517": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU360high_4", "Host:": "dog"}),
+		"SRR10489518": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU460high_0", "Host:": "dog"}),
+		"SRR10489519": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU330high_0", "Host:": "dog"}),
+		"SRR10489520": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU25low_0", "Host:": "dog"}),
+		"SRR10489521": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU650high_1", "Host:": "dog"}),
+		"SRR10489522": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU890high_0", "Host:": "dog"}),
+		"SRR10489523": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU1low_1", "Host:": "dog"}),
+		"SRR10489524": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU17low_0", "Host:": "dog"}),
+		"SRR10489525": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU460high_1", "Host:": "dog"}),
+		"SRR10489526": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU3low_1", "Host:": "dog"}),
+		"SRR10489527": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU430high_1", "Host:": "dog"}),
+		"SRR10489528": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU40low_1", "Host:": "dog"}),
+		"SRR10489529": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU21low_0", "Host:": "dog"}),
+		"SRR10489530": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU420high_0", "Host:": "dog"}),
+		"SRR10489531": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU350high_0", "Host:": "dog"}),
+		"SRR10489532": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU28low_0", "Host:": "dog"}),
+		"SRR10489533": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU29low_0", "Host:": "dog"}),
+		"SRR10489534": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU22low_1", "Host:": "dog"}),
+		"SRR10489535": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU11low_1", "Host:": "dog"}),
+		"SRR10489536": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU510high_0", "Host:": "dog"}),
+		"SRR10489537": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU11low_2", "Host:": "dog"}),
+		"SRR10489538": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU19low_1", "Host:": "dog"}),
+		"SRR10489539": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU6low_0", "Host:": "dog"}),
+		"SRR10489540": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU16low_1", "Host:": "dog"}),
+		"SRR10489541": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU400high_1", "Host:": "dog"}),
+		"SRR10489542": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU4low_0", "Host:": "dog"}),
+		"SRR10489543": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU370high_0", "Host:": "dog"}),
+		"SRR10489544": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU12low_0", "Host:": "dog"}),
+		"SRR10489545": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU31low_0", "Host:": "dog"}),
+		"SRR10489546": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU560high_0", "Host:": "dog"}),
+		"SRR10489547": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU14low_0", "Host:": "dog"}),
+		"SRR10489548": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU810high_0", "Host:": "dog"}),
+		"SRR10489549": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU9low_0", "Host:": "dog"}),
+		"SRR10489550": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU26low_0", "Host:": "dog"}),
+		"SRR10489551": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU400high_2", "Host:": "dog"}),
+		"SRR10489552": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU34low_1", "Host:": "dog"}),
+		"SRR10489553": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU24low_1", "Host:": "dog"}),
+		"SRR10489554": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU20low_0", "Host:": "dog"}),
+		"SRR10489555": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU2low_0", "Host:": "dog"}),
+		"SRR10489556": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU24low_2", "Host:": "dog"}),
+		"SRR10489557": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU37low_1", "Host:": "dog"}),
+		"SRR10489558": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU430high_2", "Host:": "dog"}),
+		"SRR10489559": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU360high_5", "Host:": "dog"}),
+		"SRR10489560": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU550high_0", "Host:": "dog"}),
+		"SRR10489561": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU31low_1", "Host:": "dog"}),
+		"SRR10489562": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU14low_1", "Host:": "dog"}),
+		"SRR10489563": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU450high_0", "Host:": "dog"}),
+		"SRR10489564": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU14low_2", "Host:": "dog"}),
+		"SRR10489565": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU960high_0", "Host:": "dog"}),
+		"SRR10489566": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU28low_1", "Host:": "dog"}),
+		"SRR10489567": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU510high_1", "Host:": "dog"}),
+		"SRR10489568": dict({"Resolution": "singlecell", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "intracellular", "Replicate": "PFU4low_1", "Host:": "dog"}),
+        "SRR10530642": dict({"Resolution": "bulk", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "extracellular", "Replicate": "1", "Host:": "dog"}),
+        "SRR10530643": dict({"Resolution": "bulk", "Cells": "MDCK", "MOI": 10, "Time": "12", "Localization:": "extracellular", "Replicate": "2", "Host:": "dog"})
     }),
     "Sheng2018": dict({
-        "SRR3211978": dict({}),
-        "SRR3211980": dict({}),
-        "SRR3211976": dict({}),
-        "SRR3211977": dict({}),
-        "SRR3211974": dict({}),
-        "SRR3211975": dict({}),
-        "SRR3211972": dict({})
+        "SRR3211978": dict({"Cells": "A549", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 1, "Time": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR3211980": dict({"Cells": "A549", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 1, "Time": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR3211976": dict({"Cells": "A549", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 1, "Time": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR3211977": dict({"Cells": "A549", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 1, "Time": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR3211974": dict({"Cells": "A549", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 1, "Time": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR3211975": dict({"Cells": "A549", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 1, "Time": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR3211972": dict({"Cells": "A549", "Localization:": "intracellular", "Resolution": "bulk", "MOI": 1, "Time": "unknown", "Replicate": "unknown", "Host:": "human"})
     }),
     "Zhuravlev2020": dict({
-        "ERR4566024":  dict({"Cell": "A549"}),
-        "ERR4566025":  dict({"Cell": "A549"}),
-        "ERR4566028":  dict({"Cell": "HEK293FT"}),
-        "ERR4566029":  dict({"Cell": "HEK293FT"}),
-        "ERR4566032":  dict({"Cell": "MRC5"}),
-        "ERR4566033":  dict({"Cell": "MRC5"}),
-        "ERR4566036":  dict({"Cell": "WI38"}),
-        "ERR4566037":  dict({"Cell": "WI38"})
+        "ERR4566024": dict({"Cells": "A549", "Time": "48", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"}),
+        "ERR4566025": dict({"Cells": "A549", "Time": "48", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"}),
+        "ERR4566028": dict({"Cells": "HEK293FT", "Time": "48", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"}),
+        "ERR4566029": dict({"Cells": "HEK293FT", "Time": "48", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"}),
+        "ERR4566032": dict({"Cells": "MRC5", "Time": "48", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"}),
+        "ERR4566033": dict({"Cells": "MRC5", "Time": "48", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"}),
+        "ERR4566036": dict({"Cells": "WI38", "Time": "48", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"}),
+        "ERR4566037": dict({"Cells": "WI38", "Time": "48", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"})
     }),
     "Berry2021_A": dict({
-        "SRR15182178":  dict({}),
-        "SRR15182177":  dict({}),
-        "SRR15182176":  dict({}),
-        "SRR15182175":  dict({}),
-        "SRR15182174":  dict({}),
-        "SRR15182173":  dict({}),
-        "SRR15182172":  dict({}),
-        "SRR15182171":  dict({})
+        "SRR15182178": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15182177": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15182176": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15182175": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15182174": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15182173": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15182172": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15182171": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"})
     }),
     "Berry2021_B": dict({
-        "SRR15183345":  dict({}),
-        "SRR15183344":  dict({}),
-        "SRR15183352":  dict({}),
-        "SRR15183353":  dict({}),
-        "SRR15196408":  dict({}),
-        "SRR15196409":  dict({}),
-        "SRR15196410":  dict({}),
-        "SRR15196411":  dict({}),
-        "SRR15196412":  dict({}),
-        "SRR15196413":  dict({}),
-        "SRR15196414":  dict({}),
-        "SRR15196415":  dict({}),
-        "SRR15196416":  dict({}),
-        "SRR15196417":  dict({}),
-        "SRR15196419":  dict({}),
-        "SRR15196418":  dict({}),
-        "SRR15196420":  dict({}),
-        "SRR15196421":  dict({}),
-        "SRR15196422":  dict({}),
-        "SRR15196423":  dict({}),
-        "SRR15196424":  dict({}),
-        "SRR15196425":  dict({})
+        "SRR15183345": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15183344": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15183352": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15183353": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196408": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196409": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196410": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196411": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "5-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196412": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "5-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196413": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196414": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "6-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196415": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "6-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196416": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "7-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196417": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "7-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196419": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "9-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196418": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "8-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196420": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "9-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196421": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "8-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196422": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "10-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196423": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "10-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196424": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "11-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15196425": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "11-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"})
     }),
     "Berry2021_B_Yam": dict({
-        "SRR15183338":  dict({}),
-        "SRR15183343":  dict({}),
-        "SRR15183342":  dict({}),
-        "SRR15183341":  dict({}),
-        "SRR15183340":  dict({}),
-        "SRR15183339":  dict({})
+        "SRR15183338": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15183343": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15183342": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15183341": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15183340": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
+        "SRR15183339": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"})
     }),
     "Valesano2020_Vic": dict({
-        "SRR10013092":  dict({}),
-        "SRR10013237":  dict({}),
-        "SRR10013181":  dict({}),
-        "SRR10013242":  dict({}),
-        "SRR10013050":  dict({}),
-        "SRR10013272":  dict({}),
-        "SRR10013047":  dict({}),
-        "SRR10013239":  dict({}),
-        "SRR10013071":  dict({}),
-        "SRR10013201":  dict({}),
-        "SRR10013072":  dict({}),
-        "SRR10013200":  dict({}),
-        "SRR10013108":  dict({}),
-        "SRR10013256":  dict({}),
-        "SRR10013037":  dict({}),
-        "SRR10013254":  dict({}),
-        "SRR10013279":  dict({}),
-        "SRR10013219":  dict({}),
-        "SRR10013221":  dict({})
+        "SRR10013092": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013237": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013181": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013242": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013050": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013272": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013047": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013239": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013071": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013201": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013072": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013200": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013108": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013256": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013037": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013254": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013279": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013219": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013221": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
     }),
     "Valesano2020_Yam": dict({
-        "SRR10013243":  dict({}),
-		"SRR10013084":  dict({}),
-		"SRR10013188":  dict({}),
-		"SRR10013094":  dict({}),
-		"SRR10013178":  dict({}),
-		"SRR10013236":  dict({}),
-		"SRR10013063":  dict({}),
-		"SRR10013209":  dict({}),
-		"SRR10013241":  dict({}),
-		"SRR10013240":  dict({}),
-		"SRR10013229":  dict({}),
-		"SRR10013068":  dict({}),
-		"SRR10013205":  dict({}),
-		"SRR10013067":  dict({}),
-		"SRR10013206":  dict({}),
-		"SRR10013062":  dict({}),
-		"SRR10013210":  dict({}),
-		"SRR10013070":  dict({}),
-		"SRR10013203":  dict({}),
-		"SRR10013103":  dict({}),
-		"SRR10013170":  dict({}),
-		"SRR10013223":  dict({}),
-		"SRR10013244":  dict({}),
-		"SRR10013275":  dict({})
+        "SRR10013243": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013084": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013188": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013094": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013178": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013236": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013063": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013209": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013241": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013240": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013229": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013068": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013205": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013067": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013206": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013062": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013210": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013070": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013203": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013103": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013170": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013223": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013244": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013275": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
     }),
     "Southgate2019": dict({
-        "ERR3474616": dict({}),
-        "ERR3474621": dict({}),
-        "ERR3474642": dict({}),
-        "ERR3474643": dict({}),
-        "ERR3474658": dict({}),
-        "ERR3474661": dict({}),
-        "ERR3474662": dict({}),
-        "ERR3474663": dict({}),
-        "ERR3474664": dict({}),
-        "ERR3474666": dict({}),
-        "ERR3474671": dict({}),
-        "ERR3474674": dict({}),
-        "ERR3474675": dict({}),
-        "ERR3474676": dict({}),
-        "ERR3474679": dict({}),
-        "ERR3474684": dict({}),
-        "ERR3474685": dict({}),
-        "ERR3474686": dict({}),
-        "ERR3474687": dict({}),
-        "ERR3474689": dict({}),
-        "ERR3474692": dict({}),
-        "ERR3474693": dict({}),
-        "ERR3474694": dict({}),
-        "ERR3474695": dict({}),
-        "ERR3474697": dict({}),
-        "ERR3474698": dict({}),
-        "ERR3474699": dict({}),
-        "ERR3474701": dict({}),
-        "ERR3474702": dict({}),
-        "ERR3474703": dict({}),
-        "ERR3474704": dict({}),
-        "ERR3474705": dict({}),
-        "ERR3474706": dict({}),
-        "ERR3474707": dict({}),
-        "ERR3474709": dict({}),
-        "ERR3474710": dict({}),
-        "ERR3474712": dict({}),
-        "ERR3474713": dict({}),
-        "ERR3474714": dict({}),
-        "ERR3474715": dict({}),
-        "ERR3474716": dict({}),
-        "ERR3474717": dict({}),
-        "ERR3474718": dict({}),
-        "ERR3474719": dict({}),
-        "ERR3474720": dict({}),
-        "ERR3474721": dict({}),
-        "ERR3474722": dict({}),
-        "ERR3474723": dict({}),
-        "ERR3474724": dict({}),
-        "ERR3474725": dict({}),
-        "ERR3474726": dict({}),
-        "ERR3474728": dict({}),
-        "ERR3474729": dict({}),
-        "ERR3474750": dict({}),
-        "ERR3474751": dict({}),
-        "ERR3474781": dict({}),
-        "ERR3474796": dict({}),
-        "ERR3474809": dict({})
+        "ERR3474616": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474621": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474642": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474643": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474658": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474661": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474662": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474663": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474664": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474666": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474671": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474674": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474675": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474676": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474679": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474684": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474685": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474686": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474687": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474689": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474692": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474693": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474694": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474695": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474697": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474698": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474699": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474701": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474702": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474703": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474704": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474705": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474706": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474707": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474709": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474710": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474712": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474713": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474714": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474715": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474716": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474717": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474718": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474719": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474720": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474721": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474722": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474723": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474724": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474725": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474726": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474728": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474729": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474750": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474751": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474781": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474796": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474809": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
     }),
     "VdHoecke2015": dict({
-        "SRR1757953": dict({}),
-        "SRR1758027": dict({})
+        "SRR1757953": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.01, "Time": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "SRR1758027": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.01, "Time": "unknown", "Replicate": "unknown", "Host:": "dog"})
     }),
     "Boussier2020": dict({
-        "180628A_rec_A-P1p_S218": dict({}),
-        "180628A_rec_B-P1p_S219": dict({}),
-        "180628A_rec_C-P1p_S219": dict({}),
-        "180628A_rec_D-P1p_S221": dict({}),
-        "180628A_rec_WT1p6-1213_S242": dict({}),
-        "180628B_rec_A-P1p-PCR_S213": dict({}),
-        "180628B_rec_B-P1p-PCR_S214": dict({}),
-        "180628B_rec_C-P1p-PCR_S215": dict({}),
-        "180628B_rec_D-P1p-PCR_S216": dict({}),
-        "180628B_rec_WT-P1p-PCR_S217": dict({}),
-        "180705A_rec_AP1pb_S294": dict({}),
-        "180705A_rec_BP1pb_S295": dict({}),
-        "180705A_rec_CP1pb_S296": dict({}),
-        "180705A_rec_DP1pb_S297": dict({}),
-        "180705A_rec_WTP1pb_S298": dict({}),
-        "180705B_rec_AP1pPCRb_S289": dict({}),
-        "180705B_rec_BP1pPCRb_S290": dict({}),
-        "180705B_rec_CP1pPCRb_S291": dict({}),
-        "180705B_rec_DP1pPCRb_S292": dict({}),
-        "180705B_rec_WTP1pPCRb_S293": dict({}),
-        "180706A_rec_AP1pc_S10": dict({}),
-        "180706A_rec_BP1pc_S11": dict({}),
-        "180706A_rec_DP1pc_S12": dict({})
+        "180628A_rec_A-P1p_S218": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628A_rec_B-P1p_S219": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628A_rec_C-P1p_S219": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628A_rec_D-P1p_S221": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628A_rec_WT1p6-1213_S242": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628B_rec_A-P1p-PCR_S213": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628B_rec_B-P1p-PCR_S214": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628B_rec_C-P1p-PCR_S215": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628B_rec_D-P1p-PCR_S216": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180628B_rec_WT-P1p-PCR_S217": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705A_rec_AP1pb_S294": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705A_rec_BP1pb_S295": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705A_rec_CP1pb_S296": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705A_rec_DP1pb_S297": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705A_rec_WTP1pb_S298": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705B_rec_AP1pPCRb_S289": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705B_rec_BP1pPCRb_S290": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705B_rec_CP1pPCRb_S291": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705B_rec_DP1pPCRb_S292": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180705B_rec_WTP1pPCRb_S293": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180706A_rec_AP1pc_S10": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180706A_rec_BP1pc_S11": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
+        "180706A_rec_DP1pc_S12": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"})
     })
 })
 
@@ -1453,7 +1456,12 @@ def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '',
     os.makedirs(read_path, exist_ok=True)
 
     fname = fname + ".csv"
-    df = pd.read_csv(os.path.join(read_path, fname), keep_default_na=False, na_values=[])
+    df = pd.read_csv(os.path.join(read_path, fname), keep_default_na=False, na_values=[], low_memory=False, dtype={
+        "Time": "string",
+        "MOI": "string"
+        }
+    )
+
     return df
 
 def load_all_preprocessed(fnames: list, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = '')-> list:
@@ -1494,76 +1502,67 @@ def save_df(df: pd.DataFrame, fname: str, save_path: str, folder: str = '', subf
 
     df.to_csv(os.path.join(save_path, fname), index=False, na_rep="")
 
-### length features ###
+### unppoled ###
 
-def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+_FEATURE_KEYS = ["Time", "Localization", "Resolution", "Cells", "MOI", "Host"]
+
+_KEY_NORMALIZATION = {
+    "Time": "Time",
+    "Localization": "Localization",
+    "Localization:": "Localization",
+    "Resolution": "Resolution",
+    "Resolution:": "Resolution",
+    "Cells": "Cells",
+    "Cells:": "Cells",
+    "MOI": "MOI",
+    "MOI:": "MOI",
+    "Host": "Host",
+    "Host:": "Host",
+}
+
+def _extract_meta_features(meta: dict) -> dict:
     """
-
+    Return ONLY the whitelisted features from ACCNUMDICT(mod).
+    Missing ones are filled with 'unknown'.
     """
-    def compute_dvg_sequence(row):
-        full_seq = row['full_seq']
-        start = row['Start']
-        end = row['End'] - 1
-        
-        seq_list = list(full_seq)
+    out = {k: "unknown" for k in _FEATURE_KEYS}
+    for raw_k, v in meta.items():
+        k = _KEY_NORMALIZATION.get(raw_k, None)
+        if k in _FEATURE_KEYS:
+            out[k] = v
+    return out
 
-        for i in range(start, end):
-            if 0 <= i < len(seq_list):
-                seq_list[i] = 'X'
-
-        return ''.join(seq_list)
-
-    df['marked_dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
-
+def load_single_dataset_unpooled(exp: str, acc: str, segment_dict: dict) -> pd.DataFrame:
+    df = load_single_dataset(exp, acc, segment_dict)  # reuse your existing loader
+    df["AN"] = acc  # keep accessions separate
     return df
 
-def add_full_seq_length(df: pd.DataFrame):
-    """
+def load_dataset_unpooled(dataset: str) -> pd.DataFrame:
+    acc_nums = ACCNUMDICT[dataset]
+    strain = DATASET_STRAIN_DICT[dataset]
 
-    """
-    df['full_seq_length'] = df['full_seq'].apply(len)
+    dfs = []
+    for acc, meta in acc_nums.items():
+        df = load_single_dataset_unpooled(dataset, acc, SEGMENT_DICTS[strain])
 
-    return df
+        # Strictly add ONLY the six agreed features from ACCNUMDICT(mod)
+        features = _extract_meta_features(meta)
+        for k, v in features.items():
+            df[k] = v
 
-def add_dvg_length(df: pd.DataFrame):
-    """
+        dfs.append(df)
 
-    """
-    df['dvg_length'] = df['dvg_sequence'].apply(len)
+    # No pooling; just stack rows
+    concat_df = pd.concat(dfs, ignore_index=True)
 
-    return df
+    # Keep all entries: cutoff=0 (preserves all data; keeps your usual preprocess columns)
+    out = preprocess(strain, concat_df, 0)
+    return out
 
-def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
-    """
-
-    """
-    df["5_end_length"] = df["Start"]
-    df["3_end_length"] = df["full_seq"].str.len() - df["End"]
-
-    return df
-
-def add_deletion_length(df: pd.DataFrame) -> pd.DataFrame:
-    """
-
-    """
-    df["deletion_length"] = df["End"] - df["Start"] - 1
-
-    return df
-
-def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
-    """
-
-    """
-    def compute_dvg_sequence(row):
-        full_seq = row['full_seq']
-        start = row['Start']
-        end = row['End']
-
-        return full_seq[:start] + full_seq[end:]
-
-    df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
-
-    return df
+def load_all_unpooled(dfnames: list, expected: bool = False):
+    dfs = [load_dataset_unpooled(name) for name in dfnames]
+    expected_dfs = [] if not expected else []
+    return dfs, expected_dfs
 
 ### metadata ###
 
@@ -1579,39 +1578,43 @@ def add_dataset_keys(dfs):
     return updated_dfs
 
 def add_metadata_features(dfnames: list, dfs: list) -> list:
-    '''
-    
-    '''
     resultpath, _ = os.path.split(RESULTSPATH)
 
-    fname = f'metadata.csv'
-    read_path = os.path.join(resultpath, 'preprocess', 'metadata', fname)
+    read_path = os.path.join(resultpath, 'preprocess', 'metadata', 'metadata.csv')
     meta_df = pd.read_csv(read_path)
 
-    meta_features = ['system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype', 'cells', 'cellular localization', 'cellular resolution', 'time point', 'max time']
+    meta_features = [
+        'system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype',
+    ]
 
     updated_dfs = []
     for dfname, df in zip(dfnames, dfs):
         df = df.copy()
         df['dataset_name'] = dfname
 
+        row = meta_df.loc[meta_df['names'] == dfname]
+
         for meta_feature in meta_features:
-            value = meta_df.loc[meta_df['names'] == dfname, meta_feature].iloc[0]
-            value = dfname if isinstance(value, str) and value.strip() == '' else value
+            if not row.empty:
+                value = row[meta_feature].iloc[0]
+            else:
+                value = np.nan
+
+            if pd.isna(value):
+                value = "unknown"
+            elif isinstance(value, str) and value.strip() == '':
+                value = "unknown"
+
             df[meta_feature] = value
 
         updated_dfs.append(df)
-    
+
     renamed_dfs = []
     for df in updated_dfs:
         df = rename_feature(df, 'system type', 'system_type')
         df = rename_feature(df, 'LibraryLayout', 'library_layout')
         df = rename_feature(df, 'LibrarySelection', 'library_selection')
         df = rename_feature(df, 'LibrarySource', 'library_source')
-        df = rename_feature(df, 'cellular localization', 'cellular_localization')
-        df = rename_feature(df, 'cellular resolution', 'cellular_resolution')
-        df = rename_feature(df, 'time point', 'time_point')
-        df = rename_feature(df, 'max time', 'max_time')
         renamed_dfs.append(df)
 
     return renamed_dfs
@@ -1630,6 +1633,15 @@ def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.
     elif modifier == 'median':
         df = add_ikey(df)
         df = median_by_ikey(df, feature_name)
+    elif modifier == 'remove with metadata':
+        df = add_metadata_ikey(df)
+        df = remove_by_ikey(df, 1)
+    elif modifier == 'mean with metadata':
+        df = add_metadata_ikey(df)
+        df = mean_by_ikey(df, feature_name)
+    elif modifier == 'median with metadata':
+        df = add_metadata_ikey(df)
+        df = median_by_ikey(df, feature_name)
     else:
         print('unvalid intersects modifier')
 
@@ -1642,6 +1654,22 @@ def add_ikey(df: pd.DataFrame) -> pd.DataFrame:
     '''
     df = df.copy()
     df['ikey'] = df['Strain'].astype(str) + '_' + df['key'].astype(str)
+
+    return df
+
+def add_metadata_ikey(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    
+    '''
+    df = df.copy()
+    df["ikey"] = (
+        df["Strain"].astype(str) + "_" +
+        df["key"].astype(str) + "_" +
+        df["Localization"].astype(str) + "_" +
+        df["Resolution"].astype(str) + "_" +
+        df["system_type"].astype(str)
+    )
+
     return df
 
 def remove_by_ikey(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
@@ -1936,7 +1964,116 @@ def balance_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float) 
 
     return df_balanced
 
-### adv pri features ###
+def reduce_rows(df: pd.DataFrame, target_number: int) -> pd.DataFrame:
+    """
+
+    """
+    if len(df) <= target_number:
+        return df
+
+    return df.sample(n=target_number, random_state=SEED).reset_index(drop=True)
+
+################
+### features ###
+################
+
+### length ###
+
+def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
+    def compute_dvg_sequence(row):
+        full_seq = row['full_seq']
+        start = row['Start']
+        end = row['End'] - 1
+        
+        seq_list = list(full_seq)
+
+        for i in range(start, end):
+            if 0 <= i < len(seq_list):
+                seq_list[i] = 'X'
+
+        return ''.join(seq_list)
+
+    df['marked_dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+
+    return df
+
+def add_full_seq_length(df: pd.DataFrame):
+    """
+
+    """
+    df['full_seq_length'] = df['full_seq'].apply(len)
+
+    return df
+
+def add_dvg_length(df: pd.DataFrame):
+    """
+
+    """
+    df['dvg_length'] = df['dvg_sequence'].apply(len)
+
+    return df
+
+def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
+    df["5_end_length"] = df["Start"]
+    df["3_end_length"] = df["full_seq"].str.len() - df["End"]
+
+    return df
+
+def add_deletion_length(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
+    df["deletion_length"] = df["End"] - df["Start"] - 1
+
+    return df
+
+def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    """
+    def compute_dvg_sequence(row):
+        full_seq = row['full_seq']
+        start = row['Start']
+        end = row['End']
+
+        return full_seq[:start] + full_seq[end:]
+
+    df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+
+    return df
+
+### direct repeats ###
+
+def cap_direct_repeat_length(df: pd.DataFrame, cap: int = 5):
+    for index, row in df.iterrows():
+        direct_repeat_length = row["direct_repeat_length"]
+        if direct_repeat_length > cap:
+            df.loc[index, "direct_repeat_length"] = cap
+    return df
+
+def add_direct_repeat_length(df: pd.DataFrame):
+    for index, row in df.iterrows():
+        seq = row["full_seq"]
+        start = row["Start"]
+        end = row["End"] - 1
+        direct_repeat_length = 0
+
+        while start > 0 and seq[start - 1] == seq[end - 1]:
+            direct_repeat_length = direct_repeat_length + 1
+            start = start - 1
+            end = end - 1
+        df.loc[index, "direct_repeat_length"] = direct_repeat_length
+
+    df["direct_repeat_length"] = df["direct_repeat_length"].astype(int)
+    return df
+
+### pri ###
 
 def add_gc_content(df: pd.DataFrame):
     """
@@ -2126,7 +2263,7 @@ def add_codon_usage_bias(df: pd.DataFrame):
     df['codon_usage_entropy'] = df['dvg_sequence'].apply(calc)
     return df
 
-### sec features ###
+### structure ###
 
 def add_marked_structure(df: pd.DataFrame) -> pd.DataFrame:
     '''
@@ -2177,7 +2314,7 @@ def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, 
 
     return df
 
-### sym feature ###
+### symmetry ###
 
 def _longest_symmetry_len(s: str) -> int:
     '''
@@ -2250,7 +2387,7 @@ def add_max_symmetry(df: pd.DataFrame) -> pd.DataFrame:
         )
     return out
 
-### adv sec features ###
+### sec ###
 
 def _pairs_from_dotbracket(s: str):
     """
@@ -2489,7 +2626,7 @@ def add_branch_point_count(df: pd.DataFrame) -> pd.DataFrame:
     df["branch_point_count"] = df["structure"].apply(f)
     return df
 
-### adv hybrid features ###
+### hybrid ###
 
 def _pairs_from_dotbracket(s: str):
     """
@@ -2801,28 +2938,6 @@ def add_tail_gc_content(df: pd.DataFrame) -> pd.DataFrame:
     df["GC_3prime_tail"] = out.apply(lambda t: t[1])
     return df
 
-# TODO #
-def add_exposed_kmer_counts(df: pd.DataFrame, k: int = 3) -> pd.DataFrame:
-    '''
-    Count k-mers (k=3 by default) that occur entirely in unpaired regions (accessibility proxy).
-    Adds a dict per row mapping k-mer -> count.
-    '''
-    def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
-        if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct) or len(seq) < k:
-            return None
-        masks = _category_masks(struct)
-        unp = masks["unpaired"]
-        hits = {}
-        for i in range(len(seq)-k+1):
-            if all(unp[i:i+k]):
-                km = seq[i:i+k]
-                hits[km] = hits.get(km, 0) + 1
-        return hits
-    col = f"exposed_{k}mer_counts"
-    df[col] = df.apply(f, axis=1)
-    return df
-
 def add_start_codon_accessibility(df: pd.DataFrame) -> pd.DataFrame:
     '''
     If dvg_sequence contains AUG, report (aug_total, aug_unpaired, aug_unpaired_content) based on structure.
@@ -2902,22 +3017,16 @@ def _normal_int(mu: float, sigma: float) -> int:
     """
     return int(round(random.gauss(mu, sigma)))
 
+# TODO #
 def generate_candidates(
     candidates_number: int,
     strain: str,
     segment: str,
     full_seq_len: int,
-    ) -> List[Tuple[str, str, int, int, str, str, str, str]]:
+    ) -> List[Tuple[str, str, int, int, str, str, str, str, str, str, str, str, str]]:
     """
 
     """
-    # Ensure global SEED is available and reproducibility uses it
-    try:
-        _ = SEED  # noqa: F821
-    except NameError as e:
-        raise NameError("global SEED must be defined before calling generate_candidates.") from e
-    random.seed(SEED)
-
     if full_seq_len < 2:
         raise ValueError("full_seq_len must be at least 2.")
     if candidates_number < 0:
@@ -2930,9 +3039,16 @@ def generate_candidates(
                          "PCR & cDNA", "RT-PCR & cDNA", "PolyA & PCR", "other"]
     library_source = ["GENOMIC", "TRANSCRIPTOMIC", "VIRAL RNA",
                       "TRANSCRIPTOMIC SINGLE CELL & VIRAL RNA", "OTHER", "VIRAL RNA & OTHER"]
+    cells = ["A549", "human", "MDCK", "mouse", "A549 & HBEpC", 
+             "A549 & HEK293FT & MRC-5 & WI-38 VA-13"]
+    cellular_localization = ["mixed", "extracellular", "intracellular", ""]
+    cellular_resolution = ["mixed", "single", "bulk", ""]
+    time_point = ["mixed", "multiple", "single", ""]
+    max_time = ["mixed", "12", "24", "48", "84", ""]
 
     # Pre-cycle each metadata feature to length candidates_number
-    metadata_features = [system_types, library_layout, library_selection, library_source]
+    metadata_features = [system_types, library_layout, library_selection, library_source, cells, 
+                         cellular_localization, cellular_resolution, time_point, max_time]
     cycle_metadata_features: List[List[str]] = []
     for meta in metadata_features:
         cycle_metadata_features.append([meta[i % len(meta)] for i in range(candidates_number)])
@@ -2944,7 +3060,7 @@ def generate_candidates(
     start_std = max(1.0, full_seq_len / 20.0)
     end_std   = max(1.0, full_seq_len / 20.0)
 
-    results: List[Tuple[str, str, int, int, str, str, str, str]] = []
+    results: List[Tuple[str, str, int, int, str, str, str, str, str, str, str, str, str]] = []
 
     for i in range(candidates_number):
         # START: bounded-normal via clamping
@@ -2978,10 +3094,16 @@ def generate_candidates(
             cycle_metadata_features[1][i],
             cycle_metadata_features[2][i],
             cycle_metadata_features[3][i],
+            cycle_metadata_features[4][i],
+            cycle_metadata_features[5][i],
+            cycle_metadata_features[6][i],
+            cycle_metadata_features[7][i],
+            cycle_metadata_features[8][i],
         ))
 
     return results
 
+# TODO #
 def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
     """
     Build a DataFrame from candidate deletion specs.
@@ -2999,14 +3121,19 @@ def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
             library_layout = "other"
             library_selection = "other"
             library_source = "other"
-        elif len(cand) == 8:
+            cells = "other"
+            cellular_localization = "other"
+            cellular_resolution = "other" 
+            time_point = "other"
+            max_time = "other"
+        elif len(cand) == 13:
             (strain, seg, start, end,
-             system_type, library_layout, library_selection, library_source) = cand
+             system_type, library_layout, library_selection, library_source, cells, 
+                         cellular_localization, cellular_resolution, time_point, max_time) = cand
         else:
             raise ValueError(
                 "Each candidate must be a 4-tuple "
-                "(strain, seg, start, end) or an 8-tuple "
-                "(strain, seg, start, end, system_type, library_layout, library_selection, library_source)."
+                "(strain, seg, start, end) or an 13-tuple "
             )
 
         seq = get_sequence(strain, seg)
@@ -3033,6 +3160,11 @@ def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
             "library_layout": library_layout,
             "library_selection": library_selection,
             "library_source": library_source,
+            "cells": cells,
+            "cellular_localization": cellular_localization,
+            "cellular_resolution": cellular_resolution,
+            "time_point": time_point,
+            "max_time": max_time,
             "isize": isize,
             "full_seq": seq,
             "deleted_sequence": deleted,
@@ -3042,6 +3174,7 @@ def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
     cols = [
         "Segment", "Start", "End", "NGS_read_count", "key",
         "Strain", "system_type", "library_layout", "library_selection", "library_source",
+        "cells", "cellular_localization", "cellular_resolution", "time_point", "max_time",
         "isize", "full_seq", "deleted_sequence", "seq_around_deletion_junction"
         ]
     df = pd.DataFrame.from_records(records, columns=cols)
@@ -3056,6 +3189,11 @@ def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
         "library_layout": "string",
         "library_selection": "string",
         "library_source": "string",
+        "cells": "string",
+        "cellular_localization": "string",
+        "cellular_resolution": "string",
+        "time_point": "string",
+        "max_time": "string",
         "isize": "int64",
         "full_seq": "string",
         "deleted_sequence": "string",
@@ -3430,45 +3568,4 @@ def insert_pseudo_motif(
 
     return df_mod, skipped_count
 
-######################
-### direct repeats ###
-######################
 
-### direct repeats ###
-
-def cap_direct_repeat_length(df: pd.DataFrame, cap: int = 5):
-    for index, row in df.iterrows():
-        direct_repeat_length = row["direct_repeat_length"]
-        if direct_repeat_length > cap:
-            df.loc[index, "direct_repeat_length"] = cap
-    return df
-
-def add_direct_repeat_length(df: pd.DataFrame):
-    for index, row in df.iterrows():
-        seq = row["full_seq"]
-        start = row["Start"]
-        end = row["End"] - 1
-        direct_repeat_length = 0
-
-        while start > 0 and seq[start - 1] == seq[end - 1]:
-            direct_repeat_length = direct_repeat_length + 1
-            start = start - 1
-            end = end - 1
-        df.loc[index, "direct_repeat_length"] = direct_repeat_length
-
-    df["direct_repeat_length"] = df["direct_repeat_length"].astype(int)
-    return df
-
-######################
-### one hot encode ###
-######################
-
-### one hot encode ###
-
-def one_hot_encode(seq, max_len=3000):
-    base_map = {'A': [1,0,0,0], 'U': [0,1,0,0], 'C': [0,0,1,0], 'G': [0,0,0,1], 'X': [0,0,0,0]}
-    seq = seq.upper().replace('T', 'U')[:max_len]
-    encoded = [base_map.get(b, [0,0,0,0]) for b in seq]
-    while len(encoded) < max_len:
-        encoded.append([0,0,0,0])
-    return encoded

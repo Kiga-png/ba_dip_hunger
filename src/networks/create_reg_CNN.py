@@ -29,11 +29,11 @@ import shap
 
 ### settings ###
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
+DATAPATH = os.path.join(RESULTSPATH, "preprocess")
 RESULTSPATH = os.path.join(RESULTSPATH, "networks")
 
 VERSION = "0"
 KMER_SIZE = 3
-THRESHOLD = True  # unused in regression, kept for compatibility
 
 MARKED = 1
 DROP_X = 0
@@ -47,8 +47,8 @@ BEST_MODEL = 0
 ###########
 
 ### load & save ###
-folder = 'training'
-subfolder = 'pri'
+folder = 'pooled'
+subfolder = 'training'
 
 data = 'IAV'
 
@@ -61,7 +61,7 @@ intersects = 'median'
 
 motif_length = 3
 fname = f'motif_length_{motif_length}'
-read_path = os.path.join(RESULTSPATH, folder, subfolder, data, strain, segment, intersects)
+read_path = os.path.join(DATAPATH, folder, subfolder, data, strain, segment, intersects)
 df = pd.read_csv(os.path.join(read_path, f'{fname}.csv'), keep_default_na=False, na_values=[])
 
 if MARKED:
@@ -73,7 +73,7 @@ else:
 
 NAME_MOD = f'{VERSION}_motif_length_{motif_length}'
 
-save_path = os.path.join(RESULTSPATH, 'CNN', subfolder, data, strain, segment, intersects)
+save_path = os.path.join(RESULTSPATH, 'CNN', 'kmer', data, strain, segment, intersects)
 os.makedirs(save_path, exist_ok=True)
 
 ### target (regression) ###
@@ -125,7 +125,8 @@ categorical_cols = []
 
 # categorical_cols += ["Segment", "Strain"]
 categorical_cols += ['system_type', 'library_layout', 'library_selection', 'library_source', 'subtype']
-# categorical_cols += ['cells', 'cellular_localization', 'cellular_resolution', 'time_point', 'max_time']
+# categorical_cols += ['Localization', 'Resolution', 'Cells', 'Host']
+# categorical_cols += ['Time', 'MOI']
 # categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
 # categorical_cols += ["full_symmetry"]

@@ -8,7 +8,7 @@ sys.path.insert(0, "..")
 
 from utils import get_dataset_names, load_all
 from utils import manage_specifiers, load_all_preprocessed, merge_missing_features, save_df
-from utils import balance_by_threshold, reduce_rows
+from utils import balance_by_threshold
 
 from utils import RESULTSPATH, SEED, DATASET_STRAIN_DICT
 from utils import COLORS, DECIMALS
@@ -16,7 +16,7 @@ from utils import COLORS, DECIMALS
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.metrics import roc_auc_score, roc_curve, f1_score
+from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
@@ -33,15 +33,11 @@ DATAPATH = os.path.join(RESULTSPATH, "preprocess")
 RESULTSPATH = os.path.join(RESULTSPATH, "networks")
 
 VERSION = "0"
-KMER_SIZE = 3
-THRESHOLD = 1.00
 
 MARKED = 1
 DROP_X = 0
 SHAP_CAT = 1
-STRUCTURE = 0
-BALANCE = 0
-MAX_NUMBER = 25000
+STRUCTURE = 1 
 
 BEST_MODEL = 0
 
@@ -50,16 +46,17 @@ BEST_MODEL = 0
 ###########
 
 ### load & save ###
-folder = 'unpooled'
+folder = 'pooled'
 subfolder = 'training'
 
 data = 'IAV'
 
 strain = 'PR8'
+### for single dataset ###
 # strain = DATASET_STRAIN_DICT[data]
 
 segment = 'PB1'
-intersects = 'median with metadata'
+intersects = 'median'
 
 motif_length = 3
 fname = f'motif_length_{motif_length}'
@@ -73,18 +70,13 @@ else:
     key_sequence = "dvg_sequence"
     key_structure = "structure"
 
-df = reduce_rows(df, MAX_NUMBER)
-
-if BALANCE:
-    df = balance_by_threshold(df, 'norm_log_NGS_read_count', THRESHOLD)
-
 NAME_MOD = f'{VERSION}_motif_length_{motif_length}'
 
-save_path_model = os.path.join(RESULTSPATH, 'CNN', 'kmer', data, strain, segment, intersects)
-os.makedirs(save_path_model, exist_ok=True)
+save_path = os.path.join(RESULTSPATH, 'CNN', 'oh', data, strain, segment, intersects)
+os.makedirs(save_path, exist_ok=True)
 
-### key parameter ####
-df["label"] = (df["norm_log_NGS_read_count"] > THRESHOLD).astype(int)
+### target (regression) ###
+y_cont = df["norm_log_NGS_read_count"].values
 
 ### k-mer token ###
 def kmer_tokenize(seq, k):
@@ -94,47 +86,90 @@ def kmer_tokenize(seq, k):
         return [seq[i:i + k] for i in range(len(seq) - k + 1)]
 
 ### sequence to integer ###
-vocab = set()
-df["kmer_seq"] = df[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-df["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
-vocab = sorted(vocab)
-token2idx = {k: i + 1 for i, k in enumerate(vocab)}
+df["char_seq"] = df[key_sequence].apply(lambda s: list(s))
 
-def encode_seq(kmers):
-    return [token2idx[k] for k in kmers if k in token2idx]
-
-df["encoded_seq"] = df["kmer_seq"].apply(encode_seq)
-maxlen = df["encoded_seq"].apply(len).max()
-X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=maxlen)
-
-### sec structure ###
-if STRUCTURE:
-    vocab2 = set()
-    df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-    df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
-    vocab2 = sorted(vocab2)
-    token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
-
-    def encode_str(kmers):
-        return [token2idx2[k] for k in kmers if k in token2idx2]
-
-    df["encoded_str"] = df["kmer_str"].apply(encode_str)
-    maxlen2 = df["encoded_str"].apply(len).max()
-    X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
+if DROP_X:
+    SEQ_ALPHABET = ['A', 'C', 'G', 'U']
 else:
+    SEQ_ALPHABET = ['A', 'C', 'G', 'U', 'X']
+seq_ohe_encoder = OneHotEncoder(
+    sparse=False,
+    handle_unknown="ignore",
+    categories=[SEQ_ALPHABET]
+)
+seq_ohe_encoder.fit(np.array(SEQ_ALPHABET).reshape(-1, 1))
+
+def encode_seq_onehot(chars):
+    arr = seq_ohe_encoder.transform(np.array(chars).reshape(-1, 1)).astype(np.float16)
+    return arr
+
+df["encoded_seq"] = df["char_seq"].apply(encode_seq_onehot)
+maxlen = df["encoded_seq"].apply(lambda x: x.shape[0]).max()
+seq_feat_dim = df["encoded_seq"].iloc[0].shape[1]
+
+def pad_onehot(arr, maxlen, feat_dim):
+    pad_len = maxlen - arr.shape[0]
+    if pad_len > 0:
+        pad_block = np.zeros((pad_len, feat_dim), dtype=np.float16)
+        return np.vstack([arr, pad_block])
+    else:
+        return arr[:maxlen, :].astype(np.float16)
+
+X_seq_padded = df["encoded_seq"].apply(lambda x: pad_onehot(x, maxlen, seq_feat_dim))
+
+### secondary structure (OPTIONAL) ###
+if STRUCTURE:
+    df["char_str"] = df[key_structure].apply(lambda s: list(s))
+    if DROP_X:
+        STR_ALPHABET = ['(', ')', '.']
+    else:
+        STR_ALPHABET = ['(', ')', '.', 'X']
+    str_ohe_encoder = OneHotEncoder(
+        sparse=False,
+        handle_unknown="ignore",
+        categories=[STR_ALPHABET]
+    )
+    str_ohe_encoder.fit(np.array(STR_ALPHABET).reshape(-1, 1))
+
+    def encode_str_onehot(chars):
+        arr = str_ohe_encoder.transform(np.array(chars).reshape(-1, 1)).astype(np.float16)
+        return arr
+
+    df["encoded_str"] = df["char_str"].apply(encode_str_onehot)
+    maxlen2 = df["encoded_str"].apply(lambda x: x.shape[0]).max()
+    str_feat_dim = df["encoded_str"].iloc[0].shape[1]
+
+    def pad_onehot2(arr, maxlen2, feat_dim2):
+        pad_len = maxlen2 - arr.shape[0]
+        if pad_len > 0:
+            pad_block = np.zeros((pad_len, feat_dim2), dtype=np.float16)
+            return np.vstack([arr, pad_block])
+        else:
+            return arr[:maxlen2, :].astype(np.float16)
+
+    X_str_padded = df["encoded_str"].apply(lambda x: pad_onehot2(x, maxlen2, str_feat_dim))
+
     vocab2 = []
     token2idx2 = {}
+else:
+    X_str_padded = None
+    str_ohe_encoder = None
     maxlen2 = 0
-    X_str = None
+    str_feat_dim = 0
+    vocab2 = []
+    token2idx2 = {}
+
+vocab = []
+token2idx = {}
 
 ### categorical features ###
 categorical_cols = []
 
 # categorical_cols += ["Segment", "Strain"]
 categorical_cols += ['system_type', 'library_layout', 'library_selection', 'library_source', 'subtype']
-categorical_cols += ['Localization', 'Resolution', 'Cells', 'Host']
+# categorical_cols += ['Localization', 'Resolution', 'Cells', 'Host']
 # categorical_cols += ['Time', 'MOI']
-categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
+# categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
 # categorical_cols += ["full_symmetry"]
 # categorical_cols += [col for col in df.columns if re.search(r"motif\d+", col)]
@@ -143,6 +178,7 @@ categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 ### test for dataset dependencies ###
 # categorical_cols += ["dataset_name"]
 
+### keep compatibility with different sklearn versions ###
 try:
     encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
 except TypeError:
@@ -154,9 +190,9 @@ numerical_cols = []
 
 # numerical_cols += ["Start", "End"]
 # numerical_cols += ["full_seq_length"]
-# numerical_cols += ["dvg_length"]
-numerical_cols += ["deletion_length"]
-numerical_cols += ["5_end_length", "3_end_length"]
+numerical_cols += ["dvg_length"]
+# numerical_cols += ["deletion_length"]
+# numerical_cols += ["5_end_length", "3_end_length"]
 
 # numerical_cols += ["GC_content", "AU_content"]
 # numerical_cols += ["UpA_content", "CpG_content"]
@@ -194,31 +230,45 @@ X_num = scaler.fit_transform(df[numerical_cols])
 
 ### combine features ###
 X_other = np.hstack([X_cat, X_num])
-y = df["label"].values
 
 ### train/test split ###
+idx_all = np.arange(len(df))
+train_idx, test_idx = train_test_split(
+    idx_all,
+    test_size=0.2,
+    random_state=SEED
+)
+
+def stack_subset(padded_series, indices):
+    return np.stack([padded_series.iloc[i] for i in indices], axis=0)
+
+X_seq_train = stack_subset(X_seq_padded, train_idx)
+X_seq_test  = stack_subset(X_seq_padded, test_idx)
+
 if STRUCTURE:
-    X_seq_train, X_seq_test, X_str_train, X_str_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
-        X_seq, X_str, X_other, y, test_size=0.2, random_state=SEED
-    )
+    X_str_train = stack_subset(X_str_padded, train_idx)
+    X_str_test  = stack_subset(X_str_padded, test_idx)
+    X_other_train = X_other[train_idx]
+    X_other_test  = X_other[test_idx]
+    y_train = y_cont[train_idx]
+    y_test  = y_cont[test_idx]
 else:
-    X_seq_train, X_seq_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
-        X_seq, X_other, y, test_size=0.2, random_state=SEED
-    )
+    X_other_train = X_other[train_idx]
+    X_other_test  = X_other[test_idx]
+    y_train = y_cont[train_idx]
+    y_test  = y_cont[test_idx]
 
 ### model ###
-seq_input = layers.Input(shape=(maxlen,))
-x = layers.Embedding(input_dim=len(token2idx) + 1, output_dim=32)(seq_input)
-x = layers.Conv1D(64, 5, activation='relu')(x)
+seq_input = layers.Input(shape=(maxlen, seq_feat_dim))
+x = layers.Conv1D(64, 5, activation='relu')(seq_input)
 x = layers.MaxPooling1D(2)(x)
 x = layers.Flatten()(x)
 
 other_input = layers.Input(shape=(X_other.shape[1],))
 
 if STRUCTURE:
-    str_input = layers.Input(shape=(maxlen2,))
-    x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=32)(str_input)
-    x2 = layers.Conv1D(64, 5, activation='relu')(x2)
+    str_input = layers.Input(shape=(maxlen2, str_feat_dim))
+    x2 = layers.Conv1D(64, 5, activation='relu')(str_input)
     x2 = layers.MaxPooling1D(2)(x2)
     x2 = layers.Flatten()(x2)
 
@@ -230,13 +280,13 @@ else:
 
 dense = layers.Dense(64, activation='relu')(concat)
 dense = layers.Dropout(0.3)(dense)
-output = layers.Dense(1, activation='sigmoid')(dense)
+output = layers.Dense(1, activation='linear')(dense)
 
 model = models.Model(inputs=inputs, outputs=output)
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer='adam', loss='mse', metrics=['mae'])
 
 ### callbacks ###
-best_model_path = os.path.join(save_path_model, f"{NAME_MOD}_best_model.h5")
+best_model_path = os.path.join(save_path, f"{NAME_MOD}_best_model.h5")
 checkpoint_cb = callbacks.ModelCheckpoint(
     best_model_path, save_best_only=True, monitor="val_loss", mode="min"
 )
@@ -260,21 +310,23 @@ else:
     )
 
 ### save ###
-final_model_path = os.path.join(save_path_model, f"{NAME_MOD}_final_model.h5")
+final_model_path = os.path.join(save_path, f"{NAME_MOD}_final_model.h5")
 model.save(final_model_path)
 print(f"\n✔ models saved")
 
-scaler_path = os.path.join(save_path_model, f"{NAME_MOD}_scaler.save")
+scaler_path = os.path.join(save_path, f"{NAME_MOD}_scaler.save")
 joblib.dump(scaler, scaler_path)
 print(f"✔ scaler saved")
 
 ### artifacts ###
-preproc_path = os.path.join(save_path_model, f"{NAME_MOD}_preproc.joblib")
+preproc_path = os.path.join(save_path, f"{NAME_MOD}_preproc.joblib")
 joblib.dump({
     "encoder": encoder,
     "scaler": scaler,
     "token2idx": token2idx,
     "token2idx2": token2idx2,
+    "seq_ohe_encoder": seq_ohe_encoder,
+    "str_ohe_encoder": str_ohe_encoder,
     "maxlen": int(maxlen),
     "maxlen2": int(maxlen2),
     "categorical_cols": categorical_cols,
@@ -287,56 +339,54 @@ print("✔ preprocessing artifacts saved")
 ### visuals ###
 ###############
 
-save_path_vis = os.path.join(RESULTSPATH, 'visuals', subfolder, data, strain, segment, intersects)
-os.makedirs(save_path_vis, exist_ok=True)
+save_path = os.path.join(RESULTSPATH, 'visuals', subfolder, data, strain, segment, intersects)
+os.makedirs(save_path, exist_ok=True)
 
 if BEST_MODEL:
     model_path = best_model_path
 else:
     model_path = final_model_path
 
-### ROC & F1 ###
+### scatter & R2 ###
 plt.style.use('seaborn-darkgrid')
 plt.rc('font', size=12)
 
 model.load_weights(model_path)
 
 if STRUCTURE:
-    y_pred_proba = model.predict([X_seq_test, X_str_test, X_other_test]).ravel()
+    y_pred = model.predict([X_seq_test, X_str_test, X_other_test]).ravel()
 else:
-    y_pred_proba = model.predict([X_seq_test, X_other_test]).ravel()
+    y_pred = model.predict([X_seq_test, X_other_test]).ravel()
 
-fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
-auc_score = roc_auc_score(y_test, y_pred_proba)
-auc_score = round(auc_score, DECIMALS)
+r2 = r2_score(y_test, y_pred)
+r2 = round(r2, DECIMALS)
 
-roc_color = COLORS[8]
+scatter_color = COLORS[8]
 
-y_pred_label = (y_pred_proba >= 0.5).astype(int)
-f1 = f1_score(y_test, y_pred_label)
-f1 = round(f1, DECIMALS)
-
-title_name = f'ROC - curve plot (F1={f1})'
+title_name = f'prediction - scatter plot (R²={r2})'
 title_name += f'\ndata: {data}'
 title_name += f', strain: {strain}'
 title_name += f', segment: {segment}'
 title_name += f', {intersects} intersects'
 dvg_count = df.shape[0]
 title_name += f' (n={dvg_count})'
+if not STRUCTURE:
+    title_name += ' [no structure]'
 
 plt.figure()
-plt.plot(fpr, tpr, label=f"ROC curve (AUC={auc_score})", linewidth=2, color=roc_color)
-plt.plot([0, 1], [0, 1], linestyle="--", linewidth=1.5, color="grey")
-plt.xlabel("false positive rate")
-plt.ylabel("true positive rate")
+plt.scatter(y_test, y_pred, s=12, alpha=0.7, edgecolors='white', color=scatter_color)
+min_val = min(np.min(y_test), np.min(y_pred))
+max_val = max(np.max(y_test), np.max(y_pred))
+plt.plot([min_val, max_val], [min_val, max_val], linestyle="--", linewidth=1.5, color="grey")
+plt.xlabel("true value (norm_log_NGS_read_count)")
+plt.ylabel("predicted value (norm_log_NGS_read_count)")
 plt.title(title_name)
-plt.legend(loc="lower right")
 plt.grid(True)
 
-roc_path = os.path.join(save_path_vis, f"{NAME_MOD}_roc.png")
-plt.savefig(roc_path, dpi=300, bbox_inches="tight")
+scatter_path = os.path.join(save_path, f"{NAME_MOD}_r2_scatter.png")
+plt.savefig(scatter_path, dpi=300, bbox_inches="tight")
 plt.close()
-print(f"\n✔ ROC curve saved")
+print(f"\n✔ R² scatter plot saved")
 
 ### SHAP ###
 if SHAP_CAT:
@@ -396,6 +446,8 @@ title_name += f', segment: {segment}'
 title_name += f', {intersects} intersects'
 dvg_count = df.shape[0]
 title_name += f' (n={dvg_count})'
+if not STRUCTURE:
+    title_name += ' [no structure]'
 
 plt.figure(figsize=(10, 6))
 plt.barh(importance_df["feature"], importance_df["importance"], color=bar_color, edgecolor='white', linewidth=1)
@@ -406,7 +458,7 @@ plt.gca().invert_yaxis()
 plt.tight_layout()
 plt.grid(True, axis="x")
 
-shap_path = os.path.join(save_path_vis, f"{NAME_MOD}_shap.png")
+shap_path = os.path.join(save_path, f"{NAME_MOD}_shap.png")
 plt.savefig(shap_path, dpi=300, bbox_inches="tight")
 plt.close()
 print("✔ SHAP bar chart saved")

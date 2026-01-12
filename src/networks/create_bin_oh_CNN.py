@@ -26,6 +26,7 @@ import re
 
 import scipy.sparse as sp
 import shap
+import itertools
 
 ### settings ###
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
@@ -33,13 +34,12 @@ DATAPATH = os.path.join(RESULTSPATH, "preprocess")
 RESULTSPATH = os.path.join(RESULTSPATH, "networks")
 
 VERSION = "0"
-KMER_SIZE = 3
-THRESHOLD = 1.00
+THRESHOLD = 0.43
 
 MARKED = 1
 DROP_X = 0
 SHAP_CAT = 1
-STRUCTURE = 0
+STRUCTURE = 1
 BALANCE = 0
 MAX_NUMBER = 25000
 
@@ -50,7 +50,7 @@ BEST_MODEL = 0
 ###########
 
 ### load & save ###
-folder = 'unpooled'
+folder = 'pooled'
 subfolder = 'training'
 
 data = 'IAV'
@@ -59,7 +59,7 @@ strain = 'PR8'
 # strain = DATASET_STRAIN_DICT[data]
 
 segment = 'PB1'
-intersects = 'median with metadata'
+intersects = 'median'
 
 motif_length = 3
 fname = f'motif_length_{motif_length}'
@@ -80,7 +80,7 @@ if BALANCE:
 
 NAME_MOD = f'{VERSION}_motif_length_{motif_length}'
 
-save_path_model = os.path.join(RESULTSPATH, 'CNN', 'kmer', data, strain, segment, intersects)
+save_path_model = os.path.join(RESULTSPATH, 'CNN', 'oh', data, strain, segment, intersects)
 os.makedirs(save_path_model, exist_ok=True)
 
 ### key parameter ####
@@ -94,45 +94,81 @@ def kmer_tokenize(seq, k):
         return [seq[i:i + k] for i in range(len(seq) - k + 1)]
 
 ### sequence to integer ###
-vocab = set()
-df["kmer_seq"] = df[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-df["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
-vocab = sorted(vocab)
-token2idx = {k: i + 1 for i, k in enumerate(vocab)}
+df["char_seq"] = df[key_sequence].apply(lambda s: list(s))
 
-def encode_seq(kmers):
-    return [token2idx[k] for k in kmers if k in token2idx]
+if DROP_X:
+    SEQ_ALPHABET = ['A', 'C', 'G', 'U']
+else:
+    SEQ_ALPHABET = ['A', 'C', 'G', 'U', 'X']
+seq_ohe_encoder = OneHotEncoder(
+    sparse=False,
+    handle_unknown="ignore",
+    categories=[SEQ_ALPHABET]
+)
+seq_ohe_encoder.fit(np.array(SEQ_ALPHABET).reshape(-1, 1))
 
-df["encoded_seq"] = df["kmer_seq"].apply(encode_seq)
-maxlen = df["encoded_seq"].apply(len).max()
-X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=maxlen)
+def encode_seq_onehot(chars):
+    arr = seq_ohe_encoder.transform(np.array(chars).reshape(-1, 1)).astype(np.float16)  # (len_seq, len(SEQ_ALPHABET))
+    return arr
+
+df["encoded_seq"] = df["char_seq"].apply(encode_seq_onehot)
+maxlen = df["encoded_seq"].apply(lambda x: x.shape[0]).max()
+seq_feat_dim = df["encoded_seq"].iloc[0].shape[1]
+
+def pad_onehot(arr, maxlen, feat_dim):
+    pad_len = maxlen - arr.shape[0]
+    if pad_len > 0:
+        pad_block = np.zeros((pad_len, feat_dim), dtype=np.float16)
+        return np.vstack([arr, pad_block])
+    else:
+        return arr[:maxlen, :].astype(np.float16)
+
+X_seq_padded = df["encoded_seq"].apply(lambda x: pad_onehot(x, maxlen, seq_feat_dim))
 
 ### sec structure ###
 if STRUCTURE:
-    vocab2 = set()
-    df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-    df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
-    vocab2 = sorted(vocab2)
-    token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
+    df["char_str"] = df[key_structure].apply(lambda s: list(s))
 
-    def encode_str(kmers):
-        return [token2idx2[k] for k in kmers if k in token2idx2]
+    if DROP_X:
+        STR_ALPHABET = ['(', ')', '.']
+    else:
+        STR_ALPHABET = ['(', ')', '.', 'X']
+    str_ohe_encoder = OneHotEncoder(
+        sparse=False,
+        handle_unknown="ignore",
+        categories=[STR_ALPHABET]
+    )
+    str_ohe_encoder.fit(np.array(STR_ALPHABET).reshape(-1, 1))
 
-    df["encoded_str"] = df["kmer_str"].apply(encode_str)
-    maxlen2 = df["encoded_str"].apply(len).max()
-    X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
+    def encode_str_onehot(chars):
+        arr = str_ohe_encoder.transform(np.array(chars).reshape(-1, 1)).astype(np.float16)  # (len_str, len(STR_ALPHABET))
+        return arr
+
+    df["encoded_str"] = df["char_str"].apply(encode_str_onehot)
+    maxlen2 = df["encoded_str"].apply(lambda x: x.shape[0]).max()
+    str_feat_dim = df["encoded_str"].iloc[0].shape[1]
+
+    def pad_onehot2(arr, maxlen2, feat_dim2):
+        pad_len = maxlen2 - arr.shape[0]
+        if pad_len > 0:
+            pad_block = np.zeros((pad_len, feat_dim2), dtype=np.float16)
+            return np.vstack([arr, pad_block])
+        else:
+            return arr[:maxlen2, :].astype(np.float16)
+
+    X_str_padded = df["encoded_str"].apply(lambda x: pad_onehot2(x, maxlen2, str_feat_dim))
 else:
-    vocab2 = []
-    token2idx2 = {}
+    X_str_padded = None
+    str_ohe_encoder = None
     maxlen2 = 0
-    X_str = None
+    str_feat_dim = 0
 
 ### categorical features ###
 categorical_cols = []
 
 # categorical_cols += ["Segment", "Strain"]
 categorical_cols += ['system_type', 'library_layout', 'library_selection', 'library_source', 'subtype']
-categorical_cols += ['Localization', 'Resolution', 'Cells', 'Host']
+# categorical_cols += ['Localization', 'Resolution', 'Cells', 'Host']
 # categorical_cols += ['Time', 'MOI']
 categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
@@ -197,28 +233,44 @@ X_other = np.hstack([X_cat, X_num])
 y = df["label"].values
 
 ### train/test split ###
+idx_all = np.arange(len(df))
+train_idx, test_idx = train_test_split(
+    idx_all,
+    test_size=0.2,
+    random_state=SEED,
+    stratify=y
+)
+
+def stack_subset(padded_series, indices):
+    return np.stack([padded_series.iloc[i] for i in indices], axis=0)
+
+X_seq_train = stack_subset(X_seq_padded, train_idx)
+X_seq_test  = stack_subset(X_seq_padded, test_idx)
+
 if STRUCTURE:
-    X_seq_train, X_seq_test, X_str_train, X_str_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
-        X_seq, X_str, X_other, y, test_size=0.2, random_state=SEED
-    )
+    X_str_train = stack_subset(X_str_padded, train_idx)
+    X_str_test  = stack_subset(X_str_padded, test_idx)
+    X_other_train = X_other[train_idx]
+    X_other_test  = X_other[test_idx]
+    y_train = y[train_idx]
+    y_test  = y[test_idx]
 else:
-    X_seq_train, X_seq_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
-        X_seq, X_other, y, test_size=0.2, random_state=SEED
-    )
+    X_other_train = X_other[train_idx]
+    X_other_test  = X_other[test_idx]
+    y_train = y[train_idx]
+    y_test  = y[test_idx]
 
 ### model ###
-seq_input = layers.Input(shape=(maxlen,))
-x = layers.Embedding(input_dim=len(token2idx) + 1, output_dim=32)(seq_input)
-x = layers.Conv1D(64, 5, activation='relu')(x)
+seq_input = layers.Input(shape=(maxlen, seq_feat_dim))
+x = layers.Conv1D(64, 5, activation='relu')(seq_input)
 x = layers.MaxPooling1D(2)(x)
 x = layers.Flatten()(x)
 
 other_input = layers.Input(shape=(X_other.shape[1],))
 
 if STRUCTURE:
-    str_input = layers.Input(shape=(maxlen2,))
-    x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=32)(str_input)
-    x2 = layers.Conv1D(64, 5, activation='relu')(x2)
+    str_input = layers.Input(shape=(maxlen2, str_feat_dim))
+    x2 = layers.Conv1D(64, 5, activation='relu')(str_input)
     x2 = layers.MaxPooling1D(2)(x2)
     x2 = layers.Flatten()(x2)
 
@@ -273,8 +325,8 @@ preproc_path = os.path.join(save_path_model, f"{NAME_MOD}_preproc.joblib")
 joblib.dump({
     "encoder": encoder,
     "scaler": scaler,
-    "token2idx": token2idx,
-    "token2idx2": token2idx2,
+    "seq_ohe_encoder": seq_ohe_encoder,
+    "str_ohe_encoder": str_ohe_encoder,
     "maxlen": int(maxlen),
     "maxlen2": int(maxlen2),
     "categorical_cols": categorical_cols,

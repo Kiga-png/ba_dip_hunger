@@ -9,20 +9,96 @@ import pandas as pd
 
 sys.path.insert(0, '..')
 
-from utils import get_dataset_names, get_sequence, load_all
-from utils import get_strains, manage_specifiers, manage_separate_specifiers, load_preprocessed_dataset, load_all_preprocessed, merge_missing_features, save_df
+from utils import load_all, get_dataset_names, get_sequence
+
+from utils import get_strains, manage_specifiers, manage_separate_specifiers, load_all_unpooled, load_all_preprocessed,  save_df
 from utils import add_metadata_features
 from utils import manage_intersects, add_ikey, set_intersect_proportion
 from utils import rename_feature, split_by_number, add_log_feature, add_norm_feature, add_feature_percentile_rank, add_separate_ngs_features
-from utils import add_dvg_sequence, add_sec_features
 
 from utils import generate_motifs, add_site_motifs, add_lin_reg_rows, compute_full_seq_motif_freq_df, insert_pseudo_motif
 from utils import compute_percentile_rank_count_df, compute_feature_count_df, compute_feature_freq_df, subtract_freq_dfs
 from utils import compute_feature_count_heatmap_df, compute_feature_freq_heatmap_df
 from utils import build_df, generate_candidates
 
+from utils import (
+    add_dvg_sequence,
+    add_deletion_length,
+    add_region_lengths,
+    add_dvg_length,
+    add_full_seq_length,
+    add_marked_dvg_sequence,
+)
+
+from utils import (
+    add_direct_repeat_length,
+    cap_direct_repeat_length,
+)
+
+from utils import (
+    add_gc_content,
+    add_au_content,
+    add_upa_content,
+    add_cpg_content,
+    add_gc_skew,
+    add_sequence_entropy,
+    add_poly_run_features,
+    add_palindrome_density,
+    add_orf_features,
+    add_kmer_richness,
+    add_codon_usage_bias,
+)
+
+from utils import (
+    add_sec_features,
+    add_marked_structure,
+    add_max_symmetry,
+)
+
+from utils import (
+    add_gc_content,
+    add_au_content,
+    add_upa_content,
+    add_cpg_content,
+    add_gc_skew,
+    add_sequence_entropy,
+    add_poly_run_features,
+    add_palindrome_density,
+    add_orf_features,
+    add_kmer_richness,
+    add_codon_usage_bias,
+)
+
+from utils import (
+    add_bp_count,
+    add_bp_density,
+    add_unpaired_count,
+    add_unpaired_density,
+    add_stem_count,
+    add_stem_length_stats,
+    add_hairpin_count,
+    add_hairpin_size_stats,
+    add_external_unpaired_density,
+    add_pair_span_stats,
+    add_free_end_lengths,
+    add_branch_point_count,
+    )
+
+from utils import (
+    add_gc_overall,
+    add_gc_paired_unpaired,
+    add_canonical_pair_stats,
+    add_stem_end_pair_enrichment,
+    add_hairpin_closing_pair_content,
+    add_tetraloop_motif_counts,
+    add_loop_au_content,
+    add_tail_gc_content,
+    add_start_codon_accessibility,
+)
+
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
-from utils import COLORS, STRAIN_SUBTYPE_DICT
+from utils import K_MER_LENGTH, PALINDROMIC_K_MER_LENGTH, DIRECT_REPEAT_LEGTH_CAP
+from utils import STRAIN_SUBTYPE_DICT
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, 'preprocess')
@@ -33,16 +109,37 @@ RESULTSPATH = os.path.join(RESULTSPATH, 'preprocess')
 
 ### base features ###
 
-def preprocess_base_features(dfnames: list, dfs: list):
+def preprocess_base_features(dfnames: list, dfs: list, folder: str):
+    '''
+
+    '''
+    dfs = add_metadata_features(dfnames, dfs)
+
+    for dfname, df in zip(dfnames, dfs):
+        save_base_features(df, dfname, folder, 'base')
+
+### structure features ###
+
+def preprocess_structure_features(dfnames: list, dfs: list, folder: str):
     '''
 
     '''
     for dfname, df in zip(dfnames, dfs):
-        save_base_features(df, dfname, 'datasets', 'base')
+        save_structure_features(df, dfname, folder, 'structure')
 
-### pri features ###
+### training ###
 
-def preprocess_site_motif_features(dfnames: list, dfs: list, motif_length: int, split: bool, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def preprocess_site_motifs(dfnames: list, dfs: list, split: bool, folder: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+    '''
+
+    '''
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    dfs = add_separate_ngs_features(dfs, True)
+    df = pd.concat(dfs, ignore_index=True)
+
+    save_site_motifs(df, split, folder, 'training', data, strain, segment, intersects)
+
+def preprocess_reg_site_motifs(dfnames: list, dfs: list, split: bool, folder: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
@@ -51,49 +148,14 @@ def preprocess_site_motif_features(dfnames: list, dfs: list, motif_length: int, 
     dfs = add_metadata_features(dfnames, dfs)
     df = pd.concat(dfs, ignore_index=True)
 
-    save_site_motif_features(df, motif_length, split, 'combined', 'pri', data, strain, segment, intersects)
-
-def preprocess_reg_site_motif_features(dfnames: list, dfs: list, motif_length: int, split: bool, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
-    '''
-
-    '''
-    dfs = manage_separate_specifiers(dfs, data, strain, segment)
-    dfs = add_separate_ngs_features(dfs, True)
-    dfs = add_metadata_features(dfnames, dfs)
-    df = pd.concat(dfs, ignore_index=True)
-
-    save_reg_site_motif_features(df, motif_length, split, 'combined', 'pri', data, strain, segment, intersects)
-
-### sec features ###
-
-def preprocess_sec_dvg_features(dfnames: list, dfs: list):
-    '''
-
-    '''
-    for dfname, df in zip(dfnames, dfs):
-        save_sec_dvg_features(df, dfname, 'datasets', 'sec_dvg')
-
-def preprocess_sec_site_motif_features(dfnames: list, dfs: list):
-    '''
-
-    '''
-    for dfname, df in zip(dfnames, dfs):
-        save_sec_site_motif_features(df, dfname, 'datasets', 'sec_site')
-
-def preprocess_sec_combine_features(dfnames: list):
-    '''
-
-    '''
-    for dfname in dfnames:
-        save_merged_sec_features(dfname, 'datasets', 'sec')
+    save_reg_site_motifs(df, split, folder, 'training', data, strain, segment, intersects)
 
 ### pseudo ###
 
-def preprocess_pseudo_motif_features(motif_length: int, split: bool, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def preprocess_pseudo_motifs(split: bool, folder: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
-    folder = 'datasets'
     subfolder = 'base'
 
     dfnames = get_dataset_names(cutoff=40, selection=data)
@@ -105,14 +167,13 @@ def preprocess_pseudo_motif_features(motif_length: int, split: bool, data: str =
     df = pd.concat(dfs, ignore_index=True)
 
     folder = 'combined'
-    df = insert_pseudo_motif_features(df)
-    save_site_motif_features(df, motif_length, split, folder, 'pseudo_motif_ACA', data, strain, segment, intersects)
+    df = insert_pseudo_motifs(df)
+    save_site_motifs(df, split, folder, 'pseudo_motif_ACA', data, strain, segment, intersects)
 
-def preprocess_pseudo_intersect_features(motif_length: int, split: bool, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def preprocess_pseudo_intersects(split: bool, folder: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
-    folder = 'datasets'
     subfolder = 'base'
 
     dfnames = get_dataset_names(cutoff=40, selection=data)
@@ -124,24 +185,23 @@ def preprocess_pseudo_intersect_features(motif_length: int, split: bool, data: s
     df = pd.concat(dfs, ignore_index=True)
 
     folder = 'combined'
-    df10 = insert_pseudo_intersect_features(df, 0.10)
-    save_site_motif_features(df10, motif_length, split, folder, 'pseudo_intersects_10', data, strain, segment, intersects)
-    df20 = insert_pseudo_intersect_features(df, 0.20)
-    save_site_motif_features(df20, motif_length, split, folder, 'pseudo_intersects_20', data, strain, segment, intersects)
-    df30 = insert_pseudo_intersect_features(df, 0.30)
-    save_site_motif_features(df30, motif_length, split, folder, 'pseudo_intersects_30', data, strain, segment, intersects)
-    df40 = insert_pseudo_intersect_features(df, 0.40)
-    save_site_motif_features(df40, motif_length, split, folder, 'pseudo_intersects_40', data, strain, segment, intersects)
-    df50 = insert_pseudo_intersect_features(df, 0.50)
-    save_site_motif_features(df50, motif_length, split, folder, 'pseudo_intersects_50', data, strain, segment, intersects)
+    df10 = insert_pseudo_intersects(df, 0.10)
+    save_site_motifs(df10, split, folder, 'pseudo_intersects_10', data, strain, segment, intersects)
+    df20 = insert_pseudo_intersects(df, 0.20)
+    save_site_motifs(df20, split, folder, 'pseudo_intersects_20', data, strain, segment, intersects)
+    df30 = insert_pseudo_intersects(df, 0.30)
+    save_site_motifs(df30, split, folder, 'pseudo_intersects_30', data, strain, segment, intersects)
+    df40 = insert_pseudo_intersects(df, 0.40)
+    save_site_motifs(df40, split, folder, 'pseudo_intersects_40', data, strain, segment, intersects)
+    df50 = insert_pseudo_intersects(df, 0.50)
+    save_site_motifs(df50, split, folder, 'pseudo_intersects_50', data, strain, segment, intersects)
 
 ### prediction ###
 
-def preprocess_prediction_candidates(candidates: list, motif_length: int, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def preprocess_prediction_candidates(candidates: list, folder: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     """
     
     """
-    folder = 'combined'
     subfolder = 'preparation'
 
     df = build_df(candidates)
@@ -154,13 +214,12 @@ def preprocess_prediction_candidates(candidates: list, motif_length: int, data: 
     df = add_dvg_sequence(df)
     df = add_sec_features(df, 'dvg_sequence', 'structure', 'MFE')
 
-    save_reg_site_motif_features(df, motif_length, False, folder, subfolder, data, strain, segment, intersects)
+    save_site_motifs(df, False, folder, subfolder, data, strain, segment, intersects)
 
-def preprocess_prediction(motif_length: int, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def preprocess_prediction(folder: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     """
     
     """
-    folder = 'combined'
     subfolder = 'preparation'
 
     candidates = compute_candidates(1000, data, strain, segment)
@@ -175,10 +234,10 @@ def preprocess_prediction(motif_length: int, data: str = 'all', strain: str = 'a
     df = add_dvg_sequence(df)
     df = add_sec_features(df, 'dvg_sequence', 'structure', 'MFE')
 
-    save_reg_site_motif_features(df, motif_length, False, folder, subfolder, data, strain, segment, intersects)
+    save_site_motifs(df, False, folder, subfolder, data, strain, segment, intersects)
 
 ################
-### features ###
+### general ###
 ################
 
 ### base features ###
@@ -187,14 +246,83 @@ def save_base_features(df: pd.DataFrame, fname: str, folder: str, subfolder: str
     '''
 
     '''
+    ### length ###
+    df = add_dvg_sequence(df)
+    df = add_deletion_length(df)
+    df = add_region_lengths(df)
+    df = add_dvg_length(df)
+    df = add_full_seq_length(df)
+    df = add_marked_dvg_sequence(df)
+
+    ### direct repeats ###
+    df = add_direct_repeat_length(df)
+    df = cap_direct_repeat_length(df, DIRECT_REPEAT_LEGTH_CAP)
+
+    ### pri ###
+    df = add_gc_content(df)
+    df = add_au_content(df)
+    df = add_upa_content(df)
+    df = add_cpg_content(df)
+    df = add_gc_skew(df)
+    df = add_sequence_entropy(df)
+    df = add_poly_run_features(df, 'A')
+    df = add_poly_run_features(df, 'U')
+    df = add_palindrome_density(df, PALINDROMIC_K_MER_LENGTH)
+    df = add_orf_features(df)
+    df = add_kmer_richness(df, K_MER_LENGTH)
+    df = add_codon_usage_bias(df)
+
     save_df(df, fname, RESULTSPATH, folder, subfolder)
 
-### pri features ###
+### structure features ###
 
-def save_site_motif_features(df: pd.DataFrame, motif_length: int, split: bool, folder: str, subfolder: str, data: str, strain: str, segment: str, intersects: str):
+def save_structure_features(df: pd.DataFrame, fname: str, folder: str, subfolder: str):
     '''
 
     '''
+    ### seuquence ###
+    df = add_dvg_sequence(df)
+
+    ### structure ###
+    df = add_sec_features(df, 'dvg_sequence', 'structure', 'MFE')
+    df = add_marked_structure(df)
+
+    ### symmetry
+    df = add_max_symmetry(df)
+
+    ### sec ###
+    df = add_bp_count(df)
+    df = add_bp_density(df)
+    df = add_unpaired_count(df)
+    df = add_unpaired_density(df)
+    df = add_stem_count(df)
+    df = add_stem_length_stats(df)
+    df = add_hairpin_count(df)
+    df = add_hairpin_size_stats(df)
+    df = add_external_unpaired_density(df)
+    df = add_pair_span_stats(df)
+    df = add_free_end_lengths(df)
+    df = add_branch_point_count(df)
+
+    ### hybrid ###
+    df = add_gc_overall(df)
+    df = add_gc_paired_unpaired(df)
+    df = add_canonical_pair_stats(df)
+    df = add_stem_end_pair_enrichment(df)
+    df = add_hairpin_closing_pair_content(df)
+    df = add_tetraloop_motif_counts(df)
+    df = add_loop_au_content(df)
+    df = add_tail_gc_content(df)
+    df = add_start_codon_accessibility(df)
+    save_df(df, fname, RESULTSPATH, folder, subfolder)
+
+### training ###
+
+def save_site_motifs(df: pd.DataFrame, split: bool, folder: str, subfolder: str, data: str, strain: str, segment: str, intersects: str):
+    '''
+
+    '''
+    motif_length = K_MER_LENGTH
     df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
 
     df, skipped_count = add_site_motifs(df, motif_length)
@@ -234,10 +362,11 @@ def save_site_motif_features(df: pd.DataFrame, motif_length: int, split: bool, f
     else:
         save_df(df_copy, fname, RESULTSPATH, folder, subfolder, data, strain, segment, intersects)
 
-def save_reg_site_motif_features(df: pd.DataFrame, motif_length: int, split: bool, folder: str, subfolder: str, data: str, strain: str, segment: str, intersects: str):
+def save_reg_site_motifs(df: pd.DataFrame, split: bool, folder: str, subfolder: str, data: str, strain: str, segment: str, intersects: str):
     '''
 
     '''
+    motif_length = K_MER_LENGTH
     df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
 
     df, skipped_count = add_site_motifs(df, motif_length)
@@ -278,47 +407,9 @@ def save_reg_site_motif_features(df: pd.DataFrame, motif_length: int, split: boo
     else:
         save_df(df_copy, fname, RESULTSPATH, folder, subfolder, data, strain, segment, intersects)
 
-### sec features ###
-
-def save_sec_dvg_features(df: pd.DataFrame, fname: str, folder: str, subfolder: str):
-    '''
-
-    '''
-    df = add_dvg_sequence(df)
-    df = add_sec_features(df, 'dvg_sequence', 'structure', 'MFE')
-    save_df(df, fname, RESULTSPATH, folder, subfolder)
-
-def save_sec_site_motif_features(df: pd.DataFrame, fname: str, folder: str, subfolder: str):
-    '''
-
-    '''
-    df, skipped_count = add_site_motifs(df, 25)
-    print(f'{skipped_count} have been left out')
-
-    for i in range(1, 5):
-        df = add_sec_features(df, f'site{i}_motif', f'structure_site{i}_motif', f'MFE_site{i}_motif')
-    save_df(df, fname, RESULTSPATH, folder, subfolder)
-
-def save_merged_sec_features(fname: str, folder: str, subfolder: str):
-    '''
-
-    '''
-    read_path = RESULTSPATH
-    read_path = os.path.join(read_path, folder)
-    fname_copy = fname + '.csv'
-
-    read_path1 = os.path.join(read_path, 'sec_dvg')
-    df1 = pd.read_csv(os.path.join(read_path1, fname_copy), keep_default_na=False, na_values=[])
-
-    read_path2 = os.path.join(read_path, 'sec_site')
-    df2 = pd.read_csv(os.path.join(read_path2, fname_copy), keep_default_na=False, na_values=[])
-
-    df = merge_missing_features(df1, df2)
-    save_df(df, fname, RESULTSPATH, folder, subfolder)
-
 ### pseudo ###
 
-def insert_pseudo_motif_features(df: pd.DataFrame):
+def insert_pseudo_motifs(df: pd.DataFrame):
     '''
 
     '''
@@ -331,7 +422,7 @@ def insert_pseudo_motif_features(df: pd.DataFrame):
 
     return df
 
-def insert_pseudo_intersect_features(df: pd.DataFrame, threshold: str):
+def insert_pseudo_intersects(df: pd.DataFrame, threshold: str):
     '''
 
     '''
@@ -399,20 +490,24 @@ if __name__ == '__main__':
 
     ### BASE ###
 
+    # folder = 'pooled'
+
     # dfnames = get_dataset_names(cutoff=40)
+
     # dfs, _ = load_all(dfnames, False)
+    # dfs, _ = load_all_unpooled(dfnames, False)
 
     ### DATASETS SINGLE ###
 
     # split = True
 
-    # folder = 'datasets'
-    # subfolder = 'sec'
+    # folder = 'pooled'
+    # subfolder = 'base'
 
-    # data = 'Alnaji2021'
+    # data = 'Alnaji2019_Perth'
     # strain = DATASET_STRAIN_DICT[data]
     # segment = 'all'
-    # intersects = 'median'
+    # intersects = 'all'
 
     # dfnames = [data]
     # dfs = load_all_preprocessed(dfnames, folder, subfolder)
@@ -421,13 +516,13 @@ if __name__ == '__main__':
 
     split = True
 
-    folder = 'datasets'
-    subfolder = 'sec'
+    folder = 'unpooled'
+    subfolder = 'base'
 
     data = 'IAV'
     strain = 'PR8'
     segment = 'PB1'
-    intersects = 'median'
+    intersects = 'median with metadata'
 
     dfnames = get_dataset_names(cutoff=40, selection=data)
     dfs = load_all_preprocessed(dfnames, folder, subfolder)
@@ -436,24 +531,22 @@ if __name__ == '__main__':
     ### run scripts ###
     ###################
 
-    ### basic features ###
+    ### base ###
 
-    # preprocess_base_features(dfnames, dfs)
+    # preprocess_base_features(dfnames, dfs, folder)
 
-    ### pri features ###
+    ### training ###
     
-    preprocess_site_motif_features(dfnames, dfs, 3, split, data, strain, segment, intersects)
+    preprocess_site_motifs(dfnames, dfs, split, folder, data, strain, segment, intersects)
 
-    ### sec features ###
+    ### structure ###
 
-    # preprocess_sec_dvg_features(dfnames, dfs)
-    # preprocess_sec_site_motif_features(dfnames, dfs)
-    # preprocess_sec_combine_features(dfnames)
+    # preprocess_structure_features(dfnames, dfs, folder)
 
     ### pseudo ###
 
-    # preprocess_pseudo_motif_features(3, split, data, strain, segment, intersects)
-    # preprocess_pseudo_intersect_features(3, split, data, strain, segment, intersects)
+    # preprocess_pseudo_motifs(split, folder, data, strain, segment, intersects)
+    # preprocess_pseudo_intersects(split, folder, data, strain, segment, intersects)
 
     ### prediction ###
 
@@ -473,8 +566,8 @@ if __name__ == '__main__':
     #     ("PR8", "PB1", 120, 1530, "in vitro", "PAIRED", "PCR", "TRANSCRIPTOMIC"),
     #     ]
     
-    # preprocess_prediction_candidates(candidates, 3, data, strain, segment, intersects)
-    # preprocess_prediction(3, data, strain, segment, intersects)
+    # preprocess_prediction_candidates(candidates, folder, data, strain, segment, intersects)
+    # preprocess_prediction(folder, data, strain, segment, intersects)
     
 
 

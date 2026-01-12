@@ -19,65 +19,23 @@ from sklearn.metrics import r2_score
 import RNA
 
 sys.path.insert(0, "..")
-from utils import get_dataset_names, load_all
-from utils import manage_separate_specifiers, load_all_preprocessed, clean_data_string
+
+from utils import get_dataset_names
+
+from utils import load_all_preprocessed
+from utils import manage_separate_specifiers, clean_data_string
 from utils import rename_feature, split_by_threshold, add_feature_percentile_rank, get_feature_modification_name, add_separate_ngs_features
-from utils import manage_intersects
-from utils import add_dvg_sequence, add_dvg_length, add_full_seq_length, add_deletion_length, add_region_lengths
+from utils import add_ikey, add_metadata_ikey, manage_intersects
 
 from utils import pick_colors
 from utils import generate_motifs, add_site_motifs, add_lin_reg_rows, compute_full_seq_motif_freq_df
 from utils import compute_percentile_rank_count_df, compute_seq_feature_count_df, compute_feature_count_df, compute_feature_freq_df, subtract_freq_dfs
 from utils import compute_feature_count_heatmap_df, compute_feature_count_heatmap_sum_df, compute_feature_freq_heatmap_df
 
-from utils import add_metadata_features, p_to_stars, mannwhitneyu_for_feature
-from utils import add_direct_repeat_length, cap_direct_repeat_length
-from utils import add_max_symmetry
-
-from utils import (
-    add_gc_content,
-    add_au_content,
-    add_upa_content,
-    add_cpg_content,
-    add_gc_skew,
-    add_sequence_entropy,
-    add_poly_run_features,
-    add_palindrome_density,
-    add_orf_features,
-    add_kmer_richness,
-    add_codon_usage_bias,
-)
-
-from utils import (
-    add_bp_count,
-    add_bp_density,
-    add_unpaired_count,
-    add_unpaired_density,
-    add_stem_count,
-    add_stem_length_stats,
-    add_hairpin_count,
-    add_hairpin_size_stats,
-    add_external_unpaired_density,
-    add_pair_span_stats,
-    add_free_end_lengths,
-    add_branch_point_count,
-    )
-
-from utils import (
-    add_gc_overall,
-    add_gc_paired_unpaired,
-    add_canonical_pair_stats,
-    add_stem_end_pair_enrichment,
-    add_hairpin_closing_pair_content,
-    add_tetraloop_motif_counts,
-    add_loop_au_content,
-    add_tail_gc_content,
-    add_start_codon_accessibility,
-)
-
+from utils import p_to_stars, mannwhitneyu_for_feature
 
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
-from utils import COLORS, RANK_THRESHOLD, DECIMALS
+from utils import COLORS, RANK_THRESHOLD, DECIMALS, K_MER_LENGTH, PALINDROMIC_K_MER_LENGTH, DIRECT_REPEAT_LEGTH_CAP
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, 'visuals')
@@ -201,7 +159,6 @@ def run_dvg_motif_freq_analysis(dfs: list, top_n: int = 5, data: str = 'all', st
 
     df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
     dvg_count = df.shape[0]
-    df = add_dvg_sequence(df)
 
     plot_name = 'DVG'
     plot_names = []
@@ -246,9 +203,95 @@ def run_ngs_histo_analysis(dfs: list, data: str = 'all', strain: str = 'all', se
 
     create_freq_histo_plot('NGS read count - histogram', df, x_feature_name, x_axis_name, True, 'ngs', 'NGS', 'histogram', data, strain, segment, intersects)
 
+def run_intersect_histo_analysis(dfnames: list, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+    '''
+
+    '''
+    dfs1 = load_all_preprocessed(dfnames, 'unpooled', 'base')
+    dfs2 = load_all_preprocessed(dfnames, 'pooled', 'base')
+
+    dfs1 = manage_separate_specifiers(dfs1, data, strain, segment)
+    dfs1 = add_separate_ngs_features(dfs1, True)
+    concat_df1 = pd.concat(dfs1, ignore_index=True)
+    dfs1.append(concat_df1)
+
+    dfs2 = manage_separate_specifiers(dfs2, data, strain, segment)
+    dfs2 = add_separate_ngs_features(dfs2, True)
+    concat_df2 = pd.concat(dfs2, ignore_index=True)
+    dfs2.append(concat_df2)
+
+    dfnames.append('all')
+
+    mod_dfs1 = []
+    mod_dfs2 = []
+
+    for df1, df2 in zip(dfs1, dfs2):
+        if intersects == "raw":
+            df1 = add_ikey(df1)
+        elif intersects == "metadata":
+            df1 = add_metadata_ikey(df1)
+        else:
+            raise ValueError(f"invalid intersects modifier: raw' or 'metadata'.")
+        df2 = add_ikey(df2)
+
+        mod_dfs1.append(df1)
+        mod_dfs2.append(df2)
+
+    create_intersect_histogram_plot(mod_dfs1, mod_dfs2, dfnames, 'dataset', 'intersects', 'histogram', 'dataset', data, strain, segment, intersects)
+
+def run_intersect_histo_analysis_by_strain(dfnames: list, data: str = 'all', strain: str = 'all', segment: str = 'all',intersects: str = 'all'): 
+    '''
+
+    '''
+    dfs1 = load_all_preprocessed(dfnames, 'unpooled', 'base')
+    dfs2 = load_all_preprocessed(dfnames, 'pooled', 'base')
+
+    dfs1 = manage_separate_specifiers(dfs1, data, strain, segment)
+    dfs1 = add_separate_ngs_features(dfs1, True)
+    concat_df1 = pd.concat(dfs1, ignore_index=True)
+
+    dfs2 = manage_separate_specifiers(dfs2, data, strain, segment)
+    dfs2 = add_separate_ngs_features(dfs2, True)
+    concat_df2 = pd.concat(dfs2, ignore_index=True)
+
+    strain_values = concat_df1["Strain"].dropna().unique()
+    strain_values = sorted(strain_values)
+
+    strain_dfs1 = []
+    strain_dfs2 = []
+    strain_names = []
+
+    for s in strain_values:
+        df1_s = concat_df1[concat_df1["Strain"] == s].copy()
+        df2_s = concat_df2[concat_df2["Strain"] == s].copy()
+        strain_dfs1.append(df1_s)
+        strain_dfs2.append(df2_s)
+        strain_names.append(str(s))
+
+    strain_dfs1.append(concat_df1)
+    strain_dfs2.append(concat_df2)
+
+    mod_dfs1 = []
+    mod_dfs2 = []
+
+    for df1, df2 in zip(strain_dfs1, strain_dfs2):
+        if intersects == "raw":
+            df1 = add_ikey(df1)
+        elif intersects == "metadata":
+            df1 = add_metadata_ikey(df1)
+        else:
+            raise ValueError(f"invalid intersects modifier: raw' or 'metadata'.")
+        df2 = add_ikey(df2)
+
+        mod_dfs1.append(df1)
+        mod_dfs2.append(df2)
+        strain_names.append('all')
+
+    create_intersect_histogram_plot(mod_dfs1, mod_dfs2, strain_names, 'strain', 'intersects', 'histogram', 'strain', data, strain, segment, intersects)
+
 ### bar, violin & scatter ###
 
-def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n: int, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def run_dvg_pri_features_analysis(dfs: list, selector: str, top_n: int, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
@@ -260,32 +303,8 @@ def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
 
-    dfs = add_metadata_features(dfnames, dfs)
-
     df = pd.concat(dfs, ignore_index=True)
     df = manage_intersects(df, intersects, x_feature_name)
-
-    palindrmic_k_mer = 6
-    k_mer = 3
-
-    df = add_dvg_sequence(df)
-    df = add_dvg_length(df)
-    df = add_deletion_length(df)
-    df = add_full_seq_length(df)
-    df = add_region_lengths(df)
-
-    df = add_gc_content(df)
-    df = add_au_content(df)
-    df = add_upa_content(df)
-    df = add_cpg_content(df)
-    df = add_gc_skew(df)
-    df = add_sequence_entropy(df)
-    df = add_poly_run_features(df, 'A')
-    df = add_poly_run_features(df, 'U')
-    df = add_palindrome_density(df, palindrmic_k_mer)
-    df = add_orf_features(df)
-    df = add_kmer_richness(df, k_mer)
-    df = add_codon_usage_bias(df)
 
     print(f'features added successfully')
 
@@ -316,12 +335,12 @@ def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n
         ("poly_A_max_run", "poly-A maximum run length", "longest consecutive run of A (nucleotides)", "length"),
         ("poly_A_tracts", "poly-A tract count", "number of A tracts above threshold length", "length"),
 
-        ("palindrome_density", f"palindrome density (k={palindrmic_k_mer})", "density of palindromic k-mers (1/k-mer)", "motifs"),
+        ("palindrome_density", f"palindrome density (k={PALINDROMIC_K_MER_LENGTH})", "density of palindromic k-mers (1/k-mer)", "motifs"),
 
         ("longest_ORF_len", "longest ORF length", "length of longest open reading frame (nucleotides)", "ORF"),
         ("ORF_count", "ORF count ≥20 AA", "number of ORFs at least 20 amino acids long", "ORF"),
 
-        ("kmer_richness", f"k-mer richness (k={k_mer})", "content of unique k-mers among all windows (1/k-mer)", "complexity"),
+        ("kmer_richness", f"k-mer richness (k={K_MER_LENGTH})", "content of unique k-mers among all windows (1/k-mer)", "complexity"),
         ("codon_usage_entropy", "codon usage entropy", "Shannon entropy of codon usage", "codon"),
     ]
 
@@ -331,7 +350,6 @@ def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n
     print(f'numerical features completed')
 
     df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
-    df = add_direct_repeat_length(df)
 
     # motifs #
     max_motif_length = 7
@@ -349,25 +367,16 @@ def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n
             site_counter = i + 1
             create_freq_bar_plot(bar_name, motif_df, f'site{site_counter}_motif', f'top {top_n} motifs', dvg_count, top_n, f'site{site_counter}_motif', 'motifs', 'barplots', data, strain, segment, intersects, f'motif_lenght_{motif_length}')
     
-    df = add_direct_repeat_length(df)
-    cap_length = 5
-    df = cap_direct_repeat_length(df, cap_length)
-
     folder = 'pri'
     subfolder = 'barplots'
 
     dvg_count = df.shape[0]
 
     features = [
-        ("direct_repeat_length", "direct repeat length", "length of direct repeats (nucleotides)", "repeats"),
+        ("direct_repeat_length", f"direct repeat length (cap={DIRECT_REPEAT_LEGTH_CAP})", "length of direct repeats (nucleotides)", "repeats"),
 
         ("system_type", "system type", "system type", "metadata"),
         ("library_selection", "library selection", "library selection", "metadata"),
-        
-        ("cells", "cells", "cells", "metadata"),
-        ("cellular_localization", "cellular localization", "cellular localization", "metadata"),
-        ("cellular_resolution", "cellular resolution", "cellular resolution", "metadata"),
-        ("time_point", "time point", "time point", "metadata")
     ]
 
     if strain == "all":
@@ -391,7 +400,7 @@ def run_dvg_pri_features_analysis(dfnames: list, dfs: list, selector: str, top_n
 
     print(f'categorical features completed')
 
-def run_dvg_sec_features_analysis(dfnames: list, dfs: list, selector: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def run_dvg_sec_features_analysis(dfs: list, selector: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
@@ -403,25 +412,8 @@ def run_dvg_sec_features_analysis(dfnames: list, dfs: list, selector: str, data:
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
 
-    dfs = add_metadata_features(dfnames, dfs)
-
     df = pd.concat(dfs, ignore_index=True)
     df = manage_intersects(df, intersects, x_feature_name)
-
-    df = add_bp_count(df)
-    df = add_bp_density(df)
-    df = add_unpaired_count(df)
-    df = add_unpaired_density(df)
-    df = add_stem_count(df)
-    df = add_stem_length_stats(df)
-    df = add_hairpin_count(df)
-    df = add_hairpin_size_stats(df)
-    df = add_external_unpaired_density(df)
-    df = add_pair_span_stats(df)
-    df = add_free_end_lengths(df)
-    df = add_branch_point_count(df)
-
-    df = add_max_symmetry(df)
 
     df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
 
@@ -490,7 +482,7 @@ def run_dvg_sec_features_analysis(dfnames: list, dfs: list, selector: str, data:
 
     print(f'categorical features completed')
 
-def run_dvg_hybrid_features_analysis(dfnames: list, dfs: list, selector: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def run_dvg_hybrid_features_analysis(dfs: list, selector: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
@@ -502,20 +494,8 @@ def run_dvg_hybrid_features_analysis(dfnames: list, dfs: list, selector: str, da
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
 
-    dfs = add_metadata_features(dfnames, dfs)
-
     df = pd.concat(dfs, ignore_index=True)
     df = manage_intersects(df, intersects, x_feature_name)
-
-    df = add_gc_overall(df)
-    df = add_gc_paired_unpaired(df)
-    df = add_canonical_pair_stats(df)
-    df = add_stem_end_pair_enrichment(df)
-    df = add_hairpin_closing_pair_content(df)
-    df = add_tetraloop_motif_counts(df)
-    df = add_loop_au_content(df)
-    df = add_tail_gc_content(df)
-    df = add_start_codon_accessibility(df)
 
     df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
 
@@ -569,7 +549,7 @@ def run_dvg_hybrid_features_analysis(dfnames: list, dfs: list, selector: str, da
     
     print(f'numerical features completed')
 
-def run_length_mfe_analysis(dfnames: list, dfs: list, selector: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
+def run_length_mfe_analysis(dfs: list, selector: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
     '''
 
     '''
@@ -579,13 +559,8 @@ def run_length_mfe_analysis(dfnames: list, dfs: list, selector: str, data: str =
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
 
-    dfs = add_metadata_features(dfnames, dfs)
-
     df = pd.concat(dfs, ignore_index=True)
     df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
-
-    df = add_dvg_sequence(df)
-    df = add_dvg_length(df)
 
     print(f'features added successfully')
 
@@ -619,8 +594,6 @@ def run_ngs_prediction_analysis(df: pd.DataFrame, selector: str, data: str = 'al
 
     for y_feature_name, y_feature_title, y_axis_name, folder in features:
         create_feature_scatter_plot(f'{y_feature_title} - NGS reads - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, y_feature_name, folder, subfolder, data, strain, segment, intersects)
-    
-    print(f'numerical features completed')
 
 ### other ###
 
@@ -633,7 +606,6 @@ def run_sec_structure_plots(dfs: list, data: str = 'all', strain: str = 'all', s
 
     df = pd.concat(dfs, ignore_index=True)
 
-    df = add_dvg_sequence(df)
     sequences = df['dvg_sequence'].head(5)
 
     save_path = os.path.join(RESULTSPATH, 'structures', data, strain, segment, 'all')
@@ -915,9 +887,9 @@ def create_freq_histo_plot(
     strain: str,
     segment: str,
     intersects: str,
-    elbow_side: str = "right",    # "right", "left", or "both"
-    kde_bw_adjust: float = 1.0,   # >1 smoother, <1 wigglier
-    kde_grid: int = 512           # resolution for KDE & curvature
+    elbow_side: str = "right",
+    kde_bw_adjust: float = 1.0,
+    kde_grid: int = 512        
     ):
     """
 
@@ -936,7 +908,6 @@ def create_freq_histo_plot(
     skew_val = stats.skew(values, bias=True)
     kurt_val = stats.kurtosis(values, fisher=True, bias=True)
 
-    # --- Histogram + Seaborn KDE (for visualization, in percent) ---
     sns.histplot(
         values,
         bins=40,
@@ -947,8 +918,6 @@ def create_freq_histo_plot(
         label='distribution'
     )
 
-    # --- Build our own KDE for elbow detection (numeric derivatives) ---
-    # Using scipy so we can control bandwidth and evaluate derivatives
     kde = stats.gaussian_kde(values)
     if kde_bw_adjust != 1.0:
         base_cf = kde.covariance_factor()
@@ -958,18 +927,14 @@ def create_freq_histo_plot(
     x_min, x_max = np.min(values), np.max(values)
     pad = 0.05 * (x_max - x_min if x_max > x_min else 1.0)
     xs = np.linspace(x_min - pad, x_max + pad, kde_grid)
-    pdf = kde(xs)              # integrates to 1 over xs
+    pdf = kde(xs)
 
-    # First & second numerical derivatives
-    # (spacing is uniform so np.gradient works well)
     dx = xs[1] - xs[0]
     pdf_prime = np.gradient(pdf, dx)
     pdf_double = np.gradient(pdf_prime, dx)
 
-    # Curvature of y=f(x): kappa = |f''(x)| / (1 + (f'(x))^2)^(3/2)
     curvature = np.abs(pdf_double) / np.power(1.0 + pdf_prime**2, 1.5)
 
-    # Choose search mask based on elbow_side
     if elbow_side.lower() == "right":
         mask = xs >= mean_val
     elif elbow_side.lower() == "left":
@@ -979,9 +944,8 @@ def create_freq_histo_plot(
     else:
         raise ValueError("elbow_side must be 'right', 'left', or 'both'.")
 
-    # Avoid degenerate cases
     if not np.any(mask) or np.all(pdf == pdf[0]):
-        elbow_x = float(mean_val)  # fallback
+        elbow_x = float(mean_val)
         elbow_idx = np.argmin(np.abs(xs - elbow_x))
     else:
         masked_idx = np.where(mask)[0]
@@ -989,10 +953,8 @@ def create_freq_histo_plot(
         elbow_idx = int(local_argmax)
         elbow_x = float(xs[elbow_idx])
 
-    # --- Draw verticals: mean + elbow ---
     plt.axvline(mean_val, color=COLORS[9], linestyle=':', linewidth=1.5, label='mean')
 
-    # Scale KDE to percent for annotation dot (same scale as stat='percent')
     elbow_y_percent = pdf[elbow_idx] * 100.0
     plt.axvline(
         elbow_x,
@@ -1012,7 +974,6 @@ def create_freq_histo_plot(
         plt.axvline(q90, color=COLORS[1], linestyle='-', linewidth=1, label='90th percentile')
         plt.axvline(q95, color=COLORS[0], linestyle='-', linewidth=1, label='95th percentile')
 
-    # --- Titles & labels ---
     title = f'{plot_name}'
     title += f'\ndata: {data}'
     title += f', strain: {strain}'
@@ -1054,10 +1015,8 @@ def create_freq_histo_plot(
         frameon=True
     )
 
-    # Keep your previous y-limit if desired; otherwise let Matplotlib autoscale
     plt.ylim(0, 20)
 
-    # --- Save ---
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
@@ -1410,6 +1369,122 @@ def create_feature_scatter_plot(
     plt.savefig(os.path.join(save_path, fname), dpi=300, bbox_inches="tight")
     plt.close()
 
+def create_intersect_histogram_plot(
+    dfs1: list,
+    dfs2: list,
+    dfnames: list,
+    y_feature_name: str,
+    fname: str,
+    folder: str,
+    subfolder: str,
+    data: str,
+    strain: str,
+    segment: str,
+    intersects: str,
+    ):
+    """
+
+    """
+
+    combined = list(zip(dfnames, dfs1, dfs2))
+    combined.sort(key=lambda x: x[0])
+
+    sorted_names = []
+    perc_nonunique_1 = []
+    perc_nonunique_2 = []
+    n_rows_1 = []
+    n_rows_2 = []
+
+    for name, df1, df2 in combined:
+        n_u = len(df1)
+        if n_u > 0:
+            dup_mask1 = df1.duplicated(subset=["ikey"], keep=False)
+            nonunique_count1 = dup_mask1.sum()
+            pct1 = 100.0 * nonunique_count1 / n_u
+        else:
+            pct1 = 0.0
+
+        n_p = len(df2)
+        if n_p > 0:
+            dup_mask2 = df2.duplicated(subset=["ikey"], keep=False)
+            nonunique_count2 = dup_mask2.sum()
+            pct2 = 100.0 * nonunique_count2 / n_p
+        else:
+            pct2 = 0.0
+
+        sorted_names.append(name)
+        perc_nonunique_1.append(pct1)
+        perc_nonunique_2.append(pct2)
+        n_rows_1.append(n_u)
+        n_rows_2.append(n_p)
+
+    plt.style.use("seaborn-darkgrid")
+    num_datasets = len(sorted_names)
+
+    y_positions = np.arange(num_datasets)
+    bar_height = 0.4
+    offset = bar_height / 2
+
+    fig, ax = plt.subplots(figsize=(12, max(6, num_datasets * 0.4)))
+
+    color_unpooled = COLORS[0] 
+    color_pooled = COLORS[8]
+
+    ax.barh(
+        y_positions,
+        perc_nonunique_1,
+        height=bar_height,
+        label="unpooled",
+        edgecolor="white",
+        linewidth=0.5,
+        color=color_unpooled,
+    )
+
+    ax.barh(
+        y_positions,
+        perc_nonunique_2,
+        height=bar_height,
+        label="pooled",
+        edgecolor="white",
+        linewidth=0.5,
+        color=color_pooled,
+    )
+
+    y_labels = [
+        f"{name} (n_u={n_u}, n_p={n_p})"
+        for name, n_u, n_p in zip(sorted_names, n_rows_1, n_rows_2)
+    ]
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(y_labels)
+
+    ax.set_xlabel("intersecting candidates (%)")
+    ax.set_ylabel(f"{y_feature_name}s")
+
+    title_name = f"percentage of intersecting candidates per {y_feature_name}"
+    title_name += f"\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects"
+    ax.set_title(title_name)
+
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        borderaxespad=0.0,
+        frameon=True,
+        title="data type",
+    )
+
+    plt.tight_layout()
+
+    clean_data = clean_data_string(data)
+    save_path = os.path.join(RESULTSPATH, folder, subfolder)
+    save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
+    os.makedirs(save_path, exist_ok=True)
+
+    fname += '.png'
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, fname), dpi=300, bbox_inches="tight")
+    plt.close()
+
 ############
 ### site ###
 ############
@@ -1541,9 +1616,6 @@ def make_repeat_heatmap_analysis(df: pd.DataFrame, heatmap_name: str, dvg_count:
     '''
 
     '''
-    df = add_direct_repeat_length(df)
-    df = cap_direct_repeat_length(df, cap_length)
-
     percentile_rank_count_df = compute_percentile_rank_count_df(df)
 
     repeat_count_heatmap_df = compute_feature_count_heatmap_df(df, 'direct_repeat_length')
@@ -1584,12 +1656,12 @@ if __name__ == "__main__":
     #################
 
     top_n = 20
-    selector = 'system_type'
+    selector = 'dataset_name'
 
     ### DATASETS SINGLE ###
 
-    # folder = 'datasets'
-    # subfolder = 'sec'
+    # folder = 'pooled'
+    # subfolder = 'base'
 
     # data = 'Alnaji2021'
     # strain = DATASET_STRAIN_DICT[data]
@@ -1601,29 +1673,31 @@ if __name__ == "__main__":
     
     ### DATASETS MULTI ###
 
-    folder = 'datasets'
-    subfolder = 'sec'
-
-    data = 'IAV'
-    strain = 'PR8'
-    segment = 'PB1'
-    intersects = 'median'
-
-    dfnames = get_dataset_names(cutoff=40, selection=data)
-    dfs = load_all_preprocessed(dfnames, folder, subfolder)
-
-    ### PREDICTION ###
+    # folder = 'unpooled'
+    # subfolder = 'base'
 
     # data = 'IAV'
     # strain = 'PR8'
     # segment = 'PB1'
-    # intersects = 'median'
+    # intersects = 'median with metadata'
 
-    # motif_length = 3
-    # fname = f'motif_length_{motif_length}'
-    # resultpath, _ = os.path.split(RESULTSPATH)
-    # read_path = os.path.join(resultpath, 'preprocess', 'combined', 'prediction', data, strain, segment, intersects)
-    # df = pd.read_csv(os.path.join(read_path, f'{fname}.csv'), keep_default_na=False, na_values=[])
+    # dfnames = get_dataset_names(cutoff=40, selection=data)
+    # dfs = load_all_preprocessed(dfnames, folder, subfolder)
+
+    ### PREDICTION ###
+
+    folder = 'unpooled'
+
+    data = 'IAV'
+    strain = 'PR8'
+    segment = 'PB1'
+    intersects = 'median with metadata'
+
+    motif_length = K_MER_LENGTH
+    fname = f'motif_length_{motif_length}'
+    resultpath, _ = os.path.split(RESULTSPATH)
+    read_path = os.path.join(resultpath, 'preprocess', folder, 'prediction', data, strain, segment, intersects)
+    df = pd.read_csv(os.path.join(read_path, f'{fname}.csv'), keep_default_na=False, na_values=[])
 
     ###################
     ### run scripts ###
@@ -1632,19 +1706,18 @@ if __name__ == "__main__":
     # run_site_motif_heatmap_analysis(dfs, top_n, data, strain, segment, intersects)
     # run_reg_site_motif_heatmap_analysis(dfs, top_n, data, strain, segment, intersects)
     # run_repeat_heatmap_analysis(dfs, top_n, data, strain, segment, intersects)
-
-    # run_dvg_motif_freq_analysis(dfs, top_n, data, strain, segment, intersects)
-    run_ngs_histo_analysis(dfs, data, strain, segment, intersects)
-
-    # run_dvg_pri_features_analysis(dfnames, dfs, selector, top_n, data, strain, segment, intersects)
-    # run_length_mfe_analysis(dfnames, dfs, selector, data, strain, segment, intersects)
-    # run_ngs_prediction_analysis(df, selector, data, strain, segment, intersects)
-
-    # run_sec_structure_plots(dfs, data, strain, segment)
-
-    ### requires sec feature preprocessing ###
-    
     # run_mfe_heatmap_analysis(dfs, data, strain, segment, intersects)
 
-    # run_dvg_sec_features_analysis(dfnames, dfs, selector, data, strain, segment, intersects)
-    # run_dvg_hybrid_features_analysis(dfnames, dfs, selector, data, strain, segment, intersects)
+    # run_dvg_motif_freq_analysis(dfs, top_n, data, strain, segment, intersects)
+    # run_ngs_histo_analysis(dfs, data, strain, segment, intersects)
+    # run_intersect_histo_analysis(dfnames, data, strain, segment, intersects)
+    # run_intersect_histo_analysis_by_strain(dfnames, data, strain, segment, intersects)
+
+    # run_dvg_pri_features_analysis(dfs, selector, top_n, data, strain, segment, intersects)
+    # run_dvg_sec_features_analysis(dfs, selector, data, strain, segment, intersects)
+    # run_dvg_hybrid_features_analysis(dfs, selector, data, strain, segment, intersects)
+    # run_length_mfe_analysis(dfs, selector, data, strain, segment, intersects)
+
+    run_ngs_prediction_analysis(df, selector, data, strain, segment, intersects)
+
+    # run_sec_structure_plots(dfs, data, strain, segment)

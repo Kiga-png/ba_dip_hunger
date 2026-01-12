@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 import os
 import sys
@@ -9,6 +7,7 @@ import pandas as pd
 sys.path.insert(0, "..")
 
 from utils import RESULTSPATH
+from utils import K_MER_LENGTH
 from tensorflow.keras.models import load_model
 from tensorflow.keras import preprocessing as keras_preproc
 import joblib
@@ -17,10 +16,10 @@ import joblib
 ### helpers ###
 ###############
 
-def ensure_networks_root(current_resultspath):
+def ensure_preprocess_root(current_resultspath):
     parent, last = os.path.split(current_resultspath)
-    if last != "networks":
-        return os.path.join(parent, "networks")
+    if last != "preprocess":
+        return os.path.join(parent, "preprocess")
     return current_resultspath
 
 def kmer_tokenize(seq, k):
@@ -85,17 +84,17 @@ def detect_task(model):
         act_name = None
     return "classification" if act_name == "sigmoid" else "regression"
 
-def build_paths_flipped(networks_root, subfolder, data, strain, segment, intersects, name_mod):
-    root_parent = os.path.dirname(networks_root)
+def build_paths_flipped(preprocess_root, folder, data, strain, segment, intersects, name_mod):
+    root_parent = os.path.dirname(preprocess_root)
 
-    read_dir = os.path.join(networks_root, "training", "preparation", data, strain, segment, intersects)
-    model_dir = os.path.join(networks_root, "CNN", subfolder, data, strain, segment, intersects)
+    read_dir = os.path.join(preprocess_root, folder, "preparation", data, strain, segment, intersects)
+    model_dir = os.path.join(root_parent, "networks", "CNN", "kmer", data, strain, segment, intersects)
 
     preproc_path = os.path.join(model_dir, f"{name_mod}_preproc.joblib")
     best_path    = os.path.join(model_dir, f"{name_mod}_best_model.h5")
     final_path   = os.path.join(model_dir, f"{name_mod}_final_model.h5")
 
-    write_dir = os.path.join(root_parent, "preprocess", "combined", "prediction", data, strain, segment, intersects)
+    write_dir = os.path.join(preprocess_root, folder, "prediction", data, strain, segment, intersects)
     os.makedirs(write_dir, exist_ok=True)
 
     return {
@@ -189,14 +188,14 @@ if __name__ == "__main__":
     
     ### COMBINED MULTI ###
 
-    subfolder = "pri"
+    folder = 'pooled'
     data      = "IAV"
     strain    = "PR8"
     segment   = "PB1"
     intersects = "median"
 
-    motif_length = 3
-    version      = "1"
+    motif_length = K_MER_LENGTH
+    version      = "0"
     NAME_MOD     = f"{version}_motif_length_{motif_length}"
 
     model_choice = "final"
@@ -207,9 +206,9 @@ if __name__ == "__main__":
     ### main ###
 
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
-    networks_root = ensure_networks_root(RESULTSPATH)
+    preprocess_root = ensure_preprocess_root(RESULTSPATH)
 
-    paths = build_paths_flipped(networks_root, subfolder, data, strain, segment, intersects, NAME_MOD)
+    paths = build_paths_flipped(preprocess_root, folder, data, strain, segment, intersects, NAME_MOD)
 
     if input_csv_name is None:
         in_csv = os.path.join(paths["read_dir"], f"motif_length_{motif_length}.csv")
