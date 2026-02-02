@@ -14,20 +14,21 @@ import pandas as pd
 from scipy import stats
 from scipy.interpolate import CubicSpline
 
+from sklearn.metrics import r2_score
+from sklearn.metrics import roc_auc_score, roc_curve, f1_score
+
 import RNA
 
-import re
-
 sys.path.insert(0, "..")
-from utils import get_dataset_names, load_all
-from utils import manage_separate_specifiers, load_all_preprocessed, save_df
-from utils import rename_feature, split_by_threshold, add_feature_percentile_rank, add_log_feature, add_norm_feature, add_separate_ngs_features
-from utils import manage_intersects
-from utils import add_dvg_sequence, add_dvg_length, add_cg_content, add_region_lengths
-from utils import mannwhitneyu_for_feature
+
+from utils import get_dataset_names
+
+from utils import manage_separate_specifiers, clean_data_string
+from utils import rename_feature, add_separate_ngs_features
+from utils import add_ikey, add_metadata_ikey, manage_intersects
+from utils import load_all_preprocessed, save_df
 
 from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
-from utils import COLORS, RANK_THRESHOLD
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, 'statistics')
@@ -39,92 +40,132 @@ RESULTSPATH = os.path.join(RESULTSPATH, 'statistics')
 
 ### statistics ###
 
-def run_pri_mannwhitneyu(dfs: list, fname: str, data: str = 'all', strain: str = 'all', segment: str = 'all', intersects: str = 'all'):
-    '''
+import numpy as np
+import pandas as pd
 
-    '''
+def strain_segment_statistics(
+    dfs: list[pd.DataFrame],
+    folder: str,
+    data: str,
+    strain: str,
+    segment: str,
+    intersects: str
+) -> None:
+    """
+    Concat a list of dfs, keep only required columns, compute per-(Strain, Segment)
+    summary stats, round all derived numbers to integers, and save via save_df.
+    """
+
+    keep_cols = [
+        "Segment",
+        "Start",
+        "End",
+        "NGS_read_count",
+        "norm_log_NGS_read_count",
+        "Strain",
+        "seq_around_deletion_junction",
+        "dataset_name",
+        "deletion_length",
+        "5_end_length",
+        "3_end_length",
+        "dvg_length",
+        "full_seq_length"
+    ]
+
+    if dfs is None or len(dfs) == 0:
+        raise ValueError("dfs is empty")
+
+    feature = 'norm_log_NGS_read_count'
+
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     dfs = add_separate_ngs_features(dfs, True)
 
     df = pd.concat(dfs, ignore_index=True)
-    df = manage_intersects(df, intersects, 'norm_log_NGS_read_count')
+    df = manage_intersects(df, intersects, feature)
 
-    df = add_feature_percentile_rank(df, 'norm_log_NGS_read_count', 'NGS_percentile_rank')
-    stats = make_pri_mannwhitneyu(df)
-    save_df(stats, fname, RESULTSPATH, 'mannwhitneyu', 'pri', data, strain, segment, intersects)
+    missing = [c for c in keep_cols if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing required columns: {missing}")
 
-###############
-### general ###
-###############
+    df = df[keep_cols].copy()
 
-### statistics ###
+    num_cols = [
+        "Start", "End", "NGS_read_count",
+        "deletion_length", "5_end_length", "3_end_length",
+        "dvg_length", "full_seq_length", "norm_log_NGS_read_count"
+    ]
+    for c in num_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
 
-def make_pri_mannwhitneyu(df: pd.DataFrame):
-    '''
+    def _agg_stats(x: pd.Series) -> pd.Series:
+        x = x.dropna()
+        if len(x) == 0:
+            return pd.Series(
+                {"mean": np.nan, "median": np.nan, "min": np.nan, "max": np.nan}
+            )
 
-    '''
-    df = add_dvg_sequence(df)
-    df = add_dvg_length(df)
-    df = add_cg_content(df)
-    df = add_region_lengths(df)
+        return pd.Series(
+            {
+                "mean": int(np.round(x.mean())),
+                "median": int(np.round(x.median())),
+                "min": int(x.min()),
+                "max": int(x.max()),
+            }
+        )
 
-    true_df, false_df = split_by_threshold(df, 'NGS_percentile_rank', RANK_THRESHOLD)
+    gb = df.groupby(["Strain", "Segment"], dropna=False)
 
-    features = [col for col in df.columns if re.search(r"motif\d+", col)] + ["Start", "End", "dvg_length", "deletion_length", "5_end_length", "3_end_length", "cg_content"]
+    stats_df = gb.size().rename("count").to_frame()
+    stats_df["count"] = stats_df["count"].astype(int)
 
-    stats = []
-    for feature in features:
-        feature_stats = mannwhitneyu_for_feature(true_df, false_df, feature)
-        stats.append(feature_stats)
+    for feat in [
+        "Start",
+        "End",
+        "deletion_length",
+        "5_end_length",
+        "3_end_length",
+        "dvg_length",
+        "NGS_read_count",
+        "norm_log_NGS_read_count",
+    ]:
+        tmp = gb[feat].apply(_agg_stats).unstack()
+        tmp.columns = [f"{feat}_{k}" for k in tmp.columns]
+        stats_df = stats_df.join(tmp)
 
-    return pd.DataFrame(stats)
+    # full_seq_length: one representative value per group (always identical)
+    stats_df["full_seq_length"] = gb["full_seq_length"].first().round().astype("Int64")
+
+    stats_df = stats_df.reset_index()
+
+    save_df(stats_df, "statistics", RESULTSPATH, folder, "stats", data, strain, segment, intersects)
 
 
 if __name__ == "__main__":
     '''
 
     '''
+    plt.style.use("seaborn")
+    plt.rc("font", size=12)
 
     #################
     ### SELECTION ###
     #################
     
-    ### COMBINED SINGLE ###
+    ### DATASETS MULTI ###
 
-    # folder = 'combined'
-    # subfolder = 'pri'
+    folder = 'unpooled'   # pooled | unpooled
+    subfolder = 'base'   # base | structure
 
-    # data = ''
-    # strain = DATASET_STRAIN_DICT[data]
-    # segment = 'all'
-    # intersects = 'all'
+    data = 'all'   # all | IAV | IBV | H1N1
+    strain = 'all'   # all | PR8
+    segment = 'all'   # all | PB1
+    intersects = 'median'   # all | meidian
 
-    # motif_length = 3
-
-    # dfname = f'motif_length_{motif_length}'
-    # dfnames = [dfname]
-    # dfs = load_all_preprocessed(dfnames, folder, subfolder, data, strain, segment, intersects)
-
-    ### COMBINED MULTI ###
-
-    folder = 'combined'
-    subfolder = 'pri'
-
-    data = 'IAV'
-    strain = 'PR8'
-    segment = 'PB1'
-    intersects = 'mean'
-
-    motif_length = 3
-
-    dfname = f'motif_length_{motif_length}'
-    dfnames = [dfname]
-    dfs = load_all_preprocessed(dfnames, folder, subfolder, data, strain, segment, intersects)
+    dfnames = get_dataset_names(cutoff=40, selection=data)
+    dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
     ###################
     ### run scripts ###
     ###################
 
-    ### requires pri feature preprocessing ###
-
-    run_pri_mannwhitneyu(dfs, dfname, data, strain, segment, intersects)
+    strain_segment_statistics(dfs, folder, data, strain, segment, intersects)

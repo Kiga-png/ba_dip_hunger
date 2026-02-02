@@ -6,17 +6,19 @@ import pandas as pd
 
 sys.path.insert(0, "..")
 
-from utils import get_dataset_names, load_all
-from utils import manage_specifiers, load_all_preprocessed, merge_missing_features, save_df
-from utils import balance_by_threshold, reduce_rows
+from analysis.visuals import create_train_test_density_plot, create_feature_roc_auc_plot, create_feature_pr_auc_plot
 
-from utils import RESULTSPATH, SEED, DATASET_STRAIN_DICT
+from analysis.visuals import POOLED_THRESHOLD, UNPOOLED_THRESHOLD
+
+from utils import balance_by_threshold, reduce_rows, get_feature_modification_name
+
+from utils import RESULTSPATH, SEED, TOP_N, DATASET_STRAIN_DICT
 from utils import COLORS, DECIMALS
 
+from sklearn.metrics import roc_auc_score, precision_recall_curve, average_precision_score, f1_score
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.metrics import roc_auc_score, roc_curve, f1_score
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks
@@ -34,105 +36,49 @@ RESULTSPATH = os.path.join(RESULTSPATH, "networks")
 
 VERSION = "0"
 KMER_SIZE = 3
-THRESHOLD = 1.00
+KMER_STEP = 3 
 
-MARKED = 1
-DROP_X = 0
-SHAP_CAT = 1
-STRUCTURE = 0
-BALANCE = 0
+BALANCE = 0   # 0 | 1
+
+MARKED = 1   # 0 | 1
+DROP_X = 0   # 0 | 1
+SHAP_CAT = 1   # 0 | 1
+STRUCTURE = 0   # 0 | 1
+
 MAX_NUMBER = 25000
 
-BEST_MODEL = 0
+BEST_MODEL = 0   # 0 | 1
+
+# occlussion and SHAP
+MAX_NUMBER_TRAIN = 10
+MAX_NUMBER_TEST  = 10
 
 ###########
 ### CNN ###
 ###########
 
 ### load & save ###
+selector = 'dataset_name'
+
 folder = 'unpooled'
 subfolder = 'training'
 
 data = 'IAV'
 
 strain = 'PR8'
+### for single dataset ###
 # strain = DATASET_STRAIN_DICT[data]
 
 segment = 'PB1'
-intersects = 'median with metadata'
-
+intersects = 'median'
 motif_length = 3
-fname = f'motif_length_{motif_length}'
-read_path = os.path.join(DATAPATH, folder, subfolder, data, strain, segment, intersects)
-df = pd.read_csv(os.path.join(read_path, f'{fname}.csv'), keep_default_na=False, na_values=[])
-
-if MARKED:
-    key_sequence = "marked_dvg_sequence"
-    key_structure = "marked_structure"
-else:
-    key_sequence = "dvg_sequence"
-    key_structure = "structure"
-
-df = reduce_rows(df, MAX_NUMBER)
-
-if BALANCE:
-    df = balance_by_threshold(df, 'norm_log_NGS_read_count', THRESHOLD)
-
-NAME_MOD = f'{VERSION}_motif_length_{motif_length}'
-
-save_path_model = os.path.join(RESULTSPATH, 'CNN', 'kmer', data, strain, segment, intersects)
-os.makedirs(save_path_model, exist_ok=True)
-
-### key parameter ####
-df["label"] = (df["norm_log_NGS_read_count"] > THRESHOLD).astype(int)
-
-### k-mer token ###
-def kmer_tokenize(seq, k):
-    if DROP_X:
-        return [seq[i:i + k] for i in range(len(seq) - k + 1) if 'X' not in seq[i:i + k]]
-    else:
-        return [seq[i:i + k] for i in range(len(seq) - k + 1)]
-
-### sequence to integer ###
-vocab = set()
-df["kmer_seq"] = df[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-df["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
-vocab = sorted(vocab)
-token2idx = {k: i + 1 for i, k in enumerate(vocab)}
-
-def encode_seq(kmers):
-    return [token2idx[k] for k in kmers if k in token2idx]
-
-df["encoded_seq"] = df["kmer_seq"].apply(encode_seq)
-maxlen = df["encoded_seq"].apply(len).max()
-X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=maxlen)
-
-### sec structure ###
-if STRUCTURE:
-    vocab2 = set()
-    df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-    df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
-    vocab2 = sorted(vocab2)
-    token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
-
-    def encode_str(kmers):
-        return [token2idx2[k] for k in kmers if k in token2idx2]
-
-    df["encoded_str"] = df["kmer_str"].apply(encode_str)
-    maxlen2 = df["encoded_str"].apply(len).max()
-    X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
-else:
-    vocab2 = []
-    token2idx2 = {}
-    maxlen2 = 0
-    X_str = None
 
 ### categorical features ###
 categorical_cols = []
 
 # categorical_cols += ["Segment", "Strain"]
 categorical_cols += ['system_type', 'library_layout', 'library_selection', 'library_source', 'subtype']
-categorical_cols += ['Localization', 'Resolution', 'Cells', 'Host']
+# categorical_cols += ['Localization', 'Resolution', 'Cells', 'Host']
 # categorical_cols += ['Time', 'MOI']
 categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
@@ -142,12 +88,6 @@ categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
 ### test for dataset dependencies ###
 # categorical_cols += ["dataset_name"]
-
-try:
-    encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-except TypeError:
-    encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
-X_cat = encoder.fit_transform(df[categorical_cols])
 
 ### numerical features ###
 numerical_cols = []
@@ -189,6 +129,123 @@ numerical_cols += ["5_end_length", "3_end_length"]
 # numerical_cols += ["GC_5prime_tail", "GC_3prime_tail"]
 # numerical_cols += ["AUG_total", "AUG_unpaired", "AUG_unpaired_content"]
 
+### extra features ###
+extra_cols = [
+    "dataset_name",
+    "norm_log_NGS_read_count",
+    "marked_dvg_sequence",
+    "dvg_sequence",
+]
+
+if STRUCTURE:
+    extra_cols += [
+        "marked_structure",
+        "structure",
+    ]
+
+### build dtype map ###
+dtype_map = {col: "string" for col in categorical_cols}
+dtype_map.update({col: "float32" for col in numerical_cols})
+
+usecols = list(dict.fromkeys(
+    categorical_cols +
+    numerical_cols +
+    extra_cols
+))
+
+fname = f'motif_length_{motif_length}'
+read_path = os.path.join(DATAPATH, folder, subfolder, data, strain, segment, intersects)
+df = pd.read_csv(os.path.join(read_path, f'{fname}.csv'), usecols=usecols, dtype=dtype_map, keep_default_na=False, na_values=[])
+
+if folder == 'pooled':
+    THRESHOLD = POOLED_THRESHOLD
+elif folder == 'unpooled':
+    THRESHOLD = UNPOOLED_THRESHOLD
+
+if MARKED:
+    key_sequence = "marked_dvg_sequence"
+    key_structure = "marked_structure"
+else:
+    key_sequence = "dvg_sequence"
+    key_structure = "structure"
+
+df = reduce_rows(df, MAX_NUMBER)
+
+if BALANCE:
+    df = balance_by_threshold(df, 'norm_log_NGS_read_count', THRESHOLD)
+
+NAME_MOD = f'{VERSION}_motif_length_{motif_length}'
+
+save_path_model = os.path.join(RESULTSPATH, 'bin', 'CNN', data, strain, segment, intersects)
+os.makedirs(save_path_model, exist_ok=True)
+
+### key parameter ####
+df["label"] = (df["norm_log_NGS_read_count"] > THRESHOLD).astype(int)
+
+### class balance (full dataset) ###
+n_total = len(df)
+n_pos = int(np.sum(df["label"] == 1))
+n_neg = int(np.sum(df["label"] == 0))
+
+print("\nclass balance (full dataset)")
+print(f"total samples: {n_total}")
+print(f"positive (1):  {n_pos} ({n_pos / n_total:.{DECIMALS}f})")
+print(f"negative (0):  {n_neg} ({n_neg / n_total:.{DECIMALS}f})")
+
+### k-mer token ###
+def kmer_tokenize(seq, k, step=KMER_STEP):
+    if DROP_X:
+        return [
+            seq[i:i + k]
+            for i in range(0, len(seq) - k + 1, step)
+            if 'X' not in seq[i:i + k]
+        ]
+    else:
+        return [
+            seq[i:i + k]
+            for i in range(0, len(seq) - k + 1, step)
+        ]
+
+### sequence to integer ###
+vocab = set()
+df["kmer_seq"] = df[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+df["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
+vocab = sorted(vocab)
+token2idx = {k: i + 1 for i, k in enumerate(vocab)}
+
+def encode_seq(kmers):
+    return [token2idx[k] for k in kmers if k in token2idx]
+
+df["encoded_seq"] = df["kmer_seq"].apply(encode_seq)
+maxlen = df["encoded_seq"].apply(len).max()
+X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=maxlen)
+
+### sec structure ###
+if STRUCTURE:
+    vocab2 = set()
+    df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+    df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
+    vocab2 = sorted(vocab2)
+    token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
+
+    def encode_str(kmers):
+        return [token2idx2[k] for k in kmers if k in token2idx2]
+
+    df["encoded_str"] = df["kmer_str"].apply(encode_str)
+    maxlen2 = df["encoded_str"].apply(len).max()
+    X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
+else:
+    vocab2 = []
+    token2idx2 = {}
+    maxlen2 = 0
+    X_str = None
+
+try:
+    encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+except TypeError:
+    encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
+X_cat = encoder.fit_transform(df[categorical_cols])
+
 scaler = StandardScaler()
 X_num = scaler.fit_transform(df[numerical_cols])
 
@@ -198,12 +255,29 @@ y = df["label"].values
 
 ### train/test split ###
 if STRUCTURE:
-    X_seq_train, X_seq_test, X_str_train, X_str_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
-        X_seq, X_str, X_other, y, test_size=0.2, random_state=SEED
+    (
+        X_seq_train, X_seq_test,
+        X_str_train, X_str_test,
+        X_other_train, X_other_test,
+        y_train, y_test,
+        df_train, df_test
+    ) = train_test_split(
+        X_seq, X_str, X_other, y, df,
+        test_size=0.2,
+        random_state=SEED,
+        stratify=y,
     )
 else:
-    X_seq_train, X_seq_test, X_other_train, X_other_test, y_train, y_test = train_test_split(
-        X_seq, X_other, y, test_size=0.2, random_state=SEED
+    (
+        X_seq_train, X_seq_test,
+        X_other_train, X_other_test,
+        y_train, y_test,
+        df_train, df_test
+    ) = train_test_split(
+        X_seq, X_other, y, df,
+        test_size=0.2,
+        random_state=SEED,
+        stratify=y,
     )
 
 ### model ###
@@ -233,17 +307,25 @@ dense = layers.Dropout(0.3)(dense)
 output = layers.Dense(1, activation='sigmoid')(dense)
 
 model = models.Model(inputs=inputs, outputs=output)
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(
+    optimizer='adam',
+    loss='binary_crossentropy',
+    metrics=[
+        'accuracy',
+        tf.keras.metrics.AUC(name='auc_roc', curve='ROC'),
+        tf.keras.metrics.AUC(name='auc_pr', curve='PR')
+    ]
+)
 
 ### callbacks ###
 best_model_path = os.path.join(save_path_model, f"{NAME_MOD}_best_model.h5")
 checkpoint_cb = callbacks.ModelCheckpoint(
-    best_model_path, save_best_only=True, monitor="val_loss", mode="min"
+    best_model_path, save_best_only=True, monitor="val_auc_pr", mode="max"
 )
 
 ### train ###
 if STRUCTURE:
-    model.fit(
+    history = model.fit(
         [X_seq_train, X_str_train, X_other_train], y_train,
         validation_split=0.1,
         epochs=10,
@@ -251,13 +333,66 @@ if STRUCTURE:
         callbacks=[checkpoint_cb]
     )
 else:
-    model.fit(
+    history = model.fit(
         [X_seq_train, X_other_train], y_train,
         validation_split=0.1,
         epochs=10,
         batch_size=64,
         callbacks=[checkpoint_cb]
     )
+
+### estimate F1 threshold (precision-constrained, validation) ###
+TARGET_PRECISION = 0.95
+
+# rebuild the exact validation split Keras used (last 10% of training arrays, shuffle=True default)
+n_train_split = len(y_train)
+n_val = int(np.floor(0.1 * n_train_split))
+n_fit = n_train_split - n_val
+
+val_slice = slice(n_fit, n_train_split)
+
+y_val = y_train[val_slice]
+
+if STRUCTURE:
+    y_val_proba = model.predict(
+        [X_seq_train[val_slice], X_str_train[val_slice], X_other_train[val_slice]]
+    ).ravel()
+else:
+    y_val_proba = model.predict(
+        [X_seq_train[val_slice], X_other_train[val_slice]]
+    ).ravel()
+
+precision, recall, thresholds = precision_recall_curve(y_val, y_val_proba)
+
+# precision_recall_curve returns thresholds with length = len(precision) - 1
+precision_t = precision[:-1]
+recall_t    = recall[:-1]
+
+mask = precision_t >= TARGET_PRECISION
+
+if np.any(mask):
+    # among thresholds that satisfy precision, pick best recall
+    best_idx = int(np.argmax(recall_t[mask]))
+    F1_THRESHOLD = float(thresholds[mask][best_idx])
+else:
+    # fallback: maximize F1 if precision target is impossible
+    f1_scores = 2 * precision_t * recall_t / (precision_t + recall_t + 1e-12)
+    best_idx = int(np.nanargmax(f1_scores))
+    F1_THRESHOLD = float(thresholds[best_idx])
+
+F1_THRESHOLD = round(F1_THRESHOLD, DECIMALS)
+
+f1_at_thr = f1_score(y_val, (y_val_proba >= F1_THRESHOLD).astype(int))
+f1_at_thr = round(f1_at_thr, DECIMALS)
+
+pr_auc_val = average_precision_score(y_val, y_val_proba)
+pr_auc_val = round(pr_auc_val, DECIMALS)
+
+print("\nF1 threshold (validation, precision-constrained)")
+print(f"target precision: {TARGET_PRECISION}")
+print(f"chosen threshold: {F1_THRESHOLD}")
+print(f"val PR-AUC:       {pr_auc_val}")
+print(f"val F1:           {f1_at_thr}")
 
 ### save ###
 final_model_path = os.path.join(save_path_model, f"{NAME_MOD}_final_model.h5")
@@ -287,7 +422,14 @@ print("✔ preprocessing artifacts saved")
 ### visuals ###
 ###############
 
-save_path_vis = os.path.join(RESULTSPATH, 'visuals', subfolder, data, strain, segment, intersects)
+### numbers ###
+n_total = len(df)
+n_train = len(df_train)
+n_val = int(np.floor(0.1 * n_train))
+n_fit = n_train - n_val
+n_test = len(df_test)
+
+save_path_vis = os.path.join(RESULTSPATH, 'bin', 'visuals', data, strain, segment, intersects)
 os.makedirs(save_path_vis, exist_ok=True)
 
 if BEST_MODEL:
@@ -295,50 +437,533 @@ if BEST_MODEL:
 else:
     model_path = final_model_path
 
-### ROC & F1 ###
 plt.style.use('seaborn-darkgrid')
 plt.rc('font', size=12)
 
-model.load_weights(model_path)
-
-if STRUCTURE:
-    y_pred_proba = model.predict([X_seq_test, X_str_test, X_other_test]).ravel()
-else:
-    y_pred_proba = model.predict([X_seq_test, X_other_test]).ravel()
-
-fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
-auc_score = roc_auc_score(y_test, y_pred_proba)
-auc_score = round(auc_score, DECIMALS)
-
-roc_color = COLORS[8]
-
-y_pred_label = (y_pred_proba >= 0.5).astype(int)
-f1 = f1_score(y_test, y_pred_label)
-f1 = round(f1, DECIMALS)
-
-title_name = f'ROC - curve plot (F1={f1})'
+### loss curve (train, val) ###
+title_name = 'loss lerarning curve (training, validation) - curve plot'
 title_name += f'\ndata: {data}'
 title_name += f', strain: {strain}'
 title_name += f', segment: {segment}'
 title_name += f', {intersects} intersects'
-dvg_count = df.shape[0]
-title_name += f' (n={dvg_count})'
+title_name += f' (n_train={n_train}, n_val={n_val})'
 
-plt.figure()
-plt.plot(fpr, tpr, label=f"ROC curve (AUC={auc_score})", linewidth=2, color=roc_color)
-plt.plot([0, 1], [0, 1], linestyle="--", linewidth=1.5, color="grey")
-plt.xlabel("false positive rate")
-plt.ylabel("true positive rate")
+epochs = np.arange(1, len(history.history["loss"]) + 1)
+
+plt.figure(figsize=(10, 6))
+plt.plot(epochs, history.history["loss"], label="training", linewidth=2, color=COLORS[8])
+plt.plot(epochs, history.history["val_loss"], label="validation", linewidth=2, color=COLORS[0])
+plt.xlabel("epoch")
+plt.ylabel("loss (binary crossentropy)")
 plt.title(title_name)
-plt.legend(loc="lower right")
+
+plt.legend(
+    loc='upper left',
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0.,
+    title='type',
+    frameon=True
+)
+
 plt.grid(True)
 
-roc_path = os.path.join(save_path_vis, f"{NAME_MOD}_roc.png")
-plt.savefig(roc_path, dpi=300, bbox_inches="tight")
+train_curve_path = os.path.join(save_path_vis, f"{NAME_MOD}_training_loss.png")
+plt.savefig(train_curve_path, dpi=300, bbox_inches="tight")
 plt.close()
-print(f"\n✔ ROC curve saved")
 
-### SHAP ###
+print("✔ training loss curve saved")
+
+### accuracy curve (train, val) ###
+title_name = 'accuracy lerarning curve (training, validation) - curve plot'
+title_name += f'\ndata: {data}'
+title_name += f', strain: {strain}'
+title_name += f', segment: {segment}'
+title_name += f', {intersects} intersects'
+title_name += f' (n_train={n_train}, n_val={n_val})'
+
+if "accuracy" in history.history and "val_accuracy" in history.history:
+    plt.figure(figsize=(10, 6))
+    plt.plot(epochs, history.history["accuracy"], label="training", linewidth=2, color=COLORS[8])
+    plt.plot(epochs, history.history["val_accuracy"], label="validation", linewidth=2, color=COLORS[0])
+    plt.xlabel("epoch")
+    plt.ylabel("accuracy (fraction of correct predictions)")
+    plt.title(title_name)
+
+    plt.legend(
+        loc='upper left',
+        bbox_to_anchor=(1.02, 1),
+        borderaxespad=0.,
+        title='type',
+        frameon=True
+    )
+
+    plt.grid(True)
+
+    acc_curve_path = os.path.join(save_path_vis, f"{NAME_MOD}_training_accuracy.png")
+    plt.savefig(acc_curve_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    print("✔ training accuracy curve saved")
+
+### PR-AUC curve (train, val) ###
+title_name = 'PR-AUC lerarning curve (training, validation) - curve plot'
+title_name += f'\ndata: {data}'
+title_name += f', strain: {strain}'
+title_name += f', segment: {segment}'
+title_name += f', {intersects} intersects'
+title_name += f' (n_train={n_train}, n_val={n_val})'
+
+# be robust to older metric naming
+if ("pr_auc" in history.history) and ("val_pr_auc" in history.history):
+    pr_key = "pr_auc"
+    val_pr_key = "val_pr_auc"
+elif ("auc" in history.history) and ("val_auc" in history.history):
+    pr_key = "auc"
+    val_pr_key = "val_auc"
+else:
+    pr_key = None
+    val_pr_key = None
+
+if pr_key is not None:
+    epochs = np.arange(1, len(history.history[pr_key]) + 1)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(
+        epochs,
+        history.history[pr_key],
+        label="training",
+        linewidth=2,
+        color=COLORS[8]
+    )
+    plt.plot(
+        epochs,
+        history.history[val_pr_key],
+        label="validation",
+        linewidth=2,
+        color=COLORS[0]
+    )
+
+    plt.xlabel("epoch")
+    plt.ylabel("PR-AUC")
+    plt.title(title_name)
+
+    plt.legend(
+        loc='upper left',
+        bbox_to_anchor=(1.02, 1),
+        borderaxespad=0.,
+        title='type',
+        frameon=True
+    )
+
+    plt.grid(True)
+
+    pr_auc_curve_path = os.path.join(save_path_vis, f"{NAME_MOD}_training_pr_auc.png")
+    plt.savefig(pr_auc_curve_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    print("✔ training PR-AUC curve saved")
+
+model.load_weights(model_path)
+
+# build dfs #
+if STRUCTURE:
+    y_pred_proba_train = model.predict(
+        [X_seq_train, X_str_train, X_other_train]
+    ).ravel()
+    y_pred_proba_test = model.predict(
+        [X_seq_test, X_str_test, X_other_test]
+    ).ravel()
+else:
+    y_pred_proba_train = model.predict(
+        [X_seq_train, X_other_train]
+    ).ravel()
+    y_pred_proba_test = model.predict(
+        [X_seq_test, X_other_test]
+    ).ravel()
+
+df_train_proba = df_train.copy().reset_index(drop=True)
+df_train_proba["y_true"] = y_train
+df_train_proba["y_proba"] = y_pred_proba_train
+
+df_test_proba = df_test.copy().reset_index(drop=True)
+df_test_proba["y_true"] = y_test
+df_test_proba["y_proba"] = y_pred_proba_test
+
+modification = get_feature_modification_name()
+
+def safe_roc_auc(y_true, y_proba):
+    if len(np.unique(y_true)) < 2:
+        return np.nan
+    return roc_auc_score(y_true, y_proba)
+
+def safe_pr_auc(y_true, y_proba):
+    if len(np.unique(y_true)) < 2:
+        return np.nan
+    return average_precision_score(y_true, y_proba)
+
+def safe_f1(y_true, y_proba, threshold=0.5):
+    if len(np.unique(y_true)) < 2:
+        return np.nan
+    y_pred = (y_proba >= threshold).astype(int)
+    return f1_score(y_true, y_pred)
+
+### ROC-AUC & PR-AUC & F1 (test) ###
+create_feature_pr_auc_plot(
+    plot_name="NGS read count - PR-AUC (testing) - curve plot",
+    df=df_test_proba,
+    y_true_feature_name="y_true",
+    y_pred_proba_feature_name="y_proba",
+    f1_threshold=F1_THRESHOLD,
+    selector=selector,
+    fname=f"{NAME_MOD}_PR_AUC",
+    path="networks",
+    folder="bin",
+    subfolder="visuals",
+    data=data,
+    strain=strain,
+    segment=segment,
+    intersects=intersects,
+)
+
+print(f"✔ test PR-AUC curve saved")
+
+create_feature_roc_auc_plot(
+    plot_name="NGS read count - ROC-AUC (testing) - curve plot",
+    df=df_test_proba,
+    y_true_feature_name="y_true",
+    y_pred_proba_feature_name="y_proba",
+    f1_threshold=F1_THRESHOLD,
+    selector=selector,
+    fname=f"{NAME_MOD}_ROC_AUC",
+    path="networks",
+    folder="bin",
+    subfolder="visuals",
+    data=data,
+    strain=strain,
+    segment=segment,
+    intersects=intersects,
+)
+
+print(f"✔ test ROC-AUC curve saved")
+
+### density (train, test) ###
+create_train_test_density_plot(
+    plot_name="NGS read count - predictions (testing) - scatter plot",
+    df_train=df_train,
+    df_test=df_test,
+    x_feature_name="norm_log_NGS_read_count",
+    x_axis_name=f"{modification} NGS count (reads)",
+    fname=f"{NAME_MOD}_density",
+    path="networks",
+    folder="bin",
+    subfolder="visuals",
+    data=data,
+    strain=strain,
+    segment=segment,
+    intersects=intersects,
+)
+
+print("✔ train/test density plot saved")
+
+### occlusion importances (test)  ###
+rng = np.random.default_rng(SEED)
+eval_n = min(MAX_NUMBER_TEST, X_seq_test.shape[0])
+idx_eval = rng.choice(X_seq_test.shape[0], size=eval_n, replace=False)
+
+X_seq_eval = X_seq_test[idx_eval]
+X_other_eval = X_other_test[idx_eval]
+y_eval = y_test[idx_eval]
+if STRUCTURE:
+    X_str_eval = X_str_test[idx_eval]
+else:
+    X_str_eval = None
+
+def cnn_predict_proba(model, X_seq, X_other, STRUCTURE=False, X_str=None):
+    if STRUCTURE:
+        return model.predict([X_seq, X_str, X_other], verbose=0).ravel()
+    return model.predict([X_seq, X_other], verbose=0).ravel()
+
+def cnn_test_roc_auc(model, X_seq_test, X_other_test, y_test, STRUCTURE=False, X_str_test=None):
+    y_proba = cnn_predict_proba(model, X_seq_test, X_other_test, STRUCTURE=STRUCTURE, X_str=X_str_test)
+    return safe_roc_auc(y_test, y_proba)
+
+def cnn_test_pr_auc(model, X_seq_test, X_other_test, y_test, STRUCTURE=False, X_str_test=None):
+    y_proba = cnn_predict_proba(model, X_seq_test, X_other_test, STRUCTURE=STRUCTURE, X_str=X_str_test)
+    return safe_pr_auc(y_test, y_proba)
+
+base_roc_auc = cnn_test_roc_auc(
+    model,
+    X_seq_eval, X_other_eval, y_eval,
+    STRUCTURE=bool(STRUCTURE),
+    X_str_test=(X_str_eval if STRUCTURE else None),
+)
+
+base_pr_auc = cnn_test_pr_auc(
+    model,
+    X_seq_eval, X_other_eval, y_eval,
+    STRUCTURE=bool(STRUCTURE),
+    X_str_test=(X_str_eval if STRUCTURE else None),
+)
+
+base_f1_eval = safe_f1(
+    y_eval,
+    cnn_predict_proba(
+        model,
+        X_seq_eval, X_other_eval,
+        STRUCTURE=bool(STRUCTURE),
+        X_str=(X_str_eval if STRUCTURE else None),
+    ),
+    threshold=F1_THRESHOLD
+)
+
+base_roc_s = "nan" if not np.isfinite(base_roc_auc) else f"{base_roc_auc:.{DECIMALS}f}"
+base_pr_s  = "nan" if not np.isfinite(base_pr_auc)  else f"{base_pr_auc:.{DECIMALS}f}"
+base_f1_s  = "nan" if not np.isfinite(base_f1_eval) else f"{base_f1_eval:.{DECIMALS}f}"
+
+try:
+    cat_names_full = encoder.get_feature_names_out(categorical_cols)
+except AttributeError:
+    cat_names_full = encoder.get_feature_names(categorical_cols)
+feature_names_other = list(cat_names_full) + numerical_cols
+
+def importance_x_other_pr_auc_drop(
+    model,
+    X_seq_test, X_other_test, y_test,
+    feature_names,
+    STRUCTURE=False, X_str_test=None,
+    mode="permute",
+    n_repeats=5,
+    seed=SEED
+):
+    rng = np.random.default_rng(seed)
+    base = cnn_test_pr_auc(model, X_seq_test, X_other_test, y_test, STRUCTURE=STRUCTURE, X_str_test=X_str_test)
+
+    rows = []
+    for j, fname in enumerate(feature_names):
+        if mode == "zero":
+            X_mod = X_other_test.copy()
+            X_mod[:, j] = 0.0
+            pr_mod = cnn_test_pr_auc(model, X_seq_test, X_mod, y_test, STRUCTURE=STRUCTURE, X_str_test=X_str_test)
+            drop = base - pr_mod
+
+        elif mode == "permute":
+            drops = []
+            for _ in range(n_repeats):
+                X_mod = X_other_test.copy()
+                perm = rng.permutation(X_mod.shape[0])
+                X_mod[:, j] = X_mod[perm, j]
+                pr_mod = cnn_test_pr_auc(model, X_seq_test, X_mod, y_test, STRUCTURE=STRUCTURE, X_str_test=X_str_test)
+                drops.append(base - pr_mod)
+            drop = float(np.nanmean(drops))
+        else:
+            raise ValueError("mode must be 'permute' or 'zero'")
+
+        rows.append((fname, drop))
+
+    imp_df = (
+        pd.DataFrame(rows, columns=["feature", "pr_auc_drop"])
+          .sort_values("pr_auc_drop", ascending=False)
+    )
+    return base, imp_df
+
+# permutation importance (on eval subset)
+base_perm, imp_perm = importance_x_other_pr_auc_drop(
+    model,
+    X_seq_eval, X_other_eval, y_eval,
+    feature_names_other,
+    STRUCTURE=bool(STRUCTURE),
+    X_str_test=(X_str_eval if STRUCTURE else None),
+    mode="permute",
+    n_repeats=5,
+    seed=SEED
+)
+
+# zero occlusion importance (on eval subset)
+base_zero, imp_zero = importance_x_other_pr_auc_drop(
+    model,
+    X_seq_eval, X_other_eval, y_eval,
+    feature_names_other,
+    STRUCTURE=bool(STRUCTURE),
+    X_str_test=(X_str_eval if STRUCTURE else None),
+    mode="zero",
+)
+
+base_perm_s = "nan" if not np.isfinite(base_perm) else f"{base_perm:.{DECIMALS}f}"
+base_zero_s = "nan" if not np.isfinite(base_zero) else f"{base_zero:.{DECIMALS}f}"
+
+# plot permutation (test subset)
+plot_df = imp_perm.head(TOP_N).iloc[::-1]
+title_name = f'top {TOP_N} permutation importances (testing) - bar plot'
+title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects (n={eval_n})'
+title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={F1_THRESHOLD})'
+
+plt.figure(figsize=(10, 6))
+plt.barh(plot_df["feature"], plot_df["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
+plt.xlabel("PR-AUC drop (when permuted)")
+plt.ylabel("feature")
+plt.title(title_name)
+plt.tight_layout()
+plt.grid(True, axis="x")
+
+perm_path = os.path.join(save_path_vis, f"{NAME_MOD}_permutation.png")
+plt.savefig(perm_path, dpi=300, bbox_inches="tight")
+plt.close()
+
+print("✔ permutation importance saved")
+
+# plot zero-occlusion (test subset)
+plot_df = imp_zero.head(TOP_N).iloc[::-1]
+title_name = f'top {TOP_N} occlusion importances (testing) - bar plot'
+title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects (n={eval_n})'
+title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={F1_THRESHOLD})'
+
+plt.figure(figsize=(10, 6))
+plt.barh(plot_df["feature"], plot_df["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
+plt.xlabel("PR-AUC drop (when set to 0)")
+plt.ylabel("feature")
+plt.title(title_name)
+plt.tight_layout()
+plt.grid(True, axis="x")
+
+occ_path = os.path.join(save_path_vis, f"{NAME_MOD}_occlusion.png")
+plt.savefig(occ_path, dpi=300, bbox_inches="tight")
+plt.close()
+
+print("✔ occlusion importance saved")
+
+SEQ_OCC_WINDOW = 10
+SEQ_OCC_STRIDE = 5
+
+def sequence_window_occlusion(
+    model,
+    X_seq_test, X_other_test, y_test,
+    window=10, stride=5,
+    STRUCTURE=False, X_str_test=None,
+):
+    base = cnn_test_pr_auc(model, X_seq_test, X_other_test, y_test, STRUCTURE=STRUCTURE, X_str_test=X_str_test)
+
+    L = X_seq_test.shape[1]
+    window = int(min(window, L)) if L > 0 else 1
+    stride = int(max(1, min(stride, window)))
+
+    starts = list(range(0, max(1, L - window + 1), stride))
+    if starts and starts[-1] != L - window:
+        starts.append(max(0, L - window))
+
+    rows = []
+    for s in starts:
+        e = min(L, s + window)
+        X_mod = X_seq_test.copy()
+        X_mod[:, s:e] = 0
+
+        pr_mod = cnn_test_pr_auc(
+            model,
+            X_mod, X_other_test, y_test,
+            STRUCTURE=STRUCTURE,
+            X_str_test=X_str_test
+        )
+        rows.append((s, e, base - pr_mod))
+
+    return base, pd.DataFrame(rows, columns=["start_tok", "end_tok", "pr_auc_drop"])
+
+base_seq, seq_imp_df = sequence_window_occlusion(
+    model,
+    X_seq_eval, X_other_eval, y_eval,
+    window=SEQ_OCC_WINDOW,
+    stride=SEQ_OCC_STRIDE,
+    STRUCTURE=bool(STRUCTURE),
+    X_str_test=(X_str_eval if STRUCTURE else None),
+)
+
+base_seq_s = "nan" if not np.isfinite(base_seq) else f"{base_seq:.{DECIMALS}f}"
+
+# curve plot (PR-AUC drop vs window center)
+x_center = (seq_imp_df["start_tok"] + seq_imp_df["end_tok"]) / 2.0
+y_drop = seq_imp_df["pr_auc_drop"].to_numpy()
+
+title_name = f'sequence window occlusion (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) importances (testing) - curve plot'
+title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects (n={eval_n})'
+title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={F1_THRESHOLD})'
+
+df_eval_meta = df_test.iloc[idx_eval].copy()
+
+start_med_tok = np.nan
+end_med_tok = np.nan
+
+if ("Start" in df_eval_meta.columns) and ("End" in df_eval_meta.columns):
+    start_med_tok = float(np.nanmedian(df_eval_meta["Start"].astype(float).to_numpy())) // KMER_SIZE
+    end_med_tok   = float(np.nanmedian(df_eval_meta["End"].astype(float).to_numpy()))   // KMER_SIZE
+elif ("5_end_length" in df_eval_meta.columns) and ("deletion_length" in df_eval_meta.columns):
+    five = df_eval_meta["5_end_length"].astype(float).to_numpy()
+    dele = df_eval_meta["deletion_length"].astype(float).to_numpy()
+    start_nt = five + 1.0
+    end_nt   = five + dele
+    start_med_tok = float(np.nanmedian(start_nt)) // KMER_SIZE
+    end_med_tok   = float(np.nanmedian(end_nt))   // KMER_SIZE
+
+plt.figure(figsize=(10, 6))
+plt.plot(x_center, y_drop, linewidth=2, color=COLORS[6], label="test")
+
+if np.isfinite(start_med_tok):
+    plt.axvline(
+        start_med_tok,
+        color="grey",
+        linestyle="--",
+        linewidth=1.5,
+        label=f"start median ({int(start_med_tok)})"
+    )
+if np.isfinite(end_med_tok):
+    plt.axvline(
+        end_med_tok,
+        color="grey",
+        linestyle="--",
+        linewidth=1.5,
+        label=f"end median ({int(end_med_tok)})"
+    )
+
+plt.xlabel("k-mer (k={KMER_SIZE}) position (window center)")
+plt.ylabel("PR-AUC drop (when window masked)")
+plt.title(title_name)
+plt.tight_layout()
+plt.grid(True)
+
+plt.legend(
+    loc='upper left',
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0.,
+    title='types',
+    frameon=True
+)
+
+seq_occ_path = os.path.join(save_path_vis, f"{NAME_MOD}_window_occlusion_curve.png")
+plt.savefig(seq_occ_path, dpi=300, bbox_inches="tight")
+plt.close()
+
+print("✔ sequence window occlusion curve saved")
+
+# top windows bar plot
+top_windows = seq_imp_df.sort_values("pr_auc_drop", ascending=False).head(TOP_N).copy()
+top_windows["window"] = top_windows.apply(lambda r: f'{int(r.start_tok)}-{int(r.end_tok)}', axis=1)
+top_windows = top_windows.sort_values("pr_auc_drop", ascending=True)
+
+title_name = f'top {TOP_N} sequence window (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) importances (testing) - bar plot'
+title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects (n={eval_n})'
+title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={F1_THRESHOLD})'
+
+plt.figure(figsize=(10, 6))
+plt.barh(top_windows["window"], top_windows["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
+plt.xlabel("PR-AUC drop (when window masked)")
+plt.ylabel(f"k-mer (k={KMER_SIZE}) window [start-end)")
+plt.title(title_name)
+plt.tight_layout()
+plt.grid(True, axis="x")
+
+seq_top_path = os.path.join(save_path_vis, f"{NAME_MOD}_window_occlusion_bar.png")
+plt.savefig(seq_top_path, dpi=300, bbox_inches="tight")
+plt.close()
+print("✔ sequence window occlusion bar saved")
+
+### SHAP (test) ###
 if SHAP_CAT:
     X_train_shap = X_other_train
     X_test_shap  = X_other_test
@@ -361,10 +986,14 @@ assert X_train_shap.shape[1] == X_test_shap.shape[1], \
 assert getattr(rf, "n_features_in_", X_test_shap.shape[1]) == X_test_shap.shape[1], \
     "model expects a different number of features than provided X_other_test."
 
-bg_n = min(200, X_train_shap.shape[0])
-eval_n = min(100, X_test_shap.shape[0])
+bg_n = min(MAX_NUMBER_TRAIN, X_train_shap.shape[0])
+eval_n_shap = min(MAX_NUMBER_TEST, X_test_shap.shape[0])
+
 X_bg = X_train_shap[:bg_n]
-X_eval = X_test_shap[:eval_n]
+
+rng = np.random.default_rng(SEED)
+idx = rng.choice(X_test_shap.shape[0], size=eval_n_shap, replace=False)
+X_eval = X_test_shap[idx]
 
 if sp.issparse(X_bg):
     X_bg = X_bg.toarray()
@@ -384,18 +1013,17 @@ mean_abs_shap = np.abs(shap_values).mean(axis=0)
 importance_df = (
     pd.DataFrame({"feature": feature_names, "importance": mean_abs_shap})
       .sort_values("importance", ascending=False)
-      .head(20)
+      .head(TOP_N)
 )
 
-bar_color = COLORS[8]
+bar_color = COLORS[6]
 
-title_name = 'top 20 SHAP importances via RandomForest - bar plot'
+title_name = f'top {TOP_N} SHAP importances via RandomForest - bar plot'
 title_name += f'\ndata: {data}'
 title_name += f', strain: {strain}'
 title_name += f', segment: {segment}'
 title_name += f', {intersects} intersects'
-dvg_count = df.shape[0]
-title_name += f' (n={dvg_count})'
+title_name += f' (n_train={bg_n}, n_test={eval_n_shap})'
 
 plt.figure(figsize=(10, 6))
 plt.barh(importance_df["feature"], importance_df["importance"], color=bar_color, edgecolor='white', linewidth=1)
@@ -409,4 +1037,5 @@ plt.grid(True, axis="x")
 shap_path = os.path.join(save_path_vis, f"{NAME_MOD}_shap.png")
 plt.savefig(shap_path, dpi=300, bbox_inches="tight")
 plt.close()
+
 print("✔ SHAP bar chart saved")

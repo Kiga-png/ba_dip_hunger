@@ -84,17 +84,21 @@ def detect_task(model):
         act_name = None
     return "classification" if act_name == "sigmoid" else "regression"
 
-def build_paths_flipped(preprocess_root, folder, data, strain, segment, intersects, name_mod):
+def build_paths_flipped(preprocess_root, model_type, folder, data, strain, segment, intersects, name_mod):
     root_parent = os.path.dirname(preprocess_root)
 
-    read_dir = os.path.join(preprocess_root, folder, "preparation", data, strain, segment, intersects)
-    model_dir = os.path.join(root_parent, "networks", "CNN", "kmer", data, strain, segment, intersects)
+    read_dir = os.path.join(preprocess_root, folder, "pseudo", data, strain, segment, intersects)
+    model_dir = os.path.join(root_parent, "networks", model_type, "CNN", data, strain, segment, intersects)
 
     preproc_path = os.path.join(model_dir, f"{name_mod}_preproc.joblib")
     best_path    = os.path.join(model_dir, f"{name_mod}_best_model.h5")
     final_path   = os.path.join(model_dir, f"{name_mod}_final_model.h5")
 
-    write_dir = os.path.join(preprocess_root, folder, "prediction", data, strain, segment, intersects)
+    if model_type == "bin":
+        write_dir = os.path.join(preprocess_root, folder, "bin_prediction", data, strain, segment, intersects)
+    elif model_type == "reg":
+        write_dir = os.path.join(preprocess_root, folder, "reg_prediction", data, strain, segment, intersects)
+
     os.makedirs(write_dir, exist_ok=True)
 
     return {
@@ -194,8 +198,10 @@ if __name__ == "__main__":
     segment   = "PB1"
     intersects = "median"
 
+    model_type = "reg"
+
     motif_length = K_MER_LENGTH
-    version      = "0"
+    version      = "1"
     NAME_MOD     = f"{version}_motif_length_{motif_length}"
 
     model_choice = "final"
@@ -208,7 +214,7 @@ if __name__ == "__main__":
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
     preprocess_root = ensure_preprocess_root(RESULTSPATH)
 
-    paths = build_paths_flipped(preprocess_root, folder, data, strain, segment, intersects, NAME_MOD)
+    paths = build_paths_flipped(preprocess_root, model_type, folder, data, strain, segment, intersects, NAME_MOD)
 
     if input_csv_name is None:
         in_csv = os.path.join(paths["read_dir"], f"motif_length_{motif_length}.csv")
@@ -233,7 +239,7 @@ if __name__ == "__main__":
     else:
         y_pred = model.predict([X_seq, X_other], verbose=0).ravel()
 
-    out_col = "NGS_prediction" if TASK == "classification" else "NGS_value"
+    out_col = "predicted_probability" if TASK == "classification" else "predicted_value"
     if TASK == "classification":
         y_pred = np.clip(y_pred, 0.0, 1.0)
     df[out_col] = y_pred

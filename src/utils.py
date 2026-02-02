@@ -37,14 +37,18 @@ CUTOFF = 15
 N_SAMPLES = 35000
 
 SEED = 42
-RANK_THRESHOLD = 20
 DECIMALS = 2
 K_MER_LENGTH = 3
-PALINDROMIC_K_MER_LENGTH = 6
-DIRECT_REPEAT_LEGTH_CAP = 5
 
-LOGARITHM = "log10"
-NORMALIZATION = "robust"
+PALINDROMIC_K_MER_LENGTH = 6
+DIRECT_REPEAT_LENGTH_CAP = 5
+
+# to high split will cause problems
+RANK_THRESHOLD = 20
+TOP_N = 10
+
+LOGARITHM = "log10"   # "none" | "log10" | "log2"
+NORMALIZATION = "robust"   # "none" | "min-max" | "z-score" | "robust" | "euclidean"
 
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
 
@@ -83,6 +87,7 @@ H1N1_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023', 'Wang2020', 'Zhuravlev202
 H3N2_DATASETS = ['Alnaji2019_Perth', 'Berry2021_A']
 H5N1_DATASETS = ['Penn2022']
 H7N9_DATASETS = ['Lui2019']
+
 IAV_DATASETS = H1N1_DATASETS + H3N2_DATASETS + H5N1_DATASETS + H7N9_DATASETS
 IBV_DATASETS = ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018", "Berry2021_B_Yam", "Southgate2019","Valesano2020_Yam"]
 
@@ -753,7 +758,6 @@ SEGMENT_DICTS = dict({
     })
 })
 
-
 ### FUNCTIONS ###
 
 def get_dataset_names(cutoff: int=0, selection: str="")-> list:
@@ -783,6 +787,14 @@ def get_dataset_names(cutoff: int=0, selection: str="")-> list:
         select_names = VIVO_DATASETS
     elif selection == "IAV":
         select_names = IAV_DATASETS
+    elif selection == "H1N1":
+        select_names = H1N1_DATASETS
+    elif selection == "H3N2":
+        select_names = H3N2_DATASETS
+    elif selection == "H5N1":
+        select_names = H5N1_DATASETS
+    elif selection == "H7N9":
+        select_names = H7N9_DATASETS
     elif selection == "IBV":
         select_names = IBV_DATASETS
     elif selection == "IAV (in vivo mouse)":
@@ -1456,11 +1468,17 @@ def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '',
     os.makedirs(read_path, exist_ok=True)
 
     fname = fname + ".csv"
-    df = pd.read_csv(os.path.join(read_path, fname), keep_default_na=False, na_values=[], low_memory=False, dtype={
-        "Time": "string",
-        "MOI": "string"
-        }
+    df = pd.read_csv(
+        os.path.join(read_path, fname),
+        keep_default_na=False,
+        na_values=[],
+        low_memory=False
     )
+
+    if "Time" in df.columns:
+        df["Time"] = df["Time"].astype("string")
+    if "MOI" in df.columns:
+        df["MOI"] = df["MOI"].astype("string")
 
     return df
 
@@ -1509,15 +1527,10 @@ _FEATURE_KEYS = ["Time", "Localization", "Resolution", "Cells", "MOI", "Host"]
 _KEY_NORMALIZATION = {
     "Time": "Time",
     "Localization": "Localization",
-    "Localization:": "Localization",
     "Resolution": "Resolution",
-    "Resolution:": "Resolution",
     "Cells": "Cells",
-    "Cells:": "Cells",
     "MOI": "MOI",
-    "MOI:": "MOI",
-    "Host": "Host",
-    "Host:": "Host",
+    "Host": "Host"
 }
 
 def _extract_meta_features(meta: dict) -> dict:
@@ -1805,12 +1818,39 @@ def split_by_feature(df: pd.DataFrame, feature_name: str, feature_value):
     return df_true, df_false
 
 def split_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float):
-    '''
+    """
+    split dataframe by threshold.
+    if threshold is not present in the data, use the maximum value below threshold.
+    returns the used threshold as well.
+    """
+    if feature_name not in df.columns:
+        raise KeyError(f"{feature_name} not in dataframe")
 
-    '''
-    df_true = df[df[feature_name] >= threshold]
-    df_false = df[df[feature_name] < threshold]
-    return df_true, df_false
+    values = df[feature_name].dropna()
+
+    # find valid threshold
+    if threshold not in values.values:
+        lower_vals = values[values < threshold]
+
+        if lower_vals.empty:
+            threshold_used = values.min()
+            print(
+                f"[WARNING] threshold {threshold} not present and no lower values "
+                f"found for '{feature_name}'. using minimum value instead: {threshold_used}"
+            )
+        else:
+            threshold_used = lower_vals.max()
+            print(
+                f"[WARNING] threshold {threshold} not present in '{feature_name}'. "
+                f"using closest lower value: {threshold_used}"
+            )
+    else:
+        threshold_used = threshold
+
+    df_true = df[df[feature_name] >= threshold_used]
+    df_false = df[df[feature_name] < threshold_used]
+
+    return df_true, df_false, threshold_used
 
 def split_by_number(df: pd.DataFrame, split_number: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -1840,7 +1880,7 @@ def split_by_number(df: pd.DataFrame, split_number: int) -> Tuple[pd.DataFrame, 
 
     return sampled_df, remaining_df
 
-def add_feature_percentile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int = 20):
+def add_feature_quantile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int = RANK_THRESHOLD):
     """
 
     """
@@ -1891,7 +1931,7 @@ def add_norm_feature(df: pd.DataFrame, feature_name: str, new_name: str, norm_ty
         df[new_name] = series / l2_norm if l2_norm != 0 else 0.0
 
     elif norm_type == "none":
-        df[new_name] = seriesfd
+        df[new_name] = series
 
     else:
         raise ValueError(f"invalid norm_type '{norm_type}'. "
@@ -2965,14 +3005,84 @@ def p_to_stars(p: float) -> str:
     """
 
     """
-    if p < 0.001:
+    if p < 0.00001:
         return "***"
-    elif p < 0.01:
+    elif p < 0.001:
         return "**"
     elif p < 0.05:
         return "*"
     else:
         return "ns"
+
+def fisher_exact_for_category(
+    n_high_cat: int,
+    n_high_total: int,
+    n_low_cat: int,
+    n_low_total: int,
+    alternative: str = "two-sided",
+):
+    """
+    Fisher's exact test on a 2x2 table for one category (one-vs-rest).
+
+    Table:
+        [ [a, b],
+          [c, d] ]
+    where
+        a = n_high_cat
+        b = n_high_total - n_high_cat
+        c = n_low_cat
+        d = n_low_total  - n_low_cat
+
+    Returns odds ratio + p-value + counts.
+    """
+    a = int(n_high_cat)
+    c = int(n_low_cat)
+    b = int(n_high_total - a)
+    d = int(n_low_total - c)
+
+    # guards
+    if n_high_total <= 0 or n_low_total <= 0:
+        return {"oddsratio": np.nan, "pvalue": np.nan, "a": a, "b": b, "c": c, "d": d}
+
+    # if category never occurs anywhere, skip
+    if (a + c) == 0:
+        return {"oddsratio": np.nan, "pvalue": np.nan, "a": a, "b": b, "c": c, "d": d}
+
+    OR, p = stats.fisher_exact([[a, b], [c, d]], alternative=alternative)
+
+    return {
+        "oddsratio": float(OR),
+        "pvalue": float(p),
+        "a": a, "b": b, "c": c, "d": d
+    }
+
+def bh_fdr(pvals):
+    """
+    Benjamini–Hochberg FDR correction.
+    returns adjusted p-values in the same order as input.
+    NaNs stay NaN.
+    """
+    pvals = np.asarray(pvals, dtype=float)
+    out = np.full_like(pvals, np.nan, dtype=float)
+
+    ok = np.isfinite(pvals)
+    if not np.any(ok):
+        return out
+
+    p = pvals[ok]
+    m = p.size
+    order = np.argsort(p)
+    ranked = p[order]
+
+    adj = ranked * m / (np.arange(1, m + 1))
+    adj = np.minimum.accumulate(adj[::-1])[::-1]  # monotone
+    adj = np.clip(adj, 0.0, 1.0)
+
+    out_ok = np.empty_like(p)
+    out_ok[order] = adj
+    out[ok] = out_ok
+
+    return out
 
 def mannwhitneyu_for_feature(
     true_df: pd.DataFrame,
@@ -3017,126 +3127,61 @@ def _normal_int(mu: float, sigma: float) -> int:
     """
     return int(round(random.gauss(mu, sigma)))
 
-# TODO #
-def generate_candidates(
-    candidates_number: int,
-    strain: str,
-    segment: str,
-    full_seq_len: int,
-    ) -> List[Tuple[str, str, int, int, str, str, str, str, str, str, str, str, str]]:
-    """
+### pseudo ###
 
-    """
-    if full_seq_len < 2:
-        raise ValueError("full_seq_len must be at least 2.")
-    if candidates_number < 0:
-        raise ValueError("candidates_number must be non-negative.")
-
-    # Metadata options
-    system_types = ["in vitro", "in vivo mouse", "in human"]
-    library_layout = ["PAIRED", "SINGLE", "SINGLE & PAIRED"]
-    library_selection = ["PCR", "RT-PCR", "cDNA", "PolyA", "WGA",
-                         "PCR & cDNA", "RT-PCR & cDNA", "PolyA & PCR", "other"]
-    library_source = ["GENOMIC", "TRANSCRIPTOMIC", "VIRAL RNA",
-                      "TRANSCRIPTOMIC SINGLE CELL & VIRAL RNA", "OTHER", "VIRAL RNA & OTHER"]
-    cells = ["A549", "human", "MDCK", "mouse", "A549 & HBEpC", 
-             "A549 & HEK293FT & MRC-5 & WI-38 VA-13"]
-    cellular_localization = ["mixed", "extracellular", "intracellular", ""]
-    cellular_resolution = ["mixed", "single", "bulk", ""]
-    time_point = ["mixed", "multiple", "single", ""]
-    max_time = ["mixed", "12", "24", "48", "84", ""]
-
-    # Pre-cycle each metadata feature to length candidates_number
-    metadata_features = [system_types, library_layout, library_selection, library_source, cells, 
-                         cellular_localization, cellular_resolution, time_point, max_time]
-    cycle_metadata_features: List[List[str]] = []
-    for meta in metadata_features:
-        cycle_metadata_features.append([meta[i % len(meta)] for i in range(candidates_number)])
-
-    # Heuristics for spread around the target means (scale with full_seq_len)
-    start_mean = full_seq_len / 10.0
-    end_mean   = full_seq_len - (full_seq_len / 10.0)
-    # Standard deviations: gentle spread around the means
-    start_std = max(1.0, full_seq_len / 20.0)
-    end_std   = max(1.0, full_seq_len / 20.0)
-
-    results: List[Tuple[str, str, int, int, str, str, str, str, str, str, str, str, str]] = []
-
-    for i in range(candidates_number):
-        # START: bounded-normal via clamping
-        start_raw = _normal_int(start_mean, start_std)
-        start = max(1, min(max(1, full_seq_len - 1), start_raw))
-
-        # END: rejection on *unclamped* draws until > start, then clamp
-        max_resamples = 64
-        end = None
-        for _ in range(max_resamples):
-            e_raw = _normal_int(end_mean, end_std)
-            if e_raw > start:
-                # now clamp to sequence bounds
-                end = max(2, min(full_seq_len, e_raw))
-                # after clamping, end will still be > start because start <= full_seq_len - 1
-                break
-
-        if end is None:
-            # Extremely unlikely fallback: draw uniformly from feasible range
-            # (maintains end > start)
-            if start >= full_seq_len:
-                start = max(1, full_seq_len - 1)
-            end = random.randint(start + 1, full_seq_len)
-
-        results.append((
-            strain,
-            segment,
-            start,
-            end,
-            cycle_metadata_features[0][i],
-            cycle_metadata_features[1][i],
-            cycle_metadata_features[2][i],
-            cycle_metadata_features[3][i],
-            cycle_metadata_features[4][i],
-            cycle_metadata_features[5][i],
-            cycle_metadata_features[6][i],
-            cycle_metadata_features[7][i],
-            cycle_metadata_features[8][i],
-        ))
-
-    return results
-
-# TODO #
-def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
+def build_pseudo_df(candidates: list[tuple], isize: int = 5) -> pd.DataFrame:
     """
     Build a DataFrame from candidate deletion specs.
 
-    Supports either:
-      (strain, seg, start, end)
-    or
-      (strain, seg, start, end, system_type, library_layout, library_selection, library_source)
+    Input order (reference-based, 17):
+      (Segment, Start, End, NGS_read_count,
+       AN, Time, Localization, Resolution, Cells, MOI, Host,
+       Strain,
+       dataset_name, system_type, library_layout,
+       library_selection, library_source, subtype)
+
+    Input order (sequence-provided, 18):
+      same as above + (full_seq_override,)
     """
     records = []
     for cand in candidates:
-        if len(cand) == 4:
-            strain, seg, start, end = cand
-            system_type = "other"
-            library_layout = "other"
-            library_selection = "other"
-            library_source = "other"
-            cells = "other"
-            cellular_localization = "other"
-            cellular_resolution = "other" 
-            time_point = "other"
-            max_time = "other"
-        elif len(cand) == 13:
-            (strain, seg, start, end,
-             system_type, library_layout, library_selection, library_source, cells, 
-                         cellular_localization, cellular_resolution, time_point, max_time) = cand
+        if len(cand) == 17:
+            (seg, start, end, ngs_read_count,
+             AN, Time, Localization, Resolution, Cells, MOI, Host,
+             strain,
+             dataset_name, system_type, library_layout,
+             library_selection, library_source, subtype) = cand
+
+            seq = get_sequence(strain, seg)
+
+        elif len(cand) == 18:
+            (seg, start, end, ngs_read_count,
+             AN, Time, Localization, Resolution, Cells, MOI, Host,
+             strain,
+             dataset_name, system_type, library_layout,
+             library_selection, library_source, subtype,
+             seq) = cand
         else:
             raise ValueError(
-                "Each candidate must be a 4-tuple "
-                "(strain, seg, start, end) or an 13-tuple "
+                "Each candidate must be a 17-tuple (reference-based) or "
+                "18-tuple (sequence-provided with full_seq_override)."
             )
 
-        seq = get_sequence(strain, seg)
+        seq_len = len(seq)
+
+        # ---- bounds + sanity checks ----
+        if not isinstance(start, int) or not isinstance(end, int):
+            raise TypeError(
+                f"start and end must be integers, got start={type(start)}, end={type(end)}."
+            )
+        if start < 1:
+            raise ValueError(f"start must be >= 1, got {start}.")
+        if end < 1:
+            raise ValueError(f"end must be >= 1, got {end}.")
+        if start >= end:
+            raise ValueError(f"start must be < end, got start={start}, end={end}.")
+        if end > seq_len:
+            raise ValueError(f"end must be <= sequence length ({seq_len}), got {end}.")
 
         start_idx = start - 1
         stop_idx = end
@@ -3145,7 +3190,7 @@ def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
         deleted = seq[start_idx:stop_idx]
         right = seq[stop_idx:]
 
-        around = left[-isize*2:] + right[:isize*2]
+        around = left[-isize * 2:] + right[:isize * 2]
 
         key = f"{seg}_{start}_{end}"
 
@@ -3153,51 +3198,71 @@ def build_df(candidates: list[tuple], isize: int=5) -> pd.DataFrame:
             "Segment": seg,
             "Start": start,
             "End": end,
-            "NGS_read_count": 0,
+            "NGS_read_count": ngs_read_count,
+
+            "AN": AN,
+            "Time": Time,
+            "Localization": Localization,
+            "Resolution": Resolution,
+            "Cells": Cells,
+            "MOI": MOI,
+            "Host": Host,
+
             "key": key,
             "Strain": strain,
-            "system_type": system_type,
-            "library_layout": library_layout,
-            "library_selection": library_selection,
-            "library_source": library_source,
-            "cells": cells,
-            "cellular_localization": cellular_localization,
-            "cellular_resolution": cellular_resolution,
-            "time_point": time_point,
-            "max_time": max_time,
+
             "isize": isize,
             "full_seq": seq,
             "deleted_sequence": deleted,
             "seq_around_deletion_junction": around,
+
+            "dataset_name": dataset_name,
+            "system_type": system_type,
+            "library_layout": library_layout,
+            "library_selection": library_selection,
+            "library_source": library_source,
+            "subtype": subtype,
         })
 
     cols = [
-        "Segment", "Start", "End", "NGS_read_count", "key",
-        "Strain", "system_type", "library_layout", "library_selection", "library_source",
-        "cells", "cellular_localization", "cellular_resolution", "time_point", "max_time",
-        "isize", "full_seq", "deleted_sequence", "seq_around_deletion_junction"
-        ]
+        "Segment", "Start", "End", "NGS_read_count",
+        "AN", "Time", "Localization", "Resolution", "Cells", "MOI", "Host",
+        "key", "Strain",
+        "isize", "full_seq", "deleted_sequence", "seq_around_deletion_junction",
+        "dataset_name", "system_type", "library_layout",
+        "library_selection", "library_source", "subtype"
+    ]
+
     df = pd.DataFrame.from_records(records, columns=cols)
+
     df = df.astype({
         "Segment": "string",
         "Start": "int64",
         "End": "int64",
         "NGS_read_count": "int64",
+
+        "AN": "string",
+        "Time": "string",
+        "Localization": "string",
+        "Resolution": "string",
+        "Cells": "string",
+        "MOI": "string",
+        "Host": "string",
+
         "key": "string",
         "Strain": "string",
-        "system_type": "string",
-        "library_layout": "string",
-        "library_selection": "string",
-        "library_source": "string",
-        "cells": "string",
-        "cellular_localization": "string",
-        "cellular_resolution": "string",
-        "time_point": "string",
-        "max_time": "string",
+
         "isize": "int64",
         "full_seq": "string",
         "deleted_sequence": "string",
         "seq_around_deletion_junction": "string",
+
+        "dataset_name": "string",
+        "system_type": "string",
+        "library_layout": "string",
+        "library_selection": "string",
+        "library_source": "string",
+        "subtype": "string",
     })
 
     return df
@@ -3225,12 +3290,12 @@ def pick_colors(colors: list, n_needed: int, templates: dict=COLOR_TEMPLATES):
 
 ### general ###
 
-def compute_percentile_rank_count_df(df: pd.DataFrame) -> pd.DataFrame:
+def compute_quantile_rank_count_df(df: pd.DataFrame) -> pd.DataFrame:
     '''
     
     '''
     return (
-        df.groupby('NGS_percentile_rank')
+        df.groupby('NGS_quantile_rank')
         .size()
         .reset_index(name='count')
     )
@@ -3298,7 +3363,7 @@ def compute_feature_count_heatmap_df(df: pd.DataFrame, feature_name: str, filter
     '''
 
     '''
-    relevant_df = df[['NGS_percentile_rank', feature_name]].copy()
+    relevant_df = df[['NGS_quantile_rank', feature_name]].copy()
 
     if filter:
         relevant_df = relevant_df[relevant_df[feature_name].isin(filter)]
@@ -3307,9 +3372,9 @@ def compute_feature_count_heatmap_df(df: pd.DataFrame, feature_name: str, filter
 
     one_hot = pd.get_dummies(relevant_df[feature_name])
     one_hot = one_hot.reindex(columns=filter, fill_value=0)
-    combined = pd.concat([relevant_df[['NGS_percentile_rank']], one_hot], axis=1)
+    combined = pd.concat([relevant_df[['NGS_quantile_rank']], one_hot], axis=1)
 
-    return combined.groupby('NGS_percentile_rank', as_index=False).sum()
+    return combined.groupby('NGS_quantile_rank', as_index=False).sum()
 
 def compute_feature_count_heatmap_sum_df(df: pd.DataFrame, feature_name: str):
     '''
@@ -3325,12 +3390,12 @@ def compute_feature_count_heatmap_sum_df(df: pd.DataFrame, feature_name: str):
 
     return feature_count_df
 
-def compute_feature_freq_heatmap_df(feature_count_heatmap_df: pd.DataFrame, percentile_rank_count_df: pd.DataFrame) -> pd.DataFrame:
+def compute_feature_freq_heatmap_df(feature_count_heatmap_df: pd.DataFrame, quantile_rank_count_df: pd.DataFrame) -> pd.DataFrame:
     '''
 
     '''
-    rank_counts = percentile_rank_count_df.set_index('NGS_percentile_rank')['count']
-    pivot_df = feature_count_heatmap_df.set_index('NGS_percentile_rank')
+    rank_counts = quantile_rank_count_df.set_index('NGS_quantile_rank')['count']
+    pivot_df = feature_count_heatmap_df.set_index('NGS_quantile_rank')
     pivot_df = pivot_df.loc[pivot_df.index.intersection(rank_counts.index)]
     feature_freq_heatmap_df = pivot_df.div(rank_counts, axis=0) * 100
 
