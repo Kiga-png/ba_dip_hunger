@@ -215,6 +215,7 @@ def save_primary_features(df: pd.DataFrame, fname: str, folder: str, subfolder: 
     '''
     df = add_primary_features(df)
     save_df(df, fname, RESULTSPATH, folder, subfolder)
+    print(f'{fname} done')
 
 def add_primary_features(df: pd.DataFrame) -> pd.DataFrame:
     '''
@@ -273,6 +274,7 @@ def save_secondary_features(df: pd.DataFrame, fname: str, folder: str, subfolder
     '''
     df = add_secondary_features(df, folder)
     save_df(df, fname, RESULTSPATH, folder, subfolder)
+    print(f'{fname} done')
 
 def add_secondary_features(df: pd.DataFrame, folder: str) -> pd.DataFrame:
     """
@@ -410,8 +412,8 @@ def save_motif_features(df: pd.DataFrame, fname: str, folder: str, subfolder: st
 
     '''
     df = add_motif_features(df)
-
     save_df(df, fname, RESULTSPATH, folder, subfolder)
+    print(f'{fname} done')
 
 def add_motif_features(df: pd.DataFrame) -> pd.DataFrame:
     '''
