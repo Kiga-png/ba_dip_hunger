@@ -28,7 +28,7 @@ from utils import rename_feature, add_separate_ngs_features
 from utils import add_ikey, add_metadata_ikey, manage_intersects
 from utils import load_all_preprocessed, save_df
 
-from utils import DATAPATH, RESULTSPATH, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
+from utils import DATAPATH, RESULTSPATH, DATASET_CUTOFF, DATASET_STRAIN_DICT, CUTOFF, SEGMENTS
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 RESULTSPATH = os.path.join(RESULTSPATH, 'statistics')
@@ -68,7 +68,7 @@ def strain_segment_statistics(
         "deletion_length",
         "5_end_length",
         "3_end_length",
-        "dvg_length",
+        "DelVG_length",
         "full_seq_length"
     ]
 
@@ -92,7 +92,7 @@ def strain_segment_statistics(
     num_cols = [
         "Start", "End", "NGS_read_count",
         "deletion_length", "5_end_length", "3_end_length",
-        "dvg_length", "full_seq_length", "norm_log_NGS_read_count"
+        "DelVG_length", "full_seq_length", "norm_log_NGS_read_count"
     ]
     for c in num_cols:
         df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -124,7 +124,7 @@ def strain_segment_statistics(
         "deletion_length",
         "5_end_length",
         "3_end_length",
-        "dvg_length",
+        "DelVG_length",
         "NGS_read_count",
         "norm_log_NGS_read_count",
     ]:
@@ -159,9 +159,9 @@ if __name__ == "__main__":
     data = 'all'   # all | IAV | IBV | H1N1
     strain = 'all'   # all | PR8
     segment = 'all'   # all | PB1
-    intersects = 'median'   # all | meidian
+    intersects = 'median'   # all | median global | median dataset metadata
 
-    dfnames = get_dataset_names(cutoff=40, selection=data)
+    dfnames = get_dataset_names(DATASET_CUTOFF, data)
     dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
     ###################

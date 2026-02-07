@@ -2,6 +2,7 @@ __pycache__/
 
 data
 results
+artefacts
 .config.json
 
 *.pyc

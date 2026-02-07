@@ -6,8 +6,7 @@ import pandas as pd
 
 sys.path.insert(0, "..")
 
-from utils import RESULTSPATH
-from utils import K_MER_LENGTH
+from utils import RESULTSPATH, DATASET_CUTOFF, K_MER_LENGTH
 from tensorflow.keras.models import load_model
 from tensorflow.keras import preprocessing as keras_preproc
 import joblib
@@ -41,12 +40,12 @@ def has_X(series, sample_rows=500):
     return s.str.contains('X').any()
 
 def identify_marked_plain_columns(df):
-    for col in ("marked_dvg_sequence", "marked_structure", "dvg_sequence", "structure"):
+    for col in ("marked_DelVG_sequence", "marked_structure", "DelVG_sequence", "structure"):
         if col not in df.columns:
             df[col] = ""
     return {
-        "marked": ("marked_dvg_sequence", "marked_structure"),
-        "plain": ("dvg_sequence", "structure"),
+        "marked": ("marked_DelVG_sequence", "marked_structure"),
+        "plain": ("DelVG_sequence", "structure"),
     }
 
 def model_vocab_looks_marked(token2idx):

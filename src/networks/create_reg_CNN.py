@@ -6,15 +6,16 @@ import pandas as pd
 
 sys.path.insert(0, "..")
 
-from analysis.visuals import create_train_test_density_plot, create_feature_residual_plot, create_feature_scatter_plot
+from analysis.visuals import create_feature_residual_plot, create_feature_scatter_plot
 
 from utils import reduce_rows, get_feature_modification_name
+from utils import add_ikey, add_metadata_ikey, get_dataset_names, load_all_preprocessed, add_intersect_ngs_features, manage_separate_specifiers
 
-from utils import RESULTSPATH, SEED, TOP_N, DATASET_STRAIN_DICT
+from utils import RESULTSPATH, DATASET_CUTOFF, SEED, TOP_N, DATASET_STRAIN_DICT
 from utils import COLORS, DECIMALS
 
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -26,6 +27,12 @@ import re
 import scipy.sparse as sp
 import shap
 
+import random
+
+random.seed(SEED)
+np.random.seed(SEED)
+tf.random.set_seed(SEED)
+
 ### settings ###
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 DATAPATH = os.path.join(RESULTSPATH, "preprocess")
@@ -33,9 +40,9 @@ RESULTSPATH = os.path.join(RESULTSPATH, "networks")
 
 VERSION = "0"
 KMER_SIZE = 3
-KMER_STEP = 3
+KMER_STEP = 3   # lightweight
 
-TRAIN_LOSS  = "huber"   # "huber" | "mse" | "mae"
+TRAIN_LOSS  = "mse"   # "huber" | "mse" | "mae"
 
 MARKED = 1   # 0 | 1
 DROP_X = 0   # 0 | 1
@@ -47,8 +54,8 @@ MAX_NUMBER = 25000
 BEST_MODEL = 0   # 0 | 1
 
 # occlussion and SHAP
-MAX_NUMBER_TRAIN = 10
-MAX_NUMBER_TEST  = 10
+MAX_NUMBER_TRAIN = 100
+MAX_NUMBER_TEST  = 100
 
 ###########
 ### CNN ###
@@ -58,80 +65,60 @@ MAX_NUMBER_TEST  = 10
 selector = 'dataset_name'
 
 folder = 'unpooled'
-subfolder = 'training'
+subfolder = 'secondary'
 
 data = 'IAV'
-
 strain = 'PR8'
-### for single dataset ###
-# strain = DATASET_STRAIN_DICT[data]
-
 segment = 'PB1'
-intersects = 'median'
+intersects = 'median_global'
 motif_length = 3
+
+dfnames = get_dataset_names(DATASET_CUTOFF, data)
+dfnames = [dfnames[0]]
+dfs = load_all_preprocessed(dfnames, folder, subfolder)
+
+dfs = manage_separate_specifiers(dfs, data, strain, segment)
 
 ### categorical features ###
 categorical_cols = []
 
-# categorical_cols += ["Segment", "Strain"]
-categorical_cols += ['system_type', 'library_layout', 'library_selection', 'library_source', 'subtype']
-# categorical_cols += ['Localization', 'Resolution', 'Cells', 'Host']
-# categorical_cols += ['Time', 'MOI']
-categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
+# only for multi segment selection!
+# categorical_cols += ["segment"]
 
-# categorical_cols += ["full_symmetry"]
-# categorical_cols += [col for col in df.columns if re.search(r"motif\d+", col)]
-# categorical_cols += ["structure_site1_motif", "structure_site2_motif", "structure_site3_motif", "structure_site4_motif"]
+# only for multi strain/subtype/type selection! only use one! strain recommended (most distinct)
+# categorical_cols += ["strain"]
+# categorical_cols += ["subtype"]
+# categorical_cols += ["type"]
 
-### test for dataset dependencies ###
+# technical metadata (NOT recommended)
+# categorical_cols += ['library_layout', 'library_selection', 'library_source']
+
+# bilogical metadata (recommended)
+categorical_cols += ['system_type', 'host']
+# only available for unpooled data
+# categorical_cols += ['cell_system', 'localization', 'resolution']
+# categorical_cols += ['time_point', 'MOI']
+
+# junction site motifs
+# categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
+
+# use with datset intersects
 # categorical_cols += ["dataset_name"]
 
 ### numerical features ###
 numerical_cols = []
 
-# numerical_cols += ["Start", "End"]
-# numerical_cols += ["full_seq_length"]
-# numerical_cols += ["dvg_length"]
-numerical_cols += ["deletion_length"]
-numerical_cols += ["5_end_length", "3_end_length"]
-
-# numerical_cols += ["GC_content", "AU_content"]
-# numerical_cols += ["UpA_content", "CpG_content"]
-# numerical_cols += ["GC_skew", "sequence_entropy"]
-# numerical_cols += ["poly_U_max_run", "poly_U_tracts", "poly_A_max_run", "poly_A_tracts"]
-# numerical_cols += ["palindrome_density"]
-# numerical_cols += ["longest_ORF_len", "ORF_count"]
-# numerical_cols += ["kmer_richness", "codon_usage_entropy"]
-
-# numerical_cols += ["direct_repeat_length"]
-
-# numerical_cols += ["MFE"]
-# numerical_cols += ["bp_count", "bp_density", "unpaired_count", "unpaired_density", "external_unpaired_density"]
-# numerical_cols += ["stem_count", "stem_len_max", "stem_len_mean", "stem_len_min"]
-# numerical_cols += ["hairpin_count", "hairpin_size_mean", "hairpin_size_min", "hairpin_size_max"]
-# numerical_cols += ["pair_span_mean", "pair_span_min", "pair_span_max"]
-# numerical_cols += ["free_5prime_len", "free_3prime_len"]
-# numerical_cols += ["branch_point_count"]
-# numerical_cols += ["max_symmetry"]
-
-### NOT recommended ###
-# numerical_cols += ["MFE_site1_motif", "MFE_site2_motif", "MFE_site3_motif", "MFE_site4_motif"]
-
-# numerical_cols += ["GC_overall", "GC_paired", "GC_unpaired"]
-# numerical_cols += ["pair_GC_count", "pair_AU_count", "pair_GU_count", "pair_noncanon_count", "pair_GC_content", "pair_AU_content", "pair_GU_content", "pair_noncanon_content"]
-# numerical_cols += ["stem_end_GC_content", "stem_end_AU_content", "stem_end_GU_content"]
-# numerical_cols += ["hairpin_close_GC_content", "hairpin_close_AU_content", "hairpin_close_GU_content", "hairpin_close_noncanon_content"]
-# numerical_cols += ["motif_GNRA_count", "motif_UNCG_count", "motif_CUUG_count"]
-# numerical_cols += ["AU_unpaired_content", "AU_hairpin_content", "AU_internal_content", "AU_external_content"]
-# numerical_cols += ["GC_5prime_tail", "GC_3prime_tail"]
-# numerical_cols += ["AUG_total", "AUG_unpaired", "AUG_unpaired_content"]
+# length information (choose one group, because of redundant information)
+numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
+# second group
+# numerical_cols += ["start", "end", "full_seq_length"]
 
 ### extra features ###
 extra_cols = [
     "dataset_name",
     "norm_log_NGS_read_count",
-    "marked_dvg_sequence",
-    "dvg_sequence",
+    "marked_DelVG_sequence",
+    "DelVG_sequence",
 ]
 
 if STRUCTURE:
@@ -140,38 +127,130 @@ if STRUCTURE:
         "structure",
     ]
 
-### build dtype map ###
-dtype_map = {col: "string" for col in categorical_cols}
-dtype_map.update({col: "float32" for col in numerical_cols})
-
-usecols = list(dict.fromkeys(
-    categorical_cols +
-    numerical_cols +
-    extra_cols
-))
-
-fname = f'motif_length_{motif_length}'
-read_path = os.path.join(DATAPATH, folder, subfolder, data, strain, segment, intersects)
-df = pd.read_csv(os.path.join(read_path, f'{fname}.csv'), usecols=usecols, dtype=dtype_map, keep_default_na=False, na_values=[])
-
+### setup ###
 if MARKED:
-    key_sequence = "marked_dvg_sequence"
+    key_sequence = "marked_DelVG_sequence"
     key_structure = "marked_structure"
 else:
-    key_sequence = "dvg_sequence"
+    key_sequence = "DelVG_sequence"
     key_structure = "structure"
-
-df = reduce_rows(df, MAX_NUMBER)
 
 NAME_MOD = f'{VERSION}_motif_length_{motif_length}'
 
-save_path_model = os.path.join(RESULTSPATH, 'reg', 'CNN', data, strain, segment, intersects)
+save_path_model = os.path.join(RESULTSPATH, folder, 'CNN', data, strain, segment, intersects)
 os.makedirs(save_path_model, exist_ok=True)
 
-### target (regression) ###
-y_cont = df["norm_log_NGS_read_count"].values
+###################################
+### group-safe split (80/10/10) ###
+###################################
 
-### k-mer token ###
+TEST_SIZE = 0.1
+VAL_SIZE  = 0.2
+
+def _add_split_ikey(df: pd.DataFrame, intersects: str) -> pd.DataFrame:
+    '''
+    create an ikey column for group-safe splitting, matching your intersect definition
+    '''
+    if 'metadata' in intersects:
+        df = add_metadata_ikey(df)
+    else:
+        df = add_ikey(df)
+
+    # dataset-wise uniqueness: treat same sequence in different datasets as different candidates
+    if 'dataset' in intersects:
+        df['ikey'] = df['dataset_name'].astype(str) + '|' + df['ikey'].astype(str)
+
+    return df
+
+def _split_df_by_ikey(df: pd.DataFrame, test_size: float, val_size: float, seed: int):
+    '''
+    returns: df_fit, df_val, df_test
+    '''
+    df = df.copy()
+
+    gss_test = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
+    groups = df['ikey'].to_numpy()
+    idx_train, idx_test = next(gss_test.split(df, groups=groups))
+
+    df_train = df.iloc[idx_train].copy().reset_index(drop=True)
+    df_test  = df.iloc[idx_test].copy().reset_index(drop=True)
+
+    # val_size is fraction of full data; convert to fraction of remaining training pool
+    val_size_rel = val_size / (1.0 - test_size)
+
+    gss_val = GroupShuffleSplit(n_splits=1, test_size=val_size_rel, random_state=seed)
+    groups_train = df_train['ikey'].to_numpy()
+    idx_fit, idx_val = next(gss_val.split(df_train, groups=groups_train))
+
+    df_fit = df_train.iloc[idx_fit].copy().reset_index(drop=True)
+    df_val = df_train.iloc[idx_val].copy().reset_index(drop=True)
+
+    return df_fit, df_val, df_test
+
+dfs_fit = []
+dfs_val = []
+dfs_test = []
+
+for df in dfs:
+    df = _add_split_ikey(df, intersects)
+
+    uniq = df['ikey'].nunique()
+    if uniq < 3:
+        dfs_fit.append(df.drop(columns=['ikey']).reset_index(drop=True))
+        dfs_val.append(df.iloc[0:0].drop(columns=['ikey']).reset_index(drop=True))
+        dfs_test.append(df.iloc[0:0].drop(columns=['ikey']).reset_index(drop=True))
+        continue
+
+    df_fit, df_val, df_test = _split_df_by_ikey(df, TEST_SIZE, VAL_SIZE, SEED)
+
+    dfs_fit.append(df_fit.drop(columns=['ikey']).reset_index(drop=True))
+    dfs_val.append(df_val.drop(columns=['ikey']).reset_index(drop=True))
+    dfs_test.append(df_test.drop(columns=['ikey']).reset_index(drop=True))
+
+############################################
+### intersect + ngs features (fit/apply) ###
+############################################
+
+df_fit, norm_params = add_intersect_ngs_features(
+    dfs=dfs_fit,
+    intersects=intersects,
+    norm_params=None,
+    return_norm_params=True,
+)
+
+df_val = add_intersect_ngs_features(
+    dfs=dfs_val,
+    intersects=intersects,
+    norm_params=norm_params,
+    return_norm_params=False,
+)
+
+df_test = add_intersect_ngs_features(
+    dfs=dfs_test,
+    intersects=intersects,
+    norm_params=norm_params,
+    return_norm_params=False,
+)
+
+df_val = df_val.reset_index(drop=True)
+df_test = df_test.reset_index(drop=True)
+
+df_fit = reduce_rows(df_fit, MAX_NUMBER)
+df_val = reduce_rows(df_val, MAX_NUMBER)
+df_test = reduce_rows(df_test, MAX_NUMBER)
+
+##########################
+### target + reporting ###
+##########################
+
+y_fit  = df_fit["norm_log_NGS_read_count"].values
+y_val  = df_val["norm_log_NGS_read_count"].values
+y_test = df_test["norm_log_NGS_read_count"].values
+
+#############################
+### k-mer token (no leak) ###
+#############################
+
 def kmer_tokenize(seq, k, step=KMER_STEP):
     if DROP_X:
         return [
@@ -185,112 +264,137 @@ def kmer_tokenize(seq, k, step=KMER_STEP):
             for i in range(0, len(seq) - k + 1, step)
         ]
 
-### sequence to integer ###
 vocab = set()
-df["kmer_seq"] = df[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-df["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
+
+df_fit["kmer_seq"] = df_fit[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+df_fit["kmer_seq"].apply(lambda kmers: vocab.update(kmers))
+
 vocab = sorted(vocab)
-token2idx = {k: i + 1 for i, k in enumerate(vocab)}
+
+UNK_IDX = 1
+token2idx = {k: i + 2 for i, k in enumerate(vocab)}   # start at 2
 
 def encode_seq(kmers):
-    return [token2idx[k] for k in kmers if k in token2idx]
+    return [token2idx.get(k, UNK_IDX) for k in kmers]
 
-df["encoded_seq"] = df["kmer_seq"].apply(encode_seq)
-maxlen = df["encoded_seq"].apply(len).max()
-X_seq = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_seq"], maxlen=maxlen)
+df_fit["encoded_seq"]  = df_fit["kmer_seq"].apply(encode_seq)
 
-### secondary structure (OPTIONAL) ###
+df_val["kmer_seq"] = df_val[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+df_val["encoded_seq"] = df_val["kmer_seq"].apply(encode_seq)
+
+df_test["kmer_seq"] = df_test[key_sequence].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+df_test["encoded_seq"] = df_test["kmer_seq"].apply(encode_seq)
+
+maxlen = df_fit["encoded_seq"].apply(len).max() if len(df_fit) > 0 else 1
+
+X_seq_fit  = tf.keras.preprocessing.sequence.pad_sequences(df_fit["encoded_seq"],  maxlen=maxlen).astype(np.int32)
+X_seq_val  = tf.keras.preprocessing.sequence.pad_sequences(df_val["encoded_seq"],  maxlen=maxlen).astype(np.int32)
+X_seq_test = tf.keras.preprocessing.sequence.pad_sequences(df_test["encoded_seq"], maxlen=maxlen).astype(np.int32)
+
+### secondary structure (OPTIONAL, no leak) ###
 if STRUCTURE:
     vocab2 = set()
-    df["kmer_str"] = df[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
-    df["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
+
+    df_fit["kmer_str"] = df_fit[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+    df_fit["kmer_str"].apply(lambda kmers: vocab2.update(kmers))
+
     vocab2 = sorted(vocab2)
     token2idx2 = {k: i + 1 for i, k in enumerate(vocab2)}
 
     def encode_str(kmers):
         return [token2idx2[k] for k in kmers if k in token2idx2]
 
-    df["encoded_str"] = df["kmer_str"].apply(encode_str)
-    maxlen2 = df["encoded_str"].apply(len).max()
-    X_str = tf.keras.preprocessing.sequence.pad_sequences(df["encoded_str"], maxlen=maxlen2)
+    df_fit["encoded_str"] = df_fit["kmer_str"].apply(encode_str)
+
+    df_val["kmer_str"] = df_val[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+    df_val["encoded_str"] = df_val["kmer_str"].apply(encode_str)
+
+    df_test["kmer_str"] = df_test[key_structure].apply(lambda x: kmer_tokenize(x, KMER_SIZE))
+    df_test["encoded_str"] = df_test["kmer_str"].apply(encode_str)
+
+    maxlen2 = df_fit["encoded_str"].apply(len).max() if len(df_fit) > 0 else 1
+
+    X_str_fit  = tf.keras.preprocessing.sequence.pad_sequences(df_fit["encoded_str"],  maxlen=maxlen2).astype(np.int32)
+    X_str_val  = tf.keras.preprocessing.sequence.pad_sequences(df_val["encoded_str"],  maxlen=maxlen2).astype(np.int32)
+    X_str_test = tf.keras.preprocessing.sequence.pad_sequences(df_test["encoded_str"], maxlen=maxlen2).astype(np.int32)
 else:
     vocab2 = []
     token2idx2 = {}
     maxlen2 = 0
-    X_str = None
+    X_str_fit = None
+    X_str_val = None
+    X_str_test = None
+
+###########################################
+### tabular preprocessing (no leak) #######
+###########################################
+
 try:
     encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
 except TypeError:
     encoder = OneHotEncoder(sparse=False, handle_unknown="ignore")
-X_cat = encoder.fit_transform(df[categorical_cols])
+
+X_cat_fit  = encoder.fit_transform(df_fit[categorical_cols]).astype(np.float32)
+X_cat_val  = encoder.transform(df_val[categorical_cols]).astype(np.float32)
+X_cat_test = encoder.transform(df_test[categorical_cols]).astype(np.float32)
 
 scaler = StandardScaler()
-X_num = scaler.fit_transform(df[numerical_cols])
+X_num_fit  = scaler.fit_transform(df_fit[numerical_cols]).astype(np.float32)
+X_num_val  = scaler.transform(df_val[numerical_cols]).astype(np.float32)
+X_num_test = scaler.transform(df_test[numerical_cols]).astype(np.float32)
 
-### combine features ###
-X_other = np.hstack([X_cat, X_num])
+X_other_fit  = np.hstack([X_cat_fit,  X_num_fit]).astype(np.float32)
+X_other_val  = np.hstack([X_cat_val,  X_num_val]).astype(np.float32)
+X_other_test = np.hstack([X_cat_test, X_num_test]).astype(np.float32)
 
-### train/test split ###
-if STRUCTURE:
-    (
-        X_seq_train, X_seq_test,
-        X_str_train, X_str_test,
-        X_other_train, X_other_test,
-        y_train, y_test,
-        df_train, df_test
-    ) = train_test_split(
-        X_seq, X_str, X_other, y_cont, df,
-        test_size=0.2,
-        random_state=SEED
-    )
-else:
-    (
-        X_seq_train, X_seq_test,
-        X_other_train, X_other_test,
-        y_train, y_test,
-        df_train, df_test
-    ) = train_test_split(
-        X_seq, X_other, y_cont, df,
-        test_size=0.2,
-        random_state=SEED
-    )
+X_cat = X_cat_fit
 
-### Huber delta (data-driven, based on training targets) ###
-y_train_arr = np.asarray(y_train, dtype=float)
+###################################
+### Huber delta (fit, no leak) ###
+###################################
 
-med = float(np.nanmedian(y_train_arr))
-mad = float(np.nanmedian(np.abs(y_train_arr - med)))
+y_fit_arr = np.asarray(y_fit, dtype=float)
+
+med = float(np.nanmedian(y_fit_arr))
+mad = float(np.nanmedian(np.abs(y_fit_arr - med)))
 
 # robust std estimate from MAD
 HUBER_DELTA = 1.4826 * mad
 
 # fallback if MAD is 0 or nan
 if (not np.isfinite(HUBER_DELTA)) or (HUBER_DELTA <= 0):
-    HUBER_DELTA = float(np.nanstd(y_train_arr))
+    HUBER_DELTA = float(np.nanstd(y_fit_arr))
 
 # keep delta in a reasonable range (avoid too-MSE-like or too-MAE-like)
 HUBER_DELTA = float(np.clip(HUBER_DELTA, 0.5, 2.0))
 HUBER_DELTA = round(HUBER_DELTA, DECIMALS)
 
-print("\nHuber delta (training, data-driven)")
+print("\nHuber delta (fit, data-driven)")
 print(f"HUBER_DELTA: {HUBER_DELTA}")
 
+#############
 ### model ###
-seq_input = layers.Input(shape=(maxlen,))
-x = layers.Embedding(input_dim=len(token2idx) + 1, output_dim=32)(seq_input)
-x = layers.Conv1D(64, 5, activation='relu')(x)
-x = layers.MaxPooling1D(2)(x)
-x = layers.Flatten()(x)
+#############
 
-other_input = layers.Input(shape=(X_other.shape[1],))
+# lightweight dims
+EMB_DIM = 16
+CONV_FILTERS = 32
+DENSE_UNITS = 32
+
+seq_input = layers.Input(shape=(maxlen,))
+x = layers.Embedding(input_dim=len(token2idx) + 2, output_dim=EMB_DIM)(seq_input)
+x = layers.Conv1D(CONV_FILTERS, 5, activation='relu')(x)
+x = layers.MaxPooling1D(2)(x)
+x = layers.GlobalMaxPooling1D()(x)
+
+other_input = layers.Input(shape=(X_other_fit.shape[1],))
 
 if STRUCTURE:
-    # exact structure branch as before
     str_input = layers.Input(shape=(maxlen2,))
-    x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=32)(str_input)
-    x2 = layers.Conv1D(64, 5, activation='relu')(x2)
+    x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=EMB_DIM)(str_input)
+    x2 = layers.Conv1D(CONV_FILTERS, 5, activation='relu')(x2)
     x2 = layers.MaxPooling1D(2)(x2)
-    x2 = layers.Flatten()(x2)
+    x2 = layers.GlobalMaxPooling1D()(x2)
 
     concat = layers.concatenate([x, x2, other_input])
     inputs = [seq_input, str_input, other_input]
@@ -298,8 +402,12 @@ else:
     concat = layers.concatenate([x, other_input])
     inputs = [seq_input, other_input]
 
-dense = layers.Dense(64, activation='relu')(concat)
-dense = layers.Dropout(0.3)(dense)
+dense = layers.Dense(
+    DENSE_UNITS,
+    activation='relu',
+    kernel_regularizer=tf.keras.regularizers.l2(1e-4)
+)(concat)
+dense = layers.Dropout(0.5)(dense)
 output = layers.Dense(1, activation='linear')(dense)
 
 model = models.Model(inputs=inputs, outputs=output)
@@ -317,7 +425,8 @@ else:
 model.compile(
     optimizer='adam',
     loss=loss_fn,
-    metrics=[
+    metrics=[],
+    weighted_metrics=[
         'mae',
         'mse',
         tf.keras.losses.Huber(delta=HUBER_DELTA, name="huber")
@@ -330,25 +439,44 @@ checkpoint_cb = callbacks.ModelCheckpoint(
     best_model_path, save_best_only=True, monitor="val_loss", mode="min"
 )
 
+early_cb = callbacks.EarlyStopping(
+    monitor="val_loss",
+    mode="min",
+    patience=2,
+    restore_best_weights=True
+)
+
+### sample weights (count) ###
+w_fit = df_fit["count"].to_numpy().astype(np.float32) if "count" in df_fit.columns else np.ones(len(df_fit), dtype=np.float32)
+w_val = df_val["count"].to_numpy().astype(np.float32) if "count" in df_val.columns else np.ones(len(df_val), dtype=np.float32)
+
+w_fit = w_fit / (np.mean(w_fit) + 1e-12)
+w_val = w_val / (np.mean(w_val) + 1e-12)
+
 ### train ###
 if STRUCTURE:
     history = model.fit(
-        [X_seq_train, X_str_train, X_other_train], y_train,
-        validation_split=0.1,
-        epochs=10,
-        batch_size=64,
-        callbacks=[checkpoint_cb]
+        [X_seq_fit, X_str_fit, X_other_fit], y_fit,
+        sample_weight=w_fit,
+        validation_data=([X_seq_val, X_str_val, X_other_val], y_val, w_val),
+        epochs=25,
+        batch_size=16,
+        callbacks=[checkpoint_cb, early_cb],
     )
 else:
     history = model.fit(
-        [X_seq_train, X_other_train], y_train,
-        validation_split=0.1,
-        epochs=10,
-        batch_size=64,
-        callbacks=[checkpoint_cb]
+        [X_seq_fit, X_other_fit], y_fit,
+        sample_weight=w_fit,
+        validation_data=([X_seq_val, X_other_val], y_val, w_val),
+        epochs=25,
+        batch_size=16,
+        callbacks=[checkpoint_cb, early_cb],
     )
 
+############
 ### save ###
+############
+
 final_model_path = os.path.join(save_path_model, f"{NAME_MOD}_final_model.h5")
 model.save(final_model_path)
 print(f"\n✔ models saved")
@@ -375,6 +503,25 @@ joblib.dump({
 
 print("✔ preprocessing artifacts saved")
 
+#####################################
+### keep compatibility for visuals ###
+#####################################
+
+df_train = df_fit.copy().reset_index(drop=True)
+df_test  = df_test.copy().reset_index(drop=True)
+
+df = pd.concat([df_train, df_test], ignore_index=True)
+
+X_seq_train   = X_seq_fit
+X_seq_test    = X_seq_test
+X_other_train = X_other_fit
+X_other_test  = X_other_test
+y_train = y_fit
+y_test  = y_test
+
+if STRUCTURE:
+    X_str_train = X_str_fit
+    X_str_test  = X_str_test
 
 ###############
 ### visuals ###
@@ -410,10 +557,7 @@ hub_last_va = float(history.history["val_huber"][-1])
 
 ### MSE curve (train, val) ###
 title_name = 'MSE lerarning curve (training, validation) - curve plot'
-title_name += f'\ndata: {data}'
-title_name += f', strain: {strain}'
-title_name += f', segment: {segment}'
-title_name += f', {intersects} intersects'
+title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
 epochs = np.arange(1, len(history.history["mse"]) + 1)
@@ -456,10 +600,7 @@ print("✔ training MSE curve saved")
 
 ### MAE curve (train, val) ###
 title_name = 'MAE lerarning curve (training, validation) - curve plot'
-title_name += f'\ndata: {data}'
-title_name += f', strain: {strain}'
-title_name += f', segment: {segment}'
-title_name += f', {intersects} intersects'
+title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
 epochs = np.arange(1, len(history.history["mae"]) + 1)
@@ -502,10 +643,7 @@ print("✔ training MAE curve saved")
 
 ### Huber curve (train, val) ###
 title_name = f'Huber (delta={HUBER_DELTA:g}) lerarning curve (training, validation) - curve plot'
-title_name += f'\ndata: {data}'
-title_name += f', strain: {strain}'
-title_name += f', segment: {segment}'
-title_name += f', {intersects} intersects'
+title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
 epochs = np.arange(1, len(history.history["huber"]) + 1)
@@ -793,8 +931,9 @@ def importance_x_other_mse_increase(
 # plot permutation (test subset)
 plot_df = imp_perm.head(TOP_N).iloc[::-1]
 title_name = f'top {TOP_N} permutation importances (testing) - bar plot'
-title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects (n={eval_n})'
-title_name += f'\nMSE={base_mse_perm:.{DECIMALS}f}, MAE={base_mae_perm:.{DECIMALS}f}, Huber={base_hub_perm:.{DECIMALS}f}, R²={base_r2_perm:.{DECIMALS}f}'
+title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
+title_name += f' (n={eval_n})'
+title_name += f'\nMAE={base_mae_perm:.{DECIMALS}f}, MSE={base_mse_perm:.{DECIMALS}f}, Huber={base_hub_perm:.{DECIMALS}f}, R²={base_r2_perm:.{DECIMALS}f}'
 
 plt.figure(figsize=(10, 6))
 plt.barh(plot_df["feature"], plot_df["mse_increase"], color=COLORS[6], edgecolor="white", linewidth=1)
@@ -813,8 +952,9 @@ print("✔ permutation importance saved")
 # plot zero-occlusion (test subset)
 plot_df = imp_zero.head(TOP_N).iloc[::-1]
 title_name = f'top {TOP_N} occlusion importances (testing) - bar plot'
-title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects (n={eval_n})'
-title_name += f'\nMSE={base_mse_zero:.{DECIMALS}f}, MAE={base_mae_zero:.{DECIMALS}f}, Huber={base_hub_zero:.{DECIMALS}f}, R²={base_r2_zero:.{DECIMALS}f}'
+title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
+title_name += f' (n={eval_n})'
+title_name += f'\nMAE={base_mae_zero:.{DECIMALS}f}, MSE={base_mse_zero:.{DECIMALS}f}, Huber={base_hub_zero:.{DECIMALS}f}, R²={base_r2_zero:.{DECIMALS}f}'
 
 plt.figure(figsize=(10, 6))
 plt.barh(plot_df["feature"], plot_df["mse_increase"], color=COLORS[6], edgecolor="white", linewidth=1)
@@ -883,8 +1023,9 @@ x_center = (seq_imp_df["start_tok"] + seq_imp_df["end_tok"]) / 2.0
 y_inc = seq_imp_df["mse_increase"].to_numpy()
 
 title_name = f'sequence window occlusion (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) importances (testing) - curve plot'
-title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects (n={eval_n})'
-title_name += f'\nMSE={base_mse_seq:.{DECIMALS}f}, MAE={base_mae_seq:.{DECIMALS}f}, Huber={base_hub_seq:.{DECIMALS}f}, R²={base_r2_seq:.{DECIMALS}f}'
+title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
+title_name += f' (n={eval_n})'
+title_name += f'\nMAE={base_mae_seq:.{DECIMALS}f}, MSE={base_mse_seq:.{DECIMALS}f}, Huber={base_hub_seq:.{DECIMALS}f}, R²={base_r2_seq:.{DECIMALS}f}'
 
 df_eval_meta = df_test.iloc[idx_eval].copy()
 
@@ -948,8 +1089,9 @@ top_windows["window"] = top_windows.apply(lambda r: f'{int(r.start_tok)}-{int(r.
 top_windows = top_windows.sort_values("mse_increase", ascending=True)
 
 title_name = f'top {TOP_N} sequence window (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) importances (testing) - bar plot'
-title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}, {intersects} intersects (n={eval_n})'
-title_name += f'\nMSE={base_mse_seq:.{DECIMALS}f}, MAE={base_mae_seq:.{DECIMALS}f}, Huber={base_hub_seq:.{DECIMALS}f}, R²={base_r2_seq:.{DECIMALS}f}'
+title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
+title_name += f' (n={eval_n})'
+title_name += f'\nMAE={base_mae_seq:.{DECIMALS}f}, MSE={base_mse_seq:.{DECIMALS}f}, Huber={base_hub_seq:.{DECIMALS}f}, R²={base_r2_seq:.{DECIMALS}f}'
 
 plt.figure(figsize=(10, 6))
 plt.barh(top_windows["window"], top_windows["mse_increase"], color=COLORS[6], edgecolor="white", linewidth=1)
@@ -1020,10 +1162,7 @@ importance_df = (
 bar_color = COLORS[6]
 
 title_name = f'top {TOP_N} SHAP importances via RandomForest (testing) - bar plot'
-title_name += f'\ndata: {data}'
-title_name += f', strain: {strain}'
-title_name += f', segment: {segment}'
-title_name += f', {intersects} intersects'
+title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={bg_n}, n_test={eval_n_shap})'
 
 plt.figure(figsize=(10, 6))

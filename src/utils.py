@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as stats
-from typing import List, Tuple
+from typing import List, Optional, Union, Dict, Tuple
 
 import traceback
 import inspect
@@ -34,53 +34,28 @@ RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
 # segments, nucleotides, and strains
 CMAP = "Accent"
 CUTOFF = 15
+DATASET_CUTOFF = 0
+NGS_CUTOFF = 0
 N_SAMPLES = 35000
 
 SEED = 42
+
 DECIMALS = 2
 K_MER_LENGTH = 3
-
 PALINDROMIC_K_MER_LENGTH = 6
+MIN_TRACT_LENGTH = 6
 DIRECT_REPEAT_LENGTH_CAP = 5
 
-# to high split will cause problems
+# do not split to high
 RANK_THRESHOLD = 20
 TOP_N = 10
+
+MAX_MOTIF_LENGTH = 6
 
 LOGARITHM = "log10"   # "none" | "log10" | "log2"
 NORMALIZATION = "robust"   # "none" | "min-max" | "z-score" | "robust" | "euclidean"
 
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
-
-# system type #
-VIVO_MOUSE_DATASETS = ["Wang2023", "Penn2022", "Lui2019"]
-VITRO_DATASETS = ["Alnaji2021", "Pelz2021", "Wang2020", "Kupke2020", "Zhuravlev2020", "VdHoecke2015", "Alnaji2019_Cal07" ,"Alnaji2019_NC", "Mendes2021", "Boussier2020", "Alnaji2019_Perth", "Alnaji2019_BLEE", "Sheng2018"]
-VIVO_HUMAN_DATASETS = ["Berry2021_A", "Berry2021_B", "Berry2021_B_Yam", "Southgate2019", "Valesano2020_Yam", "Valesano2020_Vic"]
-VIVO_DATASETS = VIVO_MOUSE_DATASETS + VIVO_HUMAN_DATASETS
-
-# LibraryLayout #
-PAIRED_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023', 'Wang2020', 'Kupke2020', 'VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Mendes2021', 'Boussier2020', 'Alnaji2019_Perth', 'Berry2021_A', 'Penn2022', 'Alnaji2019_BLEE', 'Berry2021_B', 'Valesano2020_Vic', 'Berry2021_B_Yam', 'Southgate2019', 'Valesano2020_Yam']
-SINGLE_DATASETS = ['Zhuravlev2020', 'Sheng2018']
-SINGLE_and_PAIRED_DATASETS = ['Lui2019']
-
-# LibrarySelection #
-RT_PCR_DATASETS = ['VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Alnaji2019_Perth', 'Berry2021_A', 'Alnaji2019_BLEE', 'Berry2021_B', 'Valesano2020_Vic', 'Berry2021_B_Yam', 'Southgate2019', 'Valesano2020_Yam']
-PCR_DATASETS = ['Alnaji2021', 'Pelz2021']
-POLYA_DATASETS = ['Zhuravlev2020', 'Sheng2018']
-CDNA_DATASETS = ['Wang2020', 'Mendes2021']
-WGA_DATASETS = ['Penn2022']
-OTHER_DATASETS = ['Wang2023']
-POLYA_and_PCR_DATASETS = ['Kupke2020']
-PCR_and_CDNA_DATASETS = ['Lui2019']
-RT_PCR_and_CDNA_DATASETS = ['Boussier2020']
-
-# LibrarySource #
-VIRAL_RNA_DATASETS = ['VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Alnaji2019_Perth', 'Berry2021_A', 'Penn2022', 'Alnaji2019_BLEE', 'Berry2021_B', 'Valesano2020_Vic', 'Berry2021_B_Yam', 'Valesano2020_Yam']
-GENOMIC_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023']
-TRANSCRIPTOMIC_DATASETS = ['Wang2020', 'Zhuravlev2020', 'Mendes2021', 'Sheng2018', 'Boussier2020']
-OTHER_DATASETS = ['Southgate2019']
-TRANSCRIPTOMIC_SINGLE_CELL_and_VIRAL_RNA_DATASETS = ['Kupke2020']
-VIRAL_RNA_and_OTHER_DATASETS = ['Lui2019']
 
 # subtype #
 H1N1_DATASETS = ['Alnaji2021', 'Pelz2021', 'Wang2023', 'Wang2020', 'Zhuravlev2020', 'Kupke2020', 'VdHoecke2015', 'Alnaji2019_Cal07', 'Alnaji2019_NC', 'Mendes2021', 'Boussier2020']
@@ -95,67 +70,66 @@ STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut"
 SEGMENTS = list(["PB2", "PB1", "PA", "HA", "NP", "NA", "M", "NS"])
 NUCLEOTIDES = dict({"A": "Adenine", "C": "Cytosin", "G": "Guanine", "U": "Uracil"})
 
-
 DATASET_STRAIN_DICT = dict({
     # H1N1
-    "Alnaji2021": "PR8",
-    "Pelz2021": "PR8",
-    "Wang2023": "PR8",
-    "Wang2020": "PR8",
-    "Zhuravlev2020": "PR8",
-    "Kupke2020": "PR8",
-    "VdHoecke2015": "PR8",
-    "Alnaji2019_Cal07": "Cal07",
-    "Alnaji2019_NC" : "NC",
-    "Mendes2021": "WSN_Mendes_rev",
-    "Boussier2020": "WSN",
+    "Alnaji2021": "PR8",   # 0
+    "Pelz2021": "PR8",   # 1
+    "Wang2023": "PR8",   # 2
+    "Wang2020": "PR8",   # 3
+    "Zhuravlev2020": "PR8",   # 4
+    "Kupke2020": "PR8",   # 5
+    "VdHoecke2015": "PR8",   # 6
+    "Alnaji2019_Cal07": "Cal07",   # 7
+    "Alnaji2019_NC" : "NC",   # 8
+    "Mendes2021": "WSN_Mendes_rev",   # 9
+    "Boussier2020": "WSN",   # 10
     # H3N2
-    "Alnaji2019_Perth": "Perth",
-    "Berry2021_A": "Connecticut",
+    "Alnaji2019_Perth": "Perth",   # 11
+    "Berry2021_A": "Connecticut",   # 12
     # H5N1
-    "Penn2022": "Turkey",
+    "Penn2022": "Turkey",   # 13
     # H7N9
-    "Lui2019": "Anhui",
+    "Lui2019": "Anhui",   # 14
     # B 
-    "Alnaji2019_BLEE": "BLEE",
-    "Berry2021_B": "Victoria",
-    "Valesano2020_Vic": "Victoria",
-    "Sheng2018": "Brisbane",
-    "Berry2021_B_Yam": "Yamagata",
-    "Southgate2019": "Yamagata",
-    "Valesano2020_Yam": "Yamagata"
+    "Alnaji2019_BLEE": "BLEE",   # 15
+    "Berry2021_B": "Victoria",   # 16
+    "Valesano2020_Vic": "Victoria",   # 17
+    "Sheng2018": "Brisbane",   # 18
+    "Berry2021_B_Yam": "Yamagata",   # 19
+    "Southgate2019": "Yamagata",   # 20
+    "Valesano2020_Yam": "Yamagata"   # 21
 })
 
 ACCNUMDICT = dict({
     "Wang2023": dict({
-        "SRR16770171": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770172": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770173": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770174": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770175": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770181": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770182": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770183": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770184": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770185": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770186": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770191": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770192": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770193": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770197": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770198": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770201": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770200": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770199": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770207": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770208": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770209": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770210": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770211": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770212": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770219": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770218": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "SRR16770217": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "Mouse", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"})
+        "SRR16770171": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770172": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770173": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770174": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770175": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770181": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770182": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770183": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770184": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770185": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770186": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770191": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770192": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770193": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "unknown", "Replicate": "1", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770197": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770198": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770201": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770200": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770199": dict({"IFNAR": "1", "IFNLR": "0", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770207": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770208": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770209": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770210": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770211": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770212": dict({"IFNAR": "0", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770219": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770218": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "SRR16770217": dict({"IFNAR": "1", "IFNLR": "1", "Cells": "unknown", "Replicate": "2", "Resolution": "bulk", "Localization:": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "mouse"})
     }),
     "Wang2020": dict({
         "SRR7722028": dict({"Cells": "A549", "Time": "6", "Replicate": "1", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": 5, "Host:": "human"}),
@@ -233,26 +207,26 @@ ACCNUMDICT = dict({
         "SRR8754516": dict({"Replicate": "2", "Passage": "8", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Time": "24", "MOI": "unknown", "Host:": "dog"})
     }),
     "Lui2019": dict({
-        "SRR8949705": dict({"Cells": "Mouse", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.5, "Time": "24", "Replicate": "unknown", "Host:": "mouse"}),
-        "SRR8945328": dict({"Cells": "Mouse", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.5, "Time": "24", "Replicate": "unknown", "Host:": "mouse"}),
+        "SRR8949705": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.5, "Time": "24", "Replicate": "unknown", "Host:": "mouse"}),
+        "SRR8945328": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.5, "Time": "24", "Replicate": "unknown", "Host:": "mouse"}),
     }),
     "Penn2022": dict({
-        "ERR10231074": dict({"Time": "24", "Mode": "High", "Lineage": "1", "Cells": "Mouse", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231075": dict({"Time": "48", "Mode": "High", "Lineage": "1", "Cells": "Mouse", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231076": dict({"Time": "6", "Mode": "High", "Lineage": "1", "Cells": "Mouse", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231077": dict({"Time": "96", "Mode": "High", "Lineage": "1", "Cells": "Mouse", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231078": dict({"Time": "24", "Mode": "High", "Lineage": "2", "Cells": "Mouse", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231079": dict({"Time": "48", "Mode": "High", "Lineage": "2", "Cells": "Mouse", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231080": dict({"Time": "6", "Mode": "High", "Lineage": "2", "Cells": "Mouse", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231081": dict({"Time": "96", "Mode": "High", "Lineage": "2", "Cells": "Mouse", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231089": dict({"Time": "96", "Mode": "Low", "Lineage": "2", "Cells": "Mouse", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231082": dict({"Time": "24", "Mode": "Low", "Lineage": "1", "Cells": "Mouse", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231085": dict({"Time": "96", "Mode": "Low", "Lineage": "1", "Cells": "Mouse", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231083": dict({"Time": "48", "Mode": "Low", "Lineage": "1", "Cells": "Mouse", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231084": dict({"Time": "6", "Mode": "Low", "Lineage": "1", "Cells": "Mouse", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231086": dict({"Time": "24", "Mode": "Low", "Lineage": "2", "Cells": "Mouse", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231087": dict({"Time": "48", "Mode": "Low", "Lineage": "2", "Cells": "Mouse", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
-        "ERR10231088": dict({"Time": "6", "Mode": "Low", "Lineage": "2", "Cells": "Mouse", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"})
+        "ERR10231074": dict({"Time": "24", "Mode": "High", "Lineage": "1", "Cells": "unknown", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231075": dict({"Time": "48", "Mode": "High", "Lineage": "1", "Cells": "unknown", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231076": dict({"Time": "6", "Mode": "High", "Lineage": "1", "Cells": "unknown", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231077": dict({"Time": "96", "Mode": "High", "Lineage": "1", "Cells": "unknown", "Replicate": "H1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231078": dict({"Time": "24", "Mode": "High", "Lineage": "2", "Cells": "unknown", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231079": dict({"Time": "48", "Mode": "High", "Lineage": "2", "Cells": "unknown", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231080": dict({"Time": "6", "Mode": "High", "Lineage": "2", "Cells": "unknown", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231081": dict({"Time": "96", "Mode": "High", "Lineage": "2", "Cells": "unknown", "Replicate": "H2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231089": dict({"Time": "96", "Mode": "Low", "Lineage": "2", "Cells": "unknown", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231082": dict({"Time": "24", "Mode": "Low", "Lineage": "1", "Cells": "unknown", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231085": dict({"Time": "96", "Mode": "Low", "Lineage": "1", "Cells": "unknown", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231083": dict({"Time": "48", "Mode": "Low", "Lineage": "1", "Cells": "unknown", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231084": dict({"Time": "6", "Mode": "Low", "Lineage": "1", "Cells": "unknown", "Replicate": "L1", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231086": dict({"Time": "24", "Mode": "Low", "Lineage": "2", "Cells": "unknown", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231087": dict({"Time": "48", "Mode": "Low", "Lineage": "2", "Cells": "unknown", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"}),
+        "ERR10231088": dict({"Time": "6", "Mode": "Low", "Lineage": "2", "Cells": "unknown", "Replicate": "L2", "Localization:": "unknown", "Resolution": "unknown", "MOI": "unknown", "Host:": "mouse"})
     }),
     "Alnaji2021": dict({
         "SRR14352106": dict({"Replicate": "C", "Cells": "MDCK-SIAT1", "Time": "24", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 10, "Host:": "dog"}),
@@ -428,111 +402,111 @@ ACCNUMDICT = dict({
         "SRR15183339": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"})
     }),
     "Valesano2020_Vic": dict({
-        "SRR10013092": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013237": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013181": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013242": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013050": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013272": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013047": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013239": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013071": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013201": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013072": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013200": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013108": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013256": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013037": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013254": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013279": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013219": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013221": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
+        "SRR10013092": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013237": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013181": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013242": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013050": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013272": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013047": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013239": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013071": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013201": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013072": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013200": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013108": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013256": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013037": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013254": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013279": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013219": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013221": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
     }),
     "Valesano2020_Yam": dict({
-        "SRR10013243": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013084": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013188": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013094": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013178": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013236": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013063": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013209": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013241": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013240": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013229": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013068": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013205": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013067": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013206": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013062": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013210": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013070": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013203": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013103": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013170": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013223": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013244": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "SRR10013275": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
+        "SRR10013243": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013084": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013188": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013094": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013178": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013236": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013063": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013209": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013241": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013240": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013229": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013068": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013205": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013067": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013206": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013062": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013210": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013070": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013203": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013103": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013170": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013223": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013244": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "SRR10013275": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
     }),
     "Southgate2019": dict({
-        "ERR3474616": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474621": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474642": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474643": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474658": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474661": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474662": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474663": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474664": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474666": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474671": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474674": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474675": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474676": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474679": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474684": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474685": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474686": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474687": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474689": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474692": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474693": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474694": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474695": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474697": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474698": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474699": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474701": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474702": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474703": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474704": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474705": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474706": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474707": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474709": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474710": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474712": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474713": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474714": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474715": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474716": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474717": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474718": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474719": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474720": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474721": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474722": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474723": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474724": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474725": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474726": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474728": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474729": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474750": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474751": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474781": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474796": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
-        "ERR3474809": dict({"Cells": "human", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
+        "ERR3474616": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474621": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474642": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474643": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474658": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474661": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474662": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474663": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474664": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474666": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474671": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474674": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474675": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474676": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474679": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474684": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474685": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474686": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474687": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474689": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474692": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474693": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474694": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474695": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474697": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474698": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474699": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474701": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474702": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474703": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474704": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474705": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474706": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474707": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474709": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474710": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474712": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474713": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474714": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474715": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474716": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474717": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474718": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474719": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474720": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474721": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474722": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474723": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474724": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474725": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474726": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474728": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474729": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474750": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474751": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474781": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474796": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
+        "ERR3474809": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"})
     }),
     "VdHoecke2015": dict({
         "SRR1757953": dict({"Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "MOI": 0.01, "Time": "unknown", "Replicate": "unknown", "Host:": "dog"}),
@@ -758,6 +732,207 @@ SEGMENT_DICTS = dict({
     })
 })
 
+METADATA_DICTS = dict({
+    "Alnaji2019_BLEE": dict({
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "IBV",
+        "type": "IBV",
+    }),
+    "Alnaji2019_Cal07": dict({
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Alnaji2019_NC": dict({
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Alnaji2021": dict({
+        "system_type": "in_vitro",
+        "host": "unknown",
+        "library_layout": "paired",
+        "library_selection": "PCR",
+        "library_source": "genomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Amorim2013": dict({
+        "system_type": "in_vitro",
+        "host": "unknown",
+        "library_layout": "paired",
+        "library_selection": "PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Boon2011": dict({
+        "system_type": "in_vivo",
+        "host": "mouse",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Chua2023": dict({
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H3N2",
+        "type": "IAV",
+    }),
+    "Hutchinson2010": dict({
+        "system_type": "in_vitro",
+        "host": "unknown",
+        "library_layout": "paired",
+        "library_selection": "PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Khan2021": dict({
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Klein2023": dict({
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Kuo2017": dict({
+        "system_type": "in_vitro",
+        "host": "unknown",
+        "library_layout": "paired",
+        "library_selection": "PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Lui2019": dict({
+        "system_type": "in_vivo",
+        "host": "mouse",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Pelz2021": dict({
+        "system_type": "in_vitro",
+        "host": "unknown",
+        "library_layout": "paired",
+        "library_selection": "PCR",
+        "library_source": "genomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Penn2022": dict({
+        "system_type": "in_vivo",
+        "host": "mouse",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Russell2018": dict({
+        "system_type": "in_vitro",
+        "host": "unknown",
+        "library_layout": "paired",
+        "library_selection": "PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Southgate2019": dict({
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Valesano2020": dict({
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Wang2020": dict({
+        "system_type": "in_vitro",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Wang2023": dict({
+        "system_type": "in_vivo",
+        "host": "mouse",
+        "library_layout": "paired",
+        "library_selection": "unknown",
+        "library_source": "genomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Zhuravlev2020": dict({
+        "system_type": "in_vitro",
+        "host": "human",
+        "library_layout": "single",
+        "library_selection": "PolyA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Zhu2021": dict({
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    }),
+    "Zost2021": dict({
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H3N2",
+        "type": "IAV",
+    }),
+})
+
 ### FUNCTIONS ###
 
 def get_dataset_names(cutoff: int=0, selection: str="")-> list:
@@ -777,16 +952,10 @@ def get_dataset_names(cutoff: int=0, selection: str="")-> list:
     names = df[df["Size"] >= cutoff]["Dataset"].to_list()
 
     # make selection based on in vivo/cells etc.
-    if selection == "in vivo mouse":
-        select_names = VIVO_MOUSE_DATASETS
-    elif selection == "in vitro":
-        select_names = VITRO_DATASETS
-    elif selection == "in vivo human":
-        select_names = VIVO_HUMAN_DATASETS
-    elif selection == "in vivo":
-        select_names = VIVO_DATASETS
-    elif selection == "IAV":
+    if selection == "IAV":
         select_names = IAV_DATASETS
+    elif selection == "IBV":
+        select_names = IBV_DATASETS
     elif selection == "H1N1":
         select_names = H1N1_DATASETS
     elif selection == "H3N2":
@@ -797,22 +966,6 @@ def get_dataset_names(cutoff: int=0, selection: str="")-> list:
         select_names = H7N9_DATASETS
     elif selection == "IBV":
         select_names = IBV_DATASETS
-    elif selection == "IAV (in vivo mouse)":
-        select_names = list(set(IAV_DATASETS) & set(VIVO_MOUSE_DATASETS))
-    elif selection == "IAV (in vitro)":
-        select_names = list(set(IAV_DATASETS) & set(VITRO_DATASETS))
-    elif selection == "IAV (in vivo human)":
-        select_names = list(set(IAV_DATASETS) & set(VIVO_HUMAN_DATASETS))
-    elif selection == "IAV (in vivo)":
-        select_names = list(set(IAV_DATASETS) & set(VIVO_DATASETS))
-    elif selection == "IBV (in vivo mouse)":
-        select_names = list(set(IBV_DATASETS) & set(VIVO_MOUSE_DATASETS))
-    elif selection == "IBV (in vitro)":
-        select_names = list(set(IBV_DATASETS) & set(VITRO_DATASETS))
-    elif selection == "IBV (in vivo human)":
-        select_names = list(set(IBV_DATASETS) & set(VIVO_HUMAN_DATASETS))
-    elif selection == "IBV (in vivo)":
-        select_names = list(set(IBV_DATASETS) & set(VIVO_DATASETS))
     else:
         select_names = names
 
@@ -1262,20 +1415,20 @@ def sequence_df(df: pd.DataFrame, strain: str, isize: int=5)-> pd.DataFrame:
         Generate a DataFrame with sequence information.
         :param df: Pandas DataFrame containing the DelVGs in the "key" column
             Nomenclature: {seg}_{start}_{end}
-        :param strain: name of the strain
+        :param Strain: name of the Strain
         :param isize: the size of the sequence before and after the start and
             end positions. Default is 5.
 
     :return: Pandas DataFrame with the following columns:
             - "key": The original key from the input DataFrame.
-            - "Segment": The segment
-            - "Start": The start position of the deletion site
-            - "End": The end position of the deletion site
+            - "segment": The segment
+            - "start": The start position of the deletion site
+            - "end": The end position of the deletion site
             - "seq": The dip sequence
             - "deleted_sequence": The deleted sequence
             - "isize": The specified size for the before and after sequences
             - "full_seq": full sequence of the wild type virus
-            - "Strain": strain used in the experiment
+            - "strain": strain used in the experiment
             - "seq_around_deletion_junction": sequence around deletion sites
             - "NGS_read_count": NGS count measured in the experiment
 
@@ -1438,12 +1591,12 @@ def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
     if strain == 'all':
         pass
     else:
-        df = df[df['Strain'] == strain]
+        df = df[df['strain'] == strain]
 
     if segment == 'all':
         pass
     else:
-        df = df[df['Segment'] == segment]
+        df = df[df['segment'] == segment]
     
     return df
 
@@ -1522,27 +1675,29 @@ def save_df(df: pd.DataFrame, fname: str, save_path: str, folder: str = '', subf
 
 ### unppoled ###
 
-_FEATURE_KEYS = ["Time", "Localization", "Resolution", "Cells", "MOI", "Host"]
+_FEATURE_KEYS = ["time_point", "localization", "resolution", "cell_system", "MOI", "host"]
 
 _KEY_NORMALIZATION = {
-    "Time": "Time",
-    "Localization": "Localization",
-    "Resolution": "Resolution",
-    "Cells": "Cells",
+    "Time": "time_point",
+    "Localization": "localization",
+    "Resolution": "resolution",
+    "Cells": "cell_system",
     "MOI": "MOI",
-    "Host": "Host"
+    "Host": "host",
 }
 
 def _extract_meta_features(meta: dict) -> dict:
     """
-    Return ONLY the whitelisted features from ACCNUMDICT(mod).
-    Missing ones are filled with 'unknown'.
+    return ONLY the whitelisted features from ACCNUMDICT(mod).
+    missing ones are filled with 'unknown'.
     """
     out = {k: "unknown" for k in _FEATURE_KEYS}
+
     for raw_k, v in meta.items():
         k = _KEY_NORMALIZATION.get(raw_k, None)
         if k in _FEATURE_KEYS:
             out[k] = v
+
     return out
 
 def load_single_dataset_unpooled(exp: str, acc: str, segment_dict: dict) -> pd.DataFrame:
@@ -1558,17 +1713,17 @@ def load_dataset_unpooled(dataset: str) -> pd.DataFrame:
     for acc, meta in acc_nums.items():
         df = load_single_dataset_unpooled(dataset, acc, SEGMENT_DICTS[strain])
 
-        # Strictly add ONLY the six agreed features from ACCNUMDICT(mod)
+        # Strictly add only the six agreed features from ACCNUMDICT(mod)
         features = _extract_meta_features(meta)
         for k, v in features.items():
             df[k] = v
 
         dfs.append(df)
 
-    # No pooling; just stack rows
+    # no pooling; just stack rows
     concat_df = pd.concat(dfs, ignore_index=True)
 
-    # Keep all entries: cutoff=0 (preserves all data; keeps your usual preprocess columns)
+    # keep all entries: cutoff=0 (preserves all data; keeps your usual preprocess columns)
     out = preprocess(strain, concat_df, 0)
     return out
 
@@ -1591,72 +1746,100 @@ def add_dataset_keys(dfs):
     return updated_dfs
 
 def add_metadata_features(dfnames: list, dfs: list) -> list:
-    resultpath, _ = os.path.split(RESULTSPATH)
+    '''
 
-    read_path = os.path.join(resultpath, 'preprocess', 'metadata', 'metadata.csv')
-    meta_df = pd.read_csv(read_path)
-
-    meta_features = [
-        'system type', 'LibraryLayout', 'LibrarySelection', 'LibrarySource', 'subtype',
-    ]
-
+    '''
     updated_dfs = []
     for dfname, df in zip(dfnames, dfs):
         df = df.copy()
         df['dataset_name'] = dfname
 
-        row = meta_df.loc[meta_df['names'] == dfname]
+        meta = METADATA_DICTS.get(dfname, None)
+        if meta is None:
+            meta = dict({
+                "system_type": "unknown",
+                "host": "unknown",
+                "library_layout": "unknown",
+                "library_selection": "unknown",
+                "library_source": "unknown",
+                "subtype": "unknown",
+                "type": "unknown",
+            })
 
-        for meta_feature in meta_features:
-            if not row.empty:
-                value = row[meta_feature].iloc[0]
-            else:
-                value = np.nan
-
-            if pd.isna(value):
-                value = "unknown"
-            elif isinstance(value, str) and value.strip() == '':
-                value = "unknown"
-
-            df[meta_feature] = value
+        df['system_type'] = meta['system_type']
+        df['host'] = meta['host']
+        df['library_layout'] = meta['library_layout']
+        df['library_selection'] = meta['library_selection']
+        df['library_source'] = meta['library_source']
+        df['subtype'] = meta['subtype']
+        df['type'] = meta['type']
 
         updated_dfs.append(df)
 
-    renamed_dfs = []
-    for df in updated_dfs:
-        df = rename_feature(df, 'system type', 'system_type')
-        df = rename_feature(df, 'LibraryLayout', 'library_layout')
-        df = rename_feature(df, 'LibrarySelection', 'library_selection')
-        df = rename_feature(df, 'LibrarySource', 'library_source')
-        renamed_dfs.append(df)
-
-    return renamed_dfs
+    return updated_dfs
 
 ### intersects ###
 
 def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.DataFrame:
+    meta_features = [
+        'system_type', 'cell_system', 'host'
+        'localization', 'resolution', 'time_point', 'MOI',
+        "library_layout", "library_selection", "library_source",
+    ]
+
+    def collapse_meta_features_by_ikey(df: pd.DataFrame) -> pd.DataFrame:
+        # collapse categorical/meta features per-ikey
+        for meta_feature in meta_features:
+            if meta_feature in df.columns:
+                g = df.groupby('ikey')[meta_feature]
+
+                # if any entry is 'unknown' -> 'unknown'
+                any_unknown = df[meta_feature].eq('unknown').groupby(df['ikey']).transform('any')
+
+                # nunique(dropna=False) equivalent: fill NaN with sentinel before nunique
+                tmp = df[meta_feature].fillna('__nan__')
+                all_same = tmp.groupby(df['ikey']).transform('nunique').eq(1)
+
+                first_val = g.transform('first')
+                df[meta_feature] = np.where(any_unknown | (~all_same), 'unknown', first_val)
+
+        return df
+
     if modifier == 'all':
         return df
-    elif modifier == 'remove':
+    elif modifier == 'remove_global' or modifier == 'remove_dataset':
         df = add_ikey(df)
         df = remove_by_ikey(df, 1)
-    elif modifier == 'mean':
+    elif modifier == 'mean_global' or modifier == 'mean_dataset':
         df = add_ikey(df)
+        df['count'] = df.groupby('ikey')['ikey'].transform('size')
         df = mean_by_ikey(df, feature_name)
-    elif modifier == 'median':
+        df = collapse_meta_features_by_ikey(df)
+        df = df.drop_duplicates(subset=['ikey'], keep='first')
+    elif modifier == 'median_global' or modifier == 'median_dataset':
         df = add_ikey(df)
+        df['count'] = df.groupby('ikey')['ikey'].transform('size')
         df = median_by_ikey(df, feature_name)
-    elif modifier == 'remove with metadata':
+        df = collapse_meta_features_by_ikey(df)
+        df = df.drop_duplicates(subset=['ikey'], keep='first')
+    elif modifier == 'remove_global_metadata' or modifier == 'remove_dataset_metadata':
         df = add_metadata_ikey(df)
         df = remove_by_ikey(df, 1)
-    elif modifier == 'mean with metadata':
+    elif modifier == 'mean_global_metadata' or modifier == 'mean_dataset_metadata':
         df = add_metadata_ikey(df)
+        df['count'] = df.groupby('ikey')['ikey'].transform('size')
         df = mean_by_ikey(df, feature_name)
-    elif modifier == 'median with metadata':
+        df = collapse_meta_features_by_ikey(df)
+        df = df.drop_duplicates(subset=['ikey'], keep='first')
+    elif modifier == 'median_global_metadata' or modifier == 'median_dataset_metadata':
         df = add_metadata_ikey(df)
+        df['count'] = df.groupby('ikey')['ikey'].transform('size')
         df = median_by_ikey(df, feature_name)
+        df = collapse_meta_features_by_ikey(df)
+        df = df.drop_duplicates(subset=['ikey'], keep='first')
     else:
         print('unvalid intersects modifier')
+        return
 
     df = df.drop(columns=['ikey'])
     return df
@@ -1666,7 +1849,7 @@ def add_ikey(df: pd.DataFrame) -> pd.DataFrame:
     
     '''
     df = df.copy()
-    df['ikey'] = df['Strain'].astype(str) + '_' + df['key'].astype(str)
+    df['ikey'] = df['strain'].astype(str) + '_' + df['key'].astype(str)
 
     return df
 
@@ -1676,11 +1859,15 @@ def add_metadata_ikey(df: pd.DataFrame) -> pd.DataFrame:
     '''
     df = df.copy()
     df["ikey"] = (
-        df["Strain"].astype(str) + "_" +
+        df["strain"].astype(str) + "_" +
         df["key"].astype(str) + "_" +
-        df["Localization"].astype(str) + "_" +
-        df["Resolution"].astype(str) + "_" +
-        df["system_type"].astype(str)
+        df["localization"].astype(str) + "_" +
+        df["resolution"].astype(str) + "_" +
+        df["cell_system"].astype(str)  + "_" +
+        df["system_type"].astype(str)  + "_" +
+        df["host"].astype(str)  + "_" +
+        df["time_point"].astype(str)  + "_" +
+        df["MOI"].astype(str)
     )
 
     return df
@@ -1725,6 +1912,8 @@ def median_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
     df[feature_name] = median_values
 
     return df
+
+### pseudo (outdated) ###
 
 def set_intersect_proportion(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     '''
@@ -1880,7 +2069,7 @@ def split_by_number(df: pd.DataFrame, split_number: int) -> Tuple[pd.DataFrame, 
 
     return sampled_df, remaining_df
 
-def add_feature_quantile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int = RANK_THRESHOLD):
+def add_feature_quantile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int=RANK_THRESHOLD):
     """
 
     """
@@ -1951,38 +2140,6 @@ def get_feature_modification_name(log_type: str=LOGARITHM, norm_type: str=NORMAL
         return f"{log_type}-transformed"
     return ""
 
-def add_separate_ngs_features(dfs: list, separated: bool):
-    '''
-
-    '''
-    feature = 'NGS_read_count'
-    log_feature = 'log_' + feature
-    norm_log_feature = 'norm_' + log_feature
-
-    if separated:
-        updated_dfs = []
-        for df in dfs:
-            df = add_log_feature(df, feature, log_feature)
-            df = add_norm_feature(df, log_feature, norm_log_feature)
-            updated_dfs.append(df)
-
-        return updated_dfs
-
-    else:
-        for i, df in enumerate(dfs):
-            df['dataset_index'] = i
-        concat_df = pd.concat(dfs, ignore_index=True)
-
-        concat_df = add_log_feature(concat_df, feature, log_feature)
-        concat_df = add_norm_feature(concat_df, log_feature, norm_log_feature)
-
-        updated_dfs = [
-            group.drop(columns='dataset_index').reset_index(drop=True)
-            for _, group in concat_df.groupby('dataset_index')
-            ]
-
-        return updated_dfs
-
 def balance_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float) -> pd.DataFrame:
     '''
     
@@ -2013,20 +2170,186 @@ def reduce_rows(df: pd.DataFrame, target_number: int) -> pd.DataFrame:
 
     return df.sample(n=target_number, random_state=SEED).reset_index(drop=True)
 
+###########
+### CNN ###
+###########
+
+def fit_norm_params(series: pd.Series, norm_type: str=NORMALIZATION):
+    """
+
+    """
+    if norm_type == "min-max":
+        fmin, fmax = series.min(), series.max()
+        return ("min-max", float(fmin), float(fmax))
+
+    elif norm_type == "z-score":
+        mean, std = series.mean(), series.std()
+        return ("z-score", float(mean), float(std))
+
+    elif norm_type == "robust":
+        median, q1, q3 = series.median(), series.quantile(0.25), series.quantile(0.75)
+        return ("robust", float(median), float(q1), float(q3))
+
+    elif norm_type == "euclidean":
+        l2_norm = np.sqrt((series ** 2).sum())
+        return ("euclidean", float(l2_norm))
+
+    elif norm_type == "none":
+        return ("none",)
+
+    else:
+        raise ValueError(f"invalid norm_type '{norm_type}'. "
+                         "choose from 'min-max', 'z-score', 'robust', 'euclidean','none'.")
+
+def apply_norm_params(series: pd.Series, params: tuple):
+    """
+
+    """
+    norm_type = params[0]
+
+    if norm_type == "min-max":
+        _, fmin, fmax = params
+        return (series - fmin) / (fmax - fmin) if fmax != fmin else 0.0
+
+    elif norm_type == "z-score":
+        _, mean, std = params
+        return (series - mean) / std if std != 0 else 0.0
+
+    elif norm_type == "robust":
+        _, median, q1, q3 = params
+        iqr = q3 - q1
+        return (series - median) / iqr if iqr != 0 else 0.0
+
+    elif norm_type == "euclidean":
+        _, l2_norm = params
+        return series / l2_norm if l2_norm != 0 else 0.0
+
+    elif norm_type == "none":
+        return series
+
+    else:
+        raise ValueError(f"invalid norm params '{params}'.")
+
+def add_ngs_features(
+    df: pd.DataFrame,
+    feature: str='NGS_read_count',
+    log_type: str=LOGARITHM,
+    norm_type: str=NORMALIZATION,
+    norm_params: Optional[tuple]=None,
+    return_norm_params: bool=False,
+):
+    """
+
+    """
+    log_feature = 'log_' + feature
+    norm_log_feature = 'norm_' + log_feature
+
+    df = add_log_feature(df, feature, log_feature, log_type=log_type)
+
+    if norm_params is None:
+        norm_params = fit_norm_params(df[log_feature], norm_type=norm_type)
+
+    df[norm_log_feature] = apply_norm_params(df[log_feature], norm_params)
+
+    if return_norm_params:
+        return df, norm_params
+
+    return df
+
+def add_intersect_ngs_features(
+    dfs: list,
+    intersects: str,
+    norm_params: Optional[Union[dict, tuple]]=None,
+    return_norm_params: bool=False,
+):
+    '''
+    concat/loop dataset dfs and apply:
+
+    - manage_intersects()
+    - log + norm (NGS_read_count) via add_* helpers
+
+    dataset handling:
+        for each df: manage intersects
+        for each df: apply norm
+        concat dfs
+        return one df
+
+    global handling:
+        concat dfs
+        manage intersects
+        apply norm on concat df
+        return one df
+
+    reusable:
+        - if norm_params is None: fit normalization on the provided data (old behavior)
+        - if norm_params is given: apply it (no leakage; consistent scale)
+        - if return_norm_params: return (df, norm_params)
+    '''
+    feature_name = 'NGS_read_count'
+
+    if 'dataset' in intersects:
+        updated_dfs = []
+        learned = {}
+
+        for i, df in enumerate(dfs):
+            df = manage_intersects(df, intersects, feature_name)
+
+            # pick dataset key (prefer dataset_name if it exists)
+            if 'dataset_name' in df.columns and len(df) > 0:
+                dkey = str(df['dataset_name'].iloc[0])
+            else:
+                dkey = str(i)
+
+            if norm_params is None:
+                df, p = add_ngs_features(df, feature=feature_name, return_norm_params=True)
+                learned[dkey] = p
+            else:
+                # expect dict for dataset mode
+                p = norm_params.get(dkey, None) if isinstance(norm_params, dict) else None
+                df = add_ngs_features(df, feature=feature_name, norm_params=p)
+
+            updated_dfs.append(df)
+
+        final_df = pd.concat(updated_dfs, ignore_index=True)
+
+        if return_norm_params:
+            return final_df, learned
+
+        return final_df
+
+    if 'global' in intersects or 'all' in intersects:
+        concat_df = pd.concat(dfs, ignore_index=True)
+        concat_df = manage_intersects(concat_df, intersects, feature_name)
+
+        if norm_params is None:
+            concat_df, learned = add_ngs_features(concat_df, feature=feature_name, return_norm_params=True)
+        else:
+            concat_df = add_ngs_features(concat_df, feature=feature_name, norm_params=norm_params)
+            learned = norm_params
+
+        if return_norm_params:
+            return concat_df, learned
+
+        return concat_df
+
 ################
 ### features ###
 ################
 
-### length ###
+### sequence and length ###
 
-def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+def add_marked_delvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     """
+    Add a 'marked_DelVG_sequence' column in which the deleted region of 'full_seq'
+    is replaced by 'X' characters, where 'start' is the 0-based index of the
+    first deleted nucleotide and 'end' is the 1-based position of the first
+    retained nucleotide after the deletion.
 
     """
-    def compute_dvg_sequence(row):
+    def compute_delvg_sequence(row):
         full_seq = row['full_seq']
-        start = row['Start']
-        end = row['End'] - 1
+        start = row['start']
+        end = row['end'] - 1
         
         seq_list = list(full_seq)
 
@@ -2036,61 +2359,86 @@ def add_marked_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
 
         return ''.join(seq_list)
 
-    df['marked_dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+    df['marked_DelVG_sequence'] = df.apply(compute_delvg_sequence, axis=1)
 
     return df
 
 def add_full_seq_length(df: pd.DataFrame):
     """
+    Add a 'full_seq_length' column containing the length of the original
+    full-length sequence stored in 'full_seq'.
 
     """
     df['full_seq_length'] = df['full_seq'].apply(len)
 
     return df
 
-def add_dvg_length(df: pd.DataFrame):
+def add_delvg_length(df: pd.DataFrame):
     """
+    Add a 'DelVG_length' column containing the length of the DVG sequence
+    ('DelVG_sequence'), i.e. the full sequence with the deletion removed.
 
     """
-    df['dvg_length'] = df['dvg_sequence'].apply(len)
+    df['DelVG_length'] = df['DelVG_sequence'].apply(len)
 
     return df
 
 def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
     """
+    Add flank-length columns around the deletion site:
+    - '5_end_length' gives the number of nucleotides before the deletion start
+      (with 'start' being the 0-based index of the first deleted nucleotide).
+    - '3_end_length' gives the number of nucleotides retained after the deletion,
+      where 'end' is the 1-based position of the first retained nucleotide.
 
     """
-    df["5_end_length"] = df["Start"]
-    df["3_end_length"] = df["full_seq"].str.len() - df["End"]
+    df["5_end_length"] = df["start"]
+    df["3_end_length"] = df["full_seq"].str.len() - (df["end"] - 1)
 
     return df
 
 def add_deletion_length(df: pd.DataFrame) -> pd.DataFrame:
     """
+    Add a 'deletion_length' column giving the number of deleted nucleotides,
+    computed from coordinates where 'start' is the 0-based index of the first
+    deleted nucleotide and 'end' is the 1-based position of the first retained
+    nucleotide after the deletion.
 
     """
-    df["deletion_length"] = df["End"] - df["Start"] - 1
+    df["deletion_length"] = df["end"] - df["start"] - 1
 
     return df
 
-def add_dvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
+def add_delvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     """
+    Add a 'DelVG_sequence' column by removing the deleted region from 'full_seq',
+    where 'start' denotes the 0-based index of the first deleted nucleotide and
+    'end' denotes the 1-based position of the first retained nucleotide after
+    the deletion.
 
     """
-    def compute_dvg_sequence(row):
+    def compute_delvg_sequence(row):
         full_seq = row['full_seq']
-        start = row['Start']
-        end = row['End']
+        start = row['start']
+        end = row['end']
 
-        return full_seq[:start] + full_seq[end:]
+        end0 = end - 1
 
-    df['dvg_sequence'] = df.apply(compute_dvg_sequence, axis=1)
+        return full_seq[:start] + full_seq[end0:]
+
+    df['DelVG_sequence'] = df.apply(compute_delvg_sequence, axis=1)
 
     return df
 
 ### direct repeats ###
 
-def cap_direct_repeat_length(df: pd.DataFrame, cap: int = 5):
+def cap_direct_repeat_length(df: pd.DataFrame, cap: int=DIRECT_REPEAT_LENGTH_CAP):
+    """
+    Cap the 'direct_repeat_length' at a maximum value, so that any direct repeat
+    longer than 'cap' is truncated to 'cap' while shorter repeats are left
+    unchanged.
+
+    """
     for index, row in df.iterrows():
         direct_repeat_length = row["direct_repeat_length"]
         if direct_repeat_length > cap:
@@ -2098,13 +2446,21 @@ def cap_direct_repeat_length(df: pd.DataFrame, cap: int = 5):
     return df
 
 def add_direct_repeat_length(df: pd.DataFrame):
+    """
+    Add a 'direct_repeat_length' column giving the length of the direct repeat
+    at the deletion junction, defined as the number of matching nucleotides
+    when comparing the sequence immediately upstream of the deletion (last
+    retained nucleotides before 'start') to the sequence at the end of the
+    deleted region (last deleted nucleotides before the first retained base).
+
+    """
     for index, row in df.iterrows():
         seq = row["full_seq"]
-        start = row["Start"]
-        end = row["End"] - 1
+        start = row["start"]
+        end = row["end"] - 1
         direct_repeat_length = 0
 
-        while start > 0 and seq[start - 1] == seq[end - 1]:
+        while start > 0 and end > 0 and seq[start - 1] == seq[end - 1]:
             direct_repeat_length = direct_repeat_length + 1
             start = start - 1
             end = end - 1
@@ -2117,79 +2473,79 @@ def add_direct_repeat_length(df: pd.DataFrame):
 
 def add_gc_content(df: pd.DataFrame):
     """
-    Adds 'gc_content' = (G+C)/length for each dvg_sequence.
+    adds 'GC_content' = (G+C)/length for each DelVG_sequence.
     """
     def calc(seq):
         if not isinstance(seq, str) or len(seq) == 0:
             return 0.0
         return (seq.count('G') + seq.count('C')) / len(seq)
-    df['GC_content'] = df['dvg_sequence'].apply(calc)
+    df['GC_content'] = df['DelVG_sequence'].apply(calc)
     return df
 
 def add_au_content(df: pd.DataFrame):
     """
-    Adds 'au_content' = (A+U)/length for each dvg_sequence.
+    adds 'AU_content' = (A+U)/length for each DelVG_sequence.
     """
     def calc(seq):
         if not isinstance(seq, str) or len(seq) == 0:
             return 0.0
         return (seq.count('A') + seq.count('U')) / len(seq)
-    df['AU_content'] = df['dvg_sequence'].apply(calc)
+    df['AU_content'] = df['DelVG_sequence'].apply(calc)
     return df
 
 def add_upa_content(df: pd.DataFrame):
     """
-    Adds 'upa_content' = count of 'UA' or 'AU' dinucleotides / total dinucleotides.
+    adds 'UpA_content' = count of 'UA' dinucleotides / total dinucleotides.
     UpA under-representation can reflect host pressure.
     """
     def calc(seq):
         if not isinstance(seq, str) or len(seq) < 2:
             return 0.0
         di = len(seq) - 1
-        return (seq.count('UA') + seq.count('AU')) / di
-    df['UpA_content'] = df['dvg_sequence'].apply(calc)
+        return seq.count('UA') / di
+    df['UpA_content'] = df['DelVG_sequence'].apply(calc)
     return df
 
 def add_cpg_content(df: pd.DataFrame):
     """
-    Adds 'cpg_content' = count of 'CG' dinucleotides / total dinucleotides.
-    Relevant for innate immune recognition.
+    adds 'CpG_content' = count of 'CG' dinucleotides / total dinucleotides.
+    relevant for innate immune recognition.
     """
     def calc(seq):
         if not isinstance(seq, str) or len(seq) < 2:
             return 0.0
         return seq.count('CG') / (len(seq) - 1)
-    df['CpG_content'] = df['dvg_sequence'].apply(calc)
+    df['CpG_content'] = df['DelVG_sequence'].apply(calc)
     return df
 
 def add_gc_skew(df: pd.DataFrame):
     """
-    Adds 'gc_skew' = (G - C) / (G + C) per sequence.
+    adds 'GC_skew' = (G - C) / (G + C) per sequence.
     """
     def calc(seq):
         if not isinstance(seq, str) or len(seq) == 0:
             return 0.0
         g, c = seq.count('G'), seq.count('C')
         return (g - c) / (g + c) if (g + c) else 0.0
-    df['GC_skew'] = df['dvg_sequence'].apply(calc)
+    df['GC_skew'] = df['DelVG_sequence'].apply(calc)
     return df
 
 def add_sequence_entropy(df: pd.DataFrame):
     """
-    Adds 'sequence_entropy' = Shannon entropy over A,C,G,U.
+    adds 'sequence_entropy' = Shannon entropy over A,C,G,U.
     """
     def calc(seq):
         if not isinstance(seq, str) or len(seq) == 0:
             return 0.0
         p = [seq.count(b)/len(seq) for b in 'ACGU']
         return -sum(pi*math.log2(pi) for pi in p if pi > 0)
-    df['sequence_entropy'] = df['dvg_sequence'].apply(calc)
+    df['sequence_entropy'] = df['DelVG_sequence'].apply(calc)
     return df
 
-def add_poly_run_features(df: pd.DataFrame, base: str, min_len=4):
+def add_poly_run_features(df: pd.DataFrame, base: str, min_len=MIN_TRACT_LENGTH):
     """
     Adds:
-      - f'poly{base}_max_run': longest consecutive run length of `base`
+      - f'poly__{base}_max_run': longest consecutive run length of `base`
       - f'poly{base}_tracts': number of runs with length >= min_len
     Useful for poly-U/A tracts (replication/termination signals).
     """
@@ -2204,14 +2560,14 @@ def add_poly_run_features(df: pd.DataFrame, base: str, min_len=4):
     def calc_n(seq):
         if not isinstance(seq, str): return 0
         return sum(1 for x in pat.findall(seq) if len(x) >= min_len)
-    df[run_col] = df['dvg_sequence'].apply(calc_max)
-    df[n_col] = df['dvg_sequence'].apply(calc_n)
+    df[run_col] = df['DelVG_sequence'].apply(calc_max)
+    df[n_col] = df['DelVG_sequence'].apply(calc_n)
     return df
 
-def add_palindrome_density(df: pd.DataFrame, k: int, step=1):
+def add_palindrome_density(df: pd.DataFrame, k=PALINDROMIC_K_MER_LENGTH, step=1):
     """
-    Adds 'palindrome_density' = palindromic k-mer count / number of windows.
-    Palindromes can seed hairpins.
+    adds 'palindrome_density' = palindromic k-mer count / number of windows.
+    palindromes can seed hairpins.
     """
     def is_pal(s):
         return s == s[::-1].translate(str.maketrans('ACGU','UGCA'))
@@ -2226,15 +2582,16 @@ def add_palindrome_density(df: pd.DataFrame, k: int, step=1):
             if is_pal(kmer):
                 pals += 1
         return pals / windows if windows else 0.0
-    df['palindrome_density'] = df['dvg_sequence'].apply(calc)
+    df['palindrome_density'] = df['DelVG_sequence'].apply(calc)
     return df
 
+# only recommended as proxy
 def add_orf_features(df: pd.DataFrame):
     """
-    Adds:
-      - 'longest_orf_len_nt': longest ORF length in nt across 3 frames
-      - 'orf_count_aa_ge20': count of ORFs >= 20 aa
-    Uses AUG start and UAA/UAG/UGA stops (on RNA).
+    adds:
+      - 'longest_ORF_len': longest ORF length in nt across 3 frames
+      - 'ORF_count': count of ORFs >= 20 aa
+    uses AUG start and UAA/UAG/UGA stops (on RNA).
     """
     stops = {'UAA','UAG','UGA'}
     def scan(seq):
@@ -2260,15 +2617,15 @@ def add_orf_features(df: pd.DataFrame):
                         j += 3
                 i += 3
         return (best, count20)
-    res = df['dvg_sequence'].apply(scan)
+    res = df['DelVG_sequence'].apply(scan)
     df['longest_ORF_len'] = res.apply(lambda x: x[0])
     df['ORF_count'] = res.apply(lambda x: x[1])
     return df
 
-def add_kmer_richness(df: pd.DataFrame, k: int):
+def add_kmer_richness(df: pd.DataFrame, k=K_MER_LENGTH):
     """
-    Adds 'kmer_richness_k{K}' = unique k-mers / possible windows.
-    Higher values suggest diverse sequence composition.
+    adds 'kmer_richness' = unique k-mers / possible windows.
+    higher values suggest diverse sequence composition.
     """
     col = f'kmer_richness'
     def calc(seq):
@@ -2276,13 +2633,14 @@ def add_kmer_richness(df: pd.DataFrame, k: int):
             return 0.0
         seen = set(seq[i:i+k] for i in range(len(seq)-k+1))
         return len(seen) / (len(seq)-k+1)
-    df[col] = df['dvg_sequence'].apply(calc)
+    df[col] = df['DelVG_sequence'].apply(calc)
     return df
 
+# only recommended as proxy
 def add_codon_usage_bias(df: pd.DataFrame):
     """
-    Adds 'codon_usage_entropy' over 61 sense codons (RNA alphabet; T->U).
-    Lower entropy can indicate codon bias.
+    adds 'codon_usage_entropy' over 61 sense codons (RNA alphabet; T->U).
+    lower entropy can indicate codon bias.
     """
     import math
     stops = {'UAA','UAG','UGA'}
@@ -2300,29 +2658,32 @@ def add_codon_usage_bias(df: pd.DataFrame):
         if total == 0: return 0.0
         p = [c/total for c in counts.values()]
         return -sum(pi*math.log2(pi) for pi in p)
-    df['codon_usage_entropy'] = df['dvg_sequence'].apply(calc)
+    df['codon_usage_entropy'] = df['DelVG_sequence'].apply(calc)
     return df
 
 ### structure ###
 
-def add_marked_structure(df: pd.DataFrame) -> pd.DataFrame:
+def add_marked_secondary(df: pd.DataFrame) -> pd.DataFrame:
     '''
+    add a 'marked_structure' column by inserting 'X' characters for the deleted
+    region into an RNA secondary structure string that corresponds to the DVG
+    sequence, yielding a structure aligned to the original full-length sequence.
 
     '''
     def compute_marked_structure(row):
         struct = row["structure"]
         full_len = len(row["full_seq"])
-        start = row["Start"]
-        end = row["End"]
+        start = row["start"]
+        end = row["end"]
 
-        n_missing = end - start
+        n_missing = end - start - 1
         prefix = struct[:start]
         suffix = struct[start:]
         marked = prefix + "X" * n_missing + suffix
 
         if len(marked) != full_len:
             raise ValueError(
-                f"length mismatch for row with Start={start}, End={end}: "
+                f"length mismatch for row with start={start}, end={end}: "
                 f"full_seq={full_len}, marked_structure={len(marked)}"
             )
         
@@ -2333,6 +2694,8 @@ def add_marked_structure(df: pd.DataFrame) -> pd.DataFrame:
 
 def fold_sequence(seq: str):
     '''
+    fold an RNA sequence using ViennaRNA and return the dot-bracket structure
+    together with the minimum free energy (MFE).
 
     '''
     structure, mfe = RNA.fold(seq)
@@ -2341,6 +2704,9 @@ def fold_sequence(seq: str):
 
 def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, mfe_name: str) -> pd.DataFrame:
     '''
+    compute RNA secondary structure (dot-bracket) and MFE for the sequences in
+    'sequence_name' using multiprocessing, and store results in the provided
+    structure and MFE column names.
 
     '''
     sequences = df[sequence_name].tolist()
@@ -2358,6 +2724,9 @@ def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, 
 
 def _longest_symmetry_len(s: str) -> int:
     '''
+    Return the length of the longest contiguous substring of a dot-bracket RNA
+    structure string that is symmetric under mirror pairing rules:
+    '.' <-> '.', '(' <-> ')', and ')' <-> '('.
 
     '''
     n = len(s)
@@ -2376,23 +2745,23 @@ def _longest_symmetry_len(s: str) -> int:
         return right - left - 1  # length
 
     best = 1  # any single char is symmetric with itself if it's '.'
-    # Note: single '(' or ')' alone doesn't mirror to itself; but for odd centers we need
+    # note: single '(' or ')' alone doesn't mirror to itself; but for odd centers we need
     # to ensure length 1 only counts if '.'; to keep it simple and strict, we can set best = 0
     # and rely on expansions. We'll handle single '.' properly via odd-center expansion below.
     best = 0
 
     for center in range(n):
         # odd-length center at 'center'
-        # Only valid if s[center] mirrors itself (i.e., '.')
+        # only valid if s[center] mirrors itself (i.e., '.')
         if s[center] == '.':
             best = max(best, 1)
         # even-length center between center and center+1
-        # Try both expansions:
+        # try both expansions:
 
         # odd-length expansion around (center, center)
-        # This only grows if neighbors mirror; single '.' handled above
+        # this only grows if neighbors mirror; single '.' handled above
         l = r = center
-        # Start with length 1 if '.' else 0; then expand outward
+        # start with length 1 if '.' else 0; then expand outward
         cur_len = 1 if s[center] == '.' else 0
         if cur_len == 1:
             # already counted single dot; now try to expand further
@@ -2418,6 +2787,9 @@ def _longest_symmetry_len(s: str) -> int:
 
 def add_max_symmetry(df: pd.DataFrame) -> pd.DataFrame:
     '''
+    Add symmetry features computed from a dot-bracket structure string:
+    - 'max_symmetry': length of the longest symmetric contiguous region
+    - 'full_symmetry': True if the entire structure is symmetric
 
     '''
     out = df.copy()
@@ -2431,7 +2803,13 @@ def add_max_symmetry(df: pd.DataFrame) -> pd.DataFrame:
 
 def _pairs_from_dotbracket(s: str):
     """
-    
+    Parse a dot-bracket secondary-structure string and extract base-pair indices.
+
+    Helper:
+    - Scans the string left-to-right using a stack for '(' positions.
+    - Each ')' closes the most recent unmatched '(' to form a pair (i, j).
+    - Ignores unbalanced ')' (extra right parentheses).
+    - Returns a sorted list of (i, j) index tuples (0-based).
     """
     if not isinstance(s, str):
         return []
@@ -2452,7 +2830,13 @@ def _pairs_from_dotbracket(s: str):
 
 def _stems_from_pairs(pairs):
     """
-    
+    Group base pairs into stacked stems and return the stem lengths.
+
+    Helper:
+    - A "stem" is a run of stacked base pairs: (i, j), (i+1, j-1), (i+2, j-2), ...
+    - Input: list of (i, j) pairs (typically sorted).
+    - Output: list of integers, each integer is the number of stacked base pairs
+      in one stem (unit: base pairs per stem).
     """
     if not pairs:
         return []
@@ -2469,8 +2853,14 @@ def _stems_from_pairs(pairs):
 
 def _hairpin_loop_sizes(s: str, pairs):
     """
-    Hairpin loop = a base pair (i,j) whose enclosed region has no other pairs.
-    Size = number of dots between i and j.
+    Compute hairpin-loop sizes from a dot-bracket structure and its base pairs.
+
+    Helper:
+    - Defines a hairpin loop as a base pair (i, j) whose enclosed region contains
+      no other '(' or ')' characters (i.e., no nested pairs).
+    - Size = number of positions between i and j (length of the inner substring),
+      which equals the number of unpaired nucleotides in that loop for a pure hairpin.
+    - Returns: list of integers (unit: nucleotides).
     """
     sizes = []
     for i, j in pairs:
@@ -2481,7 +2871,12 @@ def _hairpin_loop_sizes(s: str, pairs):
 
 def _external_unpaired_count(s: str):
     """
-    Dots not enclosed by any pair (i.e., in the external loop).
+    Count unpaired positions that lie in the external loop (outside all base pairs).
+
+    Helper:
+    - Marks all indices that are enclosed by any base pair interval [i, j].
+    - Counts '.' characters that are NOT covered by any such interval.
+    - Returns: integer count (unit: nucleotides).
     """
     pairs = _pairs_from_dotbracket(s)
     covered = set()
@@ -2491,23 +2886,46 @@ def _external_unpaired_count(s: str):
 
 def _pair_spans(pairs):
     """
-    For each pair (i,j) return j-i (span/arc length).
+    Compute span (arc length) for each base pair.
+
+    Helper:
+    - For each pair (i, j), span = j - i (0-based index distance).
+    - Returns: list of integers (unit: nucleotides / positions).
     """
     return [(j - i) for i, j in pairs]
 
 def add_bp_count(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add base-pair count feature from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - bp_count: number of base pairs in the structure.
+
+    How it is computed:
+    - Counts the number of '(' characters in the dot-bracket string.
+      Each '(' corresponds to exactly one base pair.
+
+    Unit:
+    - Count (base pairs).
+    """
     df["bp_count"] = df["structure"].apply(
         lambda s: s.count("(") if isinstance(s, str) else None
     )
     return df
 
 def add_bp_density(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add base-pair density feature from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - bp_density: fraction of positions participating as the left side of a base pair.
+
+    How it is computed:
+    - bp_density = (# of '(' characters) / (structure length)
+
+    Unit:
+    - Proportion (base pairs per nucleotide; dimensionless, range ~[0, 0.5]).
+    """
     def f(s):
         if not isinstance(s, str) or len(s) == 0:
             return None
@@ -2517,18 +2935,36 @@ def add_bp_density(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def add_unpaired_count(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add unpaired nucleotide count feature from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - unpaired_count: number of unpaired positions.
+
+    How it is computed:
+    - Counts '.' characters in the dot-bracket string.
+
+    Unit:
+    - Count (nucleotides).
+    """
     df["unpaired_count"] = df["structure"].apply(
         lambda s: s.count(".") if isinstance(s, str) else None
     )
     return df
 
 def add_unpaired_density(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add unpaired nucleotide density feature from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - unpaired_density: fraction of positions that are unpaired.
+
+    How it is computed:
+    - unpaired_density = (# of '.' characters) / (structure length)
+
+    Unit:
+    - Proportion (nucleotides per nucleotide; dimensionless, range [0, 1]).
+    """
     def f(s):
         if not isinstance(s, str) or len(s) == 0:
             return None
@@ -2537,17 +2973,42 @@ def add_unpaired_density(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def add_stem_count(df: pd.DataFrame) -> pd.DataFrame:
-    '''
-    '''
+    """
+    Add stem count feature from dot-bracket structure.
+
+    Feature(s) computed:
+    - stem_count: number of stems, where a stem is a run of stacked base pairs.
+
+    How it is computed:
+    - Extracts all base pairs from the dot-bracket string.
+    - Groups consecutive stacked pairs into stems.
+    - stem_count = number of such stems.
+
+    Unit:
+    - Count (stems).
+    """
     df["stem_count"] = df["structure"].apply(
         lambda s: len(_stems_from_pairs(_pairs_from_dotbracket(s))) if isinstance(s, str) else None
     )
     return df
 
 def add_stem_length_stats(df: pd.DataFrame) -> pd.DataFrame:
-    ''' 
-    
-    '''
+    """
+    Add stem-length summary statistics from dot-bracket structure.
+
+    Feature(s) computed:
+    - stem_len_max: maximum stem length across stems
+    - stem_len_mean: mean stem length across stems
+    - stem_len_min: minimum stem length across stems
+
+    How it is computed:
+    - Extracts base pairs, groups them into stems (stacked runs).
+    - Each stem length is the number of base pairs in that stem.
+    - If there are no stems/pairs: returns (0, 0.0, 0).
+
+    Unit:
+    - Base pairs (per stem) for each statistic.
+    """
     def f(s):
         if not isinstance(s, str):
             return (None, None, None)
@@ -2555,7 +3016,7 @@ def add_stem_length_stats(df: pd.DataFrame) -> pd.DataFrame:
         stems = _stems_from_pairs(_pairs_from_dotbracket(s))
         if not stems:
             return (0, 0.0, 0)
-        
+
         if isinstance(stems[0], list):
             stems = [len(seg) for seg in stems]
 
@@ -2568,18 +3029,41 @@ def add_stem_length_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def add_hairpin_count(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add hairpin loop count feature from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - hairpin_count: number of hairpin loops.
+
+    How it is computed:
+    - Finds base pairs (i, j) whose enclosed region contains no other pairs
+      (no '(' or ')' inside), i.e., a "pure" hairpin closure.
+    - hairpin_count = number of such closures.
+
+    Unit:
+    - Count (hairpin loops).
+    """
     df["hairpin_count"] = df["structure"].apply(
         lambda s: len(_hairpin_loop_sizes(s, _pairs_from_dotbracket(s))) if isinstance(s, str) else None
     )
     return df
 
 def add_hairpin_size_stats(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add hairpin-loop size summary statistics from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - hairpin_size_mean: mean hairpin loop size
+    - hairpin_size_min: minimum hairpin loop size
+    - hairpin_size_max: maximum hairpin loop size
+
+    How it is computed:
+    - Computes sizes for hairpin loops (inner length between closing bases).
+    - If there are no hairpins: sets mean/min/max to (0, None, None).
+
+    Unit:
+    - Nucleotides (unpaired positions inside hairpin loop) for each statistic.
+    """
     def f(s):
         if not isinstance(s, str):
             return (None, None, None)
@@ -2594,9 +3078,19 @@ def add_hairpin_size_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def add_external_unpaired_density(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add external-loop unpaired density feature from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - external_unpaired_density: fraction of positions that are unpaired AND lie in the
+      external loop (i.e., not enclosed by any base pair).
+
+    How it is computed:
+    - external_unpaired_density = (external unpaired '.' count) / (structure length)
+
+    Unit:
+    - Proportion (dimensionless, range [0, 1]).
+    """
     def f(s):
         if not isinstance(s, str) or len(s) == 0:
             return None
@@ -2606,9 +3100,22 @@ def add_external_unpaired_density(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def add_pair_span_stats(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add base-pair span (arc length) summary statistics from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - pair_span_mean: mean span (j - i) across all base pairs
+    - pair_span_min: minimum span (j - i)
+    - pair_span_max: maximum span (j - i)
+
+    How it is computed:
+    - Extracts all base pairs (i, j).
+    - For each pair, span = j - i (index distance).
+    - If there are no pairs: sets (mean/min/max) to (0, None, None).
+
+    Unit:
+    - Nucleotides / positions (index distance along the sequence).
+    """
     def f(s):
         if not isinstance(s, str):
             return (None, None, None)
@@ -2623,9 +3130,20 @@ def add_pair_span_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def add_free_end_lengths(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add free-end (unpaired tail) length features from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - free_5prime_len: length of leading unpaired run at the 5' end
+    - free_3prime_len: length of trailing unpaired run at the 3' end
+
+    How it is computed:
+    - free_5prime_len: counts consecutive leading '.' until first non-dot.
+    - free_3prime_len: counts consecutive trailing '.' from the end until first non-dot.
+
+    Unit:
+    - Nucleotides (count of positions).
+    """
     def f(s):
         if not isinstance(s, str) or len(s) == 0:
             return (None, None)
@@ -2649,10 +3167,23 @@ def add_free_end_lengths(df: pd.DataFrame) -> pd.DataFrame:
     df["free_3prime_len"] = out.apply(lambda t: t[1])
     return df
 
+# only recommended as proxy
 def add_branch_point_count(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
+    Add a "branchiness" / multi-stem enclosure count feature from dot-bracket structure.
 
-    '''
+    Feature(s) computed:
+    - branch_point_count: count of complex enclosures that contain at least two internal stems.
+
+    How it is computed:
+    - Uses a regex to find non-overlapping regions that look like an enclosure '( ... )'
+      containing nested parentheses patterns consistent with >=2 internal stems.
+    - This is a proxy for multiloops/branch points (not a perfect multiloop detector),
+      but useful as an index of structural branching complexity.
+
+    Unit:
+    - Count (branch-like enclosures / proxy branch points).
+    """
     # proxy for multiloops: count positions where a run of '(' ends and immediately
     # later another '(' appears after at least one dot inside the same enclosure.
     # Not a perfect multiloop detector, but useful as a "branchiness" index.
@@ -2755,7 +3286,7 @@ def _safe_upper(s):
 
 def add_gc_overall(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    Add overall GC fraction of dvg_sequence (GC / length), NaN-safe.
+    Add overall GC fraction of DelVG_sequence (GC / length), NaN-safe.
     '''
     def f(seq):
         if not isinstance(seq, str) or len(seq) == 0:
@@ -2763,7 +3294,7 @@ def add_gc_overall(df: pd.DataFrame) -> pd.DataFrame:
         seq = _safe_upper(seq)
         gc = seq.count("G") + seq.count("C")
         return gc / len(seq)
-    df["GC_overall"] = df["dvg_sequence"].apply(f)
+    df["GC_overall"] = df["DelVG_sequence"].apply(f)
     return df
 
 def add_gc_paired_unpaired(df: pd.DataFrame) -> pd.DataFrame:
@@ -2771,7 +3302,7 @@ def add_gc_paired_unpaired(df: pd.DataFrame) -> pd.DataFrame:
     Add GC fraction among paired bases and among unpaired bases (from dot-bracket).
     '''
     def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
         if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
             return (None, None)
         masks = _category_masks(struct)
@@ -2795,7 +3326,7 @@ def add_canonical_pair_stats(df: pd.DataFrame) -> pd.DataFrame:
     Count and fraction of canonical pairs: GC, AU, GU, and noncanonical among all pairs.
     '''
     def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
         if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
             return (0, 0, 0, 0, None, None, None, None)
         pairs = _pairs_from_dotbracket(struct)
@@ -2831,7 +3362,7 @@ def add_stem_end_pair_enrichment(df: pd.DataFrame) -> pd.DataFrame:
     For each stem, look at both terminal base pairs and report the fraction that are GC/AU/GU.
     '''
     def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
         if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
             return (None, None, None)
         stems = _stems_from_pairs(_pairs_from_dotbracket(struct))
@@ -2863,7 +3394,7 @@ def add_hairpin_closing_pair_content(df: pd.DataFrame) -> pd.DataFrame:
     Among hairpin loops, what fraction are closed by GC/AU/GU/noncanonical?
     '''
     def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
         if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
             return (None, None, None, None)
         pairs = _pairs_from_dotbracket(struct)
@@ -2899,7 +3430,7 @@ def add_tetraloop_motif_counts(df: pd.DataFrame) -> pd.DataFrame:
     uncg = re.compile(r"^U[ACGU]CG$", re.IGNORECASE)
     cuug = re.compile(r"^CUUG$", re.IGNORECASE)
     def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
         if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
             return (0, 0, 0)
         pairs = _pairs_from_dotbracket(struct)
@@ -2930,7 +3461,7 @@ def add_loop_au_content(df: pd.DataFrame) -> pd.DataFrame:
         return au / n
 
     def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
         if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
             return (None, None, None, None)
         masks = _category_masks(struct)
@@ -2956,7 +3487,7 @@ def add_tail_gc_content(df: pd.DataFrame) -> pd.DataFrame:
     GC fraction in 5' and 3' single-stranded tails (leading/trailing dots).
     '''
     def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
         if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct):
             return (None, None)
         # 5' tail
@@ -2980,10 +3511,10 @@ def add_tail_gc_content(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_start_codon_accessibility(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    If dvg_sequence contains AUG, report (aug_total, aug_unpaired, aug_unpaired_content) based on structure.
+    If DelVG_sequence contains AUG, report (aug_total, aug_unpaired, aug_unpaired_content) based on structure.
     '''
     def f(row):
-        seq, struct = _safe_upper(row["dvg_sequence"]), row["structure"]
+        seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
         if not isinstance(seq, str) or not isinstance(struct, str) or len(seq) != len(struct) or len(seq) < 3:
             return (0, 0, None)
         masks = _category_masks(struct)
@@ -3119,157 +3650,47 @@ def mannwhitneyu_for_feature(
         "cliffs_delta": float(cliffs_delta),
     }
 
-### prediction ###
-
-def _normal_int(mu: float, sigma: float) -> int:
-    """
-    Sample ~ N(mu, sigma), rounded to int, no clamping.
-    """
-    return int(round(random.gauss(mu, sigma)))
-
-### pseudo ###
-
-def build_pseudo_df(candidates: list[tuple], isize: int = 5) -> pd.DataFrame:
-    """
-    Build a DataFrame from candidate deletion specs.
-
-    Input order (reference-based, 17):
-      (Segment, Start, End, NGS_read_count,
-       AN, Time, Localization, Resolution, Cells, MOI, Host,
-       Strain,
-       dataset_name, system_type, library_layout,
-       library_selection, library_source, subtype)
-
-    Input order (sequence-provided, 18):
-      same as above + (full_seq_override,)
-    """
-    records = []
-    for cand in candidates:
-        if len(cand) == 17:
-            (seg, start, end, ngs_read_count,
-             AN, Time, Localization, Resolution, Cells, MOI, Host,
-             strain,
-             dataset_name, system_type, library_layout,
-             library_selection, library_source, subtype) = cand
-
-            seq = get_sequence(strain, seg)
-
-        elif len(cand) == 18:
-            (seg, start, end, ngs_read_count,
-             AN, Time, Localization, Resolution, Cells, MOI, Host,
-             strain,
-             dataset_name, system_type, library_layout,
-             library_selection, library_source, subtype,
-             seq) = cand
-        else:
-            raise ValueError(
-                "Each candidate must be a 17-tuple (reference-based) or "
-                "18-tuple (sequence-provided with full_seq_override)."
-            )
-
-        seq_len = len(seq)
-
-        # ---- bounds + sanity checks ----
-        if not isinstance(start, int) or not isinstance(end, int):
-            raise TypeError(
-                f"start and end must be integers, got start={type(start)}, end={type(end)}."
-            )
-        if start < 1:
-            raise ValueError(f"start must be >= 1, got {start}.")
-        if end < 1:
-            raise ValueError(f"end must be >= 1, got {end}.")
-        if start >= end:
-            raise ValueError(f"start must be < end, got start={start}, end={end}.")
-        if end > seq_len:
-            raise ValueError(f"end must be <= sequence length ({seq_len}), got {end}.")
-
-        start_idx = start - 1
-        stop_idx = end
-
-        left = seq[:start_idx]
-        deleted = seq[start_idx:stop_idx]
-        right = seq[stop_idx:]
-
-        around = left[-isize * 2:] + right[:isize * 2]
-
-        key = f"{seg}_{start}_{end}"
-
-        records.append({
-            "Segment": seg,
-            "Start": start,
-            "End": end,
-            "NGS_read_count": ngs_read_count,
-
-            "AN": AN,
-            "Time": Time,
-            "Localization": Localization,
-            "Resolution": Resolution,
-            "Cells": Cells,
-            "MOI": MOI,
-            "Host": Host,
-
-            "key": key,
-            "Strain": strain,
-
-            "isize": isize,
-            "full_seq": seq,
-            "deleted_sequence": deleted,
-            "seq_around_deletion_junction": around,
-
-            "dataset_name": dataset_name,
-            "system_type": system_type,
-            "library_layout": library_layout,
-            "library_selection": library_selection,
-            "library_source": library_source,
-            "subtype": subtype,
-        })
-
-    cols = [
-        "Segment", "Start", "End", "NGS_read_count",
-        "AN", "Time", "Localization", "Resolution", "Cells", "MOI", "Host",
-        "key", "Strain",
-        "isize", "full_seq", "deleted_sequence", "seq_around_deletion_junction",
-        "dataset_name", "system_type", "library_layout",
-        "library_selection", "library_source", "subtype"
-    ]
-
-    df = pd.DataFrame.from_records(records, columns=cols)
-
-    df = df.astype({
-        "Segment": "string",
-        "Start": "int64",
-        "End": "int64",
-        "NGS_read_count": "int64",
-
-        "AN": "string",
-        "Time": "string",
-        "Localization": "string",
-        "Resolution": "string",
-        "Cells": "string",
-        "MOI": "string",
-        "Host": "string",
-
-        "key": "string",
-        "Strain": "string",
-
-        "isize": "int64",
-        "full_seq": "string",
-        "deleted_sequence": "string",
-        "seq_around_deletion_junction": "string",
-
-        "dataset_name": "string",
-        "system_type": "string",
-        "library_layout": "string",
-        "library_selection": "string",
-        "library_source": "string",
-        "subtype": "string",
-    })
-
-    return df
-
 ###############
 ### visuals ###
 ###############
+
+### descriptor ###
+
+def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str, intersects: str):
+    '''
+
+    '''
+    parts = []
+
+    if data != 'all':
+        parts.append(data)
+
+    if strain != 'all':
+        parts.append(strain)
+
+    if segment != 'all':
+        parts.append(segment)
+
+    if folder != 'all':
+        if len(parts) == 0:
+            base = f'all {folder} candidates'
+        else:
+            base = f'{folder} candidates from ' + '-'.join(parts)
+    else:
+        if len(parts) == 0:
+            base = 'all candidates'
+        else:
+            base = 'candidates from ' + '-'.join(parts)
+
+    intersects_mod = intersects.replace('_', ' ')
+
+    if intersects_mod.endswith('metadata'):
+        intersects_mod = intersects_mod[:-(len('metadata'))].rstrip()
+        descriptor = '\n' + base + f' with {intersects_mod} metadata-intersects'
+    else:
+        descriptor = '\n' + base + f' with {intersects_mod} intersects'
+
+    return descriptor
 
 ### color ###
 
@@ -3458,8 +3879,8 @@ def add_site_motifs(df: pd.DataFrame, motif_length: int):
 
     for idx, row in df.iterrows():
         seq = row['full_seq']
-        start = row['Start']
-        end = row['End']
+        start = row['start']
+        end = row['end']
 
         start0 = start
         end0 = end - 1
@@ -3582,8 +4003,8 @@ def insert_pseudo_motif(
 
     def get_pos(row):
         seq = row['full_seq']
-        start0 = row['Start']
-        end0 = row['End'] - 1
+        start0 = row['start']
+        end0 = row['end'] - 1
 
         if custom_coords:
             s = int(custom_coords.group(1))
@@ -3632,5 +4053,3 @@ def insert_pseudo_motif(
         df_mod.at[idx, 'full_seq'] = new_seq
 
     return df_mod, skipped_count
-
-
