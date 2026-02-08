@@ -29,7 +29,7 @@ from utils import get_dataset_names
 from utils import load_all_preprocessed
 from utils import manage_separate_specifiers, clean_data_string
 from utils import rename_feature, split_by_threshold, add_feature_quantile_rank, get_feature_modification_name
-from utils import add_ikey, add_metadata_ikey, add_intersect_ngs_features
+from utils import add_ikey, add_metadata_ikey, add_intersect_ngs_features, remove_by_ngs_cutoff
 
 from utils import make_candidate_descriptor, pick_colors
 from utils import generate_motifs, add_site_motifs, add_lin_reg_rows, compute_full_seq_motif_freq_df
@@ -184,13 +184,56 @@ def run_ngs_multi_density_analysis(dfs: list, folder: str, data: str, strain: st
 
     create_multi_density_plot(f'{split_feature}-wise NGS read count distribution via KDE - density plot', dfs, df_names, x_feature_name, x_axis_name, 'ngs_multi', "visuals", folder, 'density', data, strain, segment, intersects)
 
-# TODO
-def run_intersect_analysis(dfnames: list, data: str, strain: str, segment: str, intersects: str):
+def run_intersect_analysis(dfs: list, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
 
     '''
-    dfs1 = load_all_preprocessed(dfnames, 'unpooled', 'base')
-    dfs2 = load_all_preprocessed(dfnames, 'pooled', 'base')
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+
+    feature_name = 'NGS_read_count'
+
+    new_dfs = []
+
+    for df in dfs:
+        cutoff = None
+        m = re.search(r'_(\d+)$', intersects)
+        if m:
+            cutoff = int(m.group(1))
+            df = remove_by_ngs_cutoff(df, feature_name, cutoff)
+        new_dfs.append(df)
+
+    dfs = new_dfs
+
+    new_dfs = []
+    for df in dfs:
+        if 'metadata' in intersects:
+            df = add_metadata_ikey(df)
+        else:
+            df = add_ikey(df)
+        new_dfs.append(df)
+
+    dfs = new_dfs
+    df = pd.concat(dfs, ignore_index=True)
+    
+    if (data != 'all') and (strain != 'all') and (segment != 'all'):
+        print('use at leats one non-all specifier')
+        return
+    elif segment == 'all':
+        y_feature_name = 'segment'
+    elif strain == 'all':
+        y_feature_name = 'strain'
+    else:
+        y_feature_name = 'subtype'
+
+    create_intersect_bar_plot(df, y_feature_name, 'intersects', folder, 'bar', data, strain, segment, intersects)
+
+# outdated
+def run_old_intersect_analysis(dfnames: list, data: str, strain: str, segment: str, intersects: str):
+    '''
+
+    '''
+    dfs1 = load_all_preprocessed(dfnames, 'unpooled', 'primary')
+    dfs2 = load_all_preprocessed(dfnames, 'pooled', 'primary')
 
     dfs1 = manage_separate_specifiers(dfs1, data, strain, segment)
     dfs1 = add_separate_ngs_features(dfs1, True)
@@ -219,10 +262,10 @@ def run_intersect_analysis(dfnames: list, data: str, strain: str, segment: str, 
         mod_dfs1.append(df1)
         mod_dfs2.append(df2)
 
-    create_intersect_bar_plot(mod_dfs1, mod_dfs2, dfnames, 'dataset', 'dataset', 'intersects', 'bar', data, strain, segment, intersects)
+    create_old_intersect_bar_plot(mod_dfs1, mod_dfs2, dfnames, 'dataset', 'dataset', 'intersects', 'bar', data, strain, segment, intersects)
 
-# TODO
-def run_intersect_analysis_by_strain(dfnames: list, data: str, strain: str, segment: str, intersects: str): 
+# outdated
+def run_old_intersect_analysis_by_strain(dfnames: list, data: str, strain: str, segment: str, intersects: str): 
     '''
 
     '''
@@ -270,7 +313,7 @@ def run_intersect_analysis_by_strain(dfnames: list, data: str, strain: str, segm
         mod_dfs2.append(df2)
         strain_names.append('all')
 
-    create_intersect_bar_plot(mod_dfs1, mod_dfs2, strain_names, 'strain', 'strain', 'intersects', 'bar', data, strain, segment, intersects)
+    create_old_intersect_bar_plot(mod_dfs1, mod_dfs2, strain_names, 'strain', 'strain', 'intersects', 'bar', data, strain, segment, intersects)
 
 ### bar, violin, scatter ###
 
@@ -1961,11 +2004,11 @@ def create_feature_scatter_plot(
             mse = float(np.nanmean(err ** 2))
 
             # Huber
-            delta = huber_delta
-            ae = np.abs(err)
-            quad = np.minimum(ae, delta)
-            lin  = ae - quad
-            hub = float(np.nanmean(0.5 * quad ** 2 + delta * lin))
+            # delta = huber_delta
+            # ae = np.abs(err)
+            # quad = np.minimum(ae, delta)
+            # lin  = ae - quad
+            # hub = float(np.nanmean(0.5 * quad ** 2 + delta * lin))
 
         # R² of predictions vs truth
         if len(y_true) > 1 and np.nanstd(y_true) > 0:
@@ -1992,10 +2035,10 @@ def create_feature_scatter_plot(
         else:
             line += ', MSE=nan'
 
-        if hub is not None and np.isfinite(hub):
-            line += f', Huber={float(hub):.{DECIMALS}f}'
-        else:
-            line += ', Huber=nan'
+        # if hub is not None and np.isfinite(hub):
+        #     line += f', Huber={float(hub):.{DECIMALS}f}'
+        # else:
+        #     line += ', Huber=nan'
 
         if r2_pred is not None and np.isfinite(r2_pred):
             line += f', R²={float(r2_pred):.{DECIMALS}f}'
@@ -2500,12 +2543,12 @@ def create_feature_residual_plot(
             mae = float(np.nanmean(np.abs(err)))
             mse = float(np.nanmean(err ** 2))
 
-            # Huber
-            delta = HUBER_DELTA
-            ae = np.abs(err)
-            quad = np.minimum(ae, delta)
-            lin  = ae - quad
-            hub = float(np.nanmean(0.5 * quad ** 2 + delta * lin))
+            # # Huber
+            # delta = HUBER_DELTA
+            # ae = np.abs(err)
+            # quad = np.minimum(ae, delta)
+            # lin  = ae - quad
+            # hub = float(np.nanmean(0.5 * quad ** 2 + delta * lin))
 
         # R² (only if meaningful)
         if len(y_true) > 1 and np.nanstd(y_true) > 0:
@@ -2532,10 +2575,10 @@ def create_feature_residual_plot(
         else:
             line += 'MSE=nan'
 
-        if hub is not None and np.isfinite(hub):
-            line += f', Huber={float(hub):.{DECIMALS}f}'
-        else:
-            line += ', Huber=nan'
+        # if hub is not None and np.isfinite(hub):
+        #     line += f', Huber={float(hub):.{DECIMALS}f}'
+        # else:
+        #     line += ', Huber=nan'
 
         if r2 is not None and np.isfinite(r2):
             line += f', R²={float(r2):.{DECIMALS}f}'
@@ -2570,6 +2613,169 @@ def create_feature_residual_plot(
     plt.close()
 
 def create_intersect_bar_plot(
+    df: pd.DataFrame,
+    y_feature_name: str,
+    fname: str,
+    folder: str,
+    subfolder: str,
+    data: str,
+    strain: str,
+    segment: str,
+    intersects: str,
+):
+    """
+    One input df (must contain: 'ikey', 'dataset_name', y_feature_name).
+
+    - "global" view: use df as-is
+      -> within each y_feature group, compute % rows whose ikey is non-unique (duplicated keep=False)
+
+    - "dataset" view: computationally derive a second df by collapsing within (dataset_name, ikey)
+      -> df_dataset = one row per (dataset_name, ikey)
+      -> within each y_feature group, compute % rows whose ikey is non-unique across datasets
+
+    Plot side-by-side horizontal bars in the desired order (based on y_feature_name).
+    """
+
+    # ---- checks ----
+    required = {"ikey", "dataset_name", y_feature_name}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+    # ---- normalize feature column ----
+    df_global = df.copy()
+    df_global[y_feature_name] = df_global[y_feature_name].astype(object)
+    df_global[y_feature_name] = df_global[y_feature_name].where(
+        df_global[y_feature_name].notna(), "NA"
+    )
+
+    # ---- derive dataset-collapsed df (one row per dataset_name + ikey) ----
+    # Grouping idea: collapse within (dataset_name, ikey) and keep the first row as representative
+    df_dataset = (
+        df_global.sort_values(["dataset_name", "ikey"])
+        .groupby(["dataset_name", "ikey"], as_index=False)
+        .first()
+    )
+
+    # ---- helpers ----
+    def pct_nonunique_within_group(g: pd.DataFrame) -> float:
+        n = len(g)
+        if n == 0:
+            return 0.0
+        dup_mask = g.duplicated(subset=["ikey"], keep=False)
+        return 100.0 * float(dup_mask.sum()) / float(n)
+
+    def compute_group_stats(dfx: pd.DataFrame) -> dict:
+        # group -> (pct_nonunique, n_rows)
+        stats = {}
+        if dfx is None or len(dfx) == 0:
+            return stats
+        for group_name, g in dfx.groupby(y_feature_name, dropna=False):
+            stats[group_name] = (pct_nonunique_within_group(g), int(len(g)))
+        return stats
+
+    # ---- compute stats ----
+    stats_g = compute_group_stats(df_global)
+    stats_d = compute_group_stats(df_dataset)
+
+    present = list(set(stats_g.keys()) | set(stats_d.keys()))
+
+    rev_seg = SEGMENTS[::-1]
+    rev_str = STRAINS[::-1]
+
+    # ---- ordering scheme (y_feature_name drives ordering) ----
+    if all(n in rev_seg for n in present):
+        ordered = [s for s in rev_seg if s in present]
+        remaining = sorted([s for s in present if s not in ordered])
+        desired = ordered + remaining
+    elif all(n in rev_str for n in present):
+        ordered = [s for s in rev_str if s in present]
+        remaining = sorted([s for s in present if s not in ordered])
+        desired = ordered + remaining
+    else:
+        desired = sorted(present)
+
+    # aligned vectors
+    pct_g, pct_d, n_g, n_d = [], [], [], []
+    for name in desired:
+        pg, ng = stats_g.get(name, (0.0, 0))
+        pd_, nd_ = stats_d.get(name, (0.0, 0))
+        pct_g.append(pg)
+        pct_d.append(pd_)
+        n_g.append(ng)
+        n_d.append(nd_)
+
+    # ---- plot ----
+    plt.style.use("seaborn-darkgrid")
+    num_groups = len(desired)
+    y_positions = np.arange(num_groups)
+
+    bar_height = 0.35
+    offset = bar_height / 2.0
+
+    fig, ax = plt.subplots(figsize=(12, max(6, num_groups * 0.4)))
+
+    color_global = COLORS[0]
+    color_dataset = COLORS[8]
+
+    ax.barh(
+        y_positions - offset,
+        pct_g,
+        height=bar_height,
+        label="global",
+        edgecolor="white",
+        linewidth=0.5,
+        color=color_global,
+    )
+    ax.barh(
+        y_positions + offset,
+        pct_d,
+        height=bar_height,
+        label="dataset-wise",
+        edgecolor="white",
+        linewidth=0.5,
+        color=color_dataset,
+    )
+
+    y_labels = [
+        f"{name} (n_g={ng}, n_d={nd})"
+        for name, ng, nd in zip(desired, n_g, n_d)
+    ]
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(y_labels)
+
+    ax.set_xlabel("intersects within candidates (%)")
+    ax.set_ylabel(f"{y_feature_name}s")
+
+    N_g = int(len(df_global))
+    N_d = int(len(df_dataset))
+
+    title = f"comparison of intersects per {y_feature_name}"
+    title += make_candidate_descriptor("all", data, strain, segment, intersects, True)
+    title += f" (n_glo={N_g}, n_dat={N_d})"
+    ax.set_title(title)
+
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        borderaxespad=0.0,
+        frameon=True,
+        title="type",
+    )
+
+    plt.tight_layout()
+
+    clean_data = clean_data_string(data)
+    save_path = os.path.join(RESULTSPATH, folder, subfolder)
+    save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
+    os.makedirs(save_path, exist_ok=True)
+
+    outname = fname + ".png"
+    plt.savefig(os.path.join(save_path, outname), dpi=300, bbox_inches="tight")
+    plt.close()
+
+# outdated
+def create_old_intersect_bar_plot(
     dfs1: list,
     dfs2: list,
     dfnames: list,
@@ -2714,16 +2920,16 @@ if __name__ == "__main__":
     
     ### DATASETS MULTI ###
 
-    # folder = 'unpooled'
-    # subfolder = 'primary'
+    folder = 'unpooled'
+    subfolder = 'primary'
 
-    # data = 'IAV'
-    # strain = 'PR8'
-    # segment = 'all'
-    # intersects = 'median_global'
+    data = 'IAV'
+    strain = 'PR8'
+    segment = 'all'
+    intersects = 'median_global_5'
 
-    # dfnames = get_dataset_names(DATASET_CUTOFF, data)
-    # dfs = load_all_preprocessed(dfnames, folder, subfolder)
+    dfnames = get_dataset_names(DATASET_CUTOFF, data)
+    dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
     ### PREDICTION ###
 
@@ -2753,10 +2959,10 @@ if __name__ == "__main__":
 
     # run_ngs_single_density_analysis(dfs, folder, data, strain, segment, intersects)
     # run_ngs_multi_density_analysis(dfs, folder, data, strain, segment, intersects)
-    # run_intersect_analysis(dfnames, data, strain, segment, intersects)
-    # run_intersect_analysis_by_strain(dfnames, data, strain, segment, intersects)
 
-    run_delvg_pri_features_analysis(dfs, selector, TOP_N, folder, data, strain, segment, intersects)
+    run_intersect_analysis(dfs, folder,  data, strain, segment, intersects)
+
+    # run_delvg_pri_features_analysis(dfs, selector, TOP_N, folder, data, strain, segment, intersects)
     # run_delvg_sec_features_analysis(dfs, selector, folder, data, strain, segment, intersects)
     # run_delvg_hybrid_features_analysis(dfs, selector, folder, data, strain, segment, intersects)
     # run_length_mfe_analysis(dfs, selector, folder, data, strain, segment, intersects)

@@ -28,16 +28,15 @@ from sklearn.linear_model import LinearRegression
 
 ### STATIC VALUES ###
 # load config and assign values to global variables
-# DATAPATH = "/home/erikl/ubudocuments/ba_dip_hunger/data"
-DATAPATH = "/home/eriklinushunger/ba_dip_hunger/data"
-# RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
-RESULTSPATH = "/home/eriklinushunger/ba_dip_hunger/results"
+DATAPATH = "/home/erikl/ubudocuments/ba_dip_hunger/data"
+# DATAPATH = "/home/eriklinushunger/ba_dip_hunger/data"
+RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
+# RESULTSPATH = "/home/eriklinushunger/ba_dip_hunger/results"
 
 # segments, nucleotides, and strains
 CMAP = "Accent"
 CUTOFF = 15
 DATASET_CUTOFF = 0
-NGS_CUTOFF = 0
 N_SAMPLES = 35000
 
 SEED = 42
@@ -2047,7 +2046,6 @@ def split_by_number(df: pd.DataFrame, split_number: int) -> Tuple[pd.DataFrame, 
     """
 
     """
-
     if split_number < 0:
         raise ValueError(f"`split_number` must be non-negative; got {split_number}.")
     if split_number > len(df):
@@ -2071,6 +2069,14 @@ def split_by_number(df: pd.DataFrame, split_number: int) -> Tuple[pd.DataFrame, 
 
     return sampled_df, remaining_df
 
+def remove_by_ngs_cutoff(df: pd.DataFrame, feature_name: str, cutoff: int):
+    """
+
+    """
+    df = df[df[feature_name] >= cutoff]
+    return df
+
+# better idea?
 def add_feature_quantile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int=RANK_THRESHOLD):
     """
 
@@ -2108,12 +2114,18 @@ def add_norm_feature(df: pd.DataFrame, feature_name: str, new_name: str, norm_ty
         fmin, fmax = series.min(), series.max()
         df[new_name] = (series - fmin) / (fmax - fmin) if fmax != fmin else 0.0
 
+    elif norm_type == "robust-min-max":
+        q1 = series.quantile(0.20)
+        q3 = series.quantile(0.80)
+        denom = q3 - q1
+        df[new_name] = ((series - q1) / denom).clip(0, 1) if denom != 0 else 0.0
+
     elif norm_type == "z-score":
         mean, std = series.mean(), series.std()
         df[new_name] = (series - mean) / std if std != 0 else 0.0
 
     elif norm_type == "robust":
-        median, q1, q3 = series.median(), series.quantile(0.25), series.quantile(0.75)
+        median, q1, q3 = series.median(), series.quantile(0.20), series.quantile(0.80)
         iqr = q3 - q1
         df[new_name] = (series - median) / iqr if iqr != 0 else 0.0
 
@@ -2288,6 +2300,19 @@ def add_intersect_ngs_features(
         - if return_norm_params: return (df, norm_params)
     '''
     feature_name = 'NGS_read_count'
+
+    new_dfs = []
+
+    for df in dfs:
+        cutoff = None
+        m = re.search(r'_(\d+)$', intersects)
+        if m:
+            cutoff = int(m.group(1))
+            intersects = intersects[:m.start()]
+            df = remove_by_ngs_cutoff(df, feature_name, cutoff)
+        new_dfs.append(df)
+
+    dfs = new_dfs
 
     if 'dataset' in intersects:
         updated_dfs = []
@@ -3658,11 +3683,20 @@ def mannwhitneyu_for_feature(
 
 ### descriptor ###
 
-def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str, intersects: str):
+def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str, intersects: str, cut_intersects: bool=False):
     '''
 
     '''
     parts = []
+
+    intersects_mod = intersects.replace('_', ' ')
+
+    # extract trailing number (if present)
+    m = re.search(r'\s(\d+)$', intersects_mod)
+    cutoff = None
+    if m:
+        cutoff = m.group(1)
+        intersects_mod = intersects_mod[:m.start()].rstrip()
 
     if data != 'all':
         parts.append(data)
@@ -3675,22 +3709,28 @@ def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str,
 
     if folder != 'all':
         if len(parts) == 0:
-            base = f'all {folder} candidates'
+            base = f'all candidates (cutoff≥{cutoff})'
         else:
-            base = f'{folder} candidates from ' + '-'.join(parts)
+            base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
     else:
         if len(parts) == 0:
-            base = 'all candidates'
+            base = f'all candidates (cutoff≥{cutoff})'
         else:
-            base = 'candidates from ' + '-'.join(parts)
+            base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
 
-    intersects_mod = intersects.replace('_', ' ')
+    suffix = f"{intersects_mod}-wise" if "dataset" in intersects_mod else intersects_mod
 
     if intersects_mod.endswith('metadata'):
         intersects_mod = intersects_mod[:-(len('metadata'))].rstrip()
-        descriptor = '\n' + base + f' with {intersects_mod} metadata-intersects'
+        if cut_intersects:
+            descriptor = '\n' + base + f' with metadata-intersects'
+        else:
+            descriptor = '\n' + base + f' with {suffix} metadata-intersects'
     else:
-        descriptor = '\n' + base + f' with {intersects_mod} intersects'
+        if cut_intersects:
+            descriptor = '\n' + base + f' with intersects'
+        else:
+            descriptor = '\n' + base + f' with {suffix} intersects'
 
     return descriptor
 

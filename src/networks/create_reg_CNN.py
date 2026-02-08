@@ -6,9 +6,9 @@ import pandas as pd
 
 sys.path.insert(0, "..")
 
-from analysis.visuals import create_feature_residual_plot, create_feature_scatter_plot
+from analysis.visuals import create_feature_residual_plot, create_feature_scatter_plot, create_multi_density_plot
 
-from utils import reduce_rows, get_feature_modification_name
+from utils import reduce_rows, get_feature_modification_name, make_candidate_descriptor
 from utils import add_ikey, add_metadata_ikey, get_dataset_names, load_all_preprocessed, add_intersect_ngs_features, manage_separate_specifiers
 
 from utils import RESULTSPATH, DATASET_CUTOFF, SEED, TOP_N, DATASET_STRAIN_DICT
@@ -36,7 +36,7 @@ tf.random.set_seed(SEED)
 ### settings ###
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
 DATAPATH = os.path.join(RESULTSPATH, "preprocess")
-RESULTSPATH = os.path.join(RESULTSPATH, "networks")
+RESULTSPATH = os.path.join(RESULTSPATH, "reg_network")
 
 VERSION = "0"
 KMER_SIZE = 3
@@ -65,12 +65,12 @@ MAX_NUMBER_TEST  = 100
 selector = 'dataset_name'
 
 folder = 'unpooled'
-subfolder = 'secondary'
+subfolder = 'primary'
 
 data = 'IAV'
 strain = 'PR8'
 segment = 'PB1'
-intersects = 'median_global'
+intersects = 'median_global_5'
 motif_length = 3
 
 dfnames = get_dataset_names(DATASET_CUTOFF, data)
@@ -93,7 +93,7 @@ categorical_cols = []
 # technical metadata (NOT recommended)
 # categorical_cols += ['library_layout', 'library_selection', 'library_source']
 
-# bilogical metadata (recommended)
+# biological metadata (recommended)
 categorical_cols += ['system_type', 'host']
 # only available for unpooled data
 # categorical_cols += ['cell_system', 'localization', 'resolution']
@@ -112,6 +112,127 @@ numerical_cols = []
 numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
 # second group
 # numerical_cols += ["start", "end", "full_seq_length"]
+
+### numerical features ###
+numerical_cols = []
+
+# length information (choose one group, because of redundant information)
+numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
+# second group
+# numerical_cols += ["start", "end", "full_seq_length"]
+
+### primary ###
+
+# repeats
+numerical_cols += [
+    "direct_repeat_length",
+]
+
+# nucleotide + dinucleotide composition
+numerical_cols += [
+    "GC_content",
+    "AU_content",
+    "UpA_content",
+    "CpG_content",
+    "GC_skew",
+]
+
+# entropy / complexity
+numerical_cols += [
+    "sequence_entropy",
+    "kmer_richness",
+]
+
+# homopolymers
+numerical_cols += [
+    "poly_U_max_run",
+    "poly_U_tracts",
+    "poly_A_max_run",
+    "poly_A_tracts",
+]
+
+# motif-like patterns
+numerical_cols += [
+    "palindrome_density",
+]
+
+### secondary ###
+
+# energy
+numerical_cols += [
+    "MFE",
+]
+
+# pairing (global)
+numerical_cols += [
+    "bp_count",
+    "bp_density",
+    "unpaired_count",
+    "unpaired_density",
+    "external_unpaired_density",
+]
+
+# stems
+numerical_cols += [
+    "stem_count",
+    "stem_len_max",
+    "stem_len_mean",
+    "stem_len_min",
+]
+
+# hairpins
+numerical_cols += [
+    "hairpin_count",
+    "hairpin_size_mean",
+    "hairpin_size_min",
+    "hairpin_size_max",
+]
+
+# pair span
+numerical_cols += [
+    "pair_span_mean",
+    "pair_span_min",
+    "pair_span_max",
+]
+
+# free ends
+numerical_cols += [
+    "free_5prime_len",
+    "free_3prime_len",
+]
+
+### hybrid ###
+
+# GC by context
+numerical_cols += [
+    "GC_overall",
+    "GC_paired",
+    "GC_unpaired",
+]
+
+# pair-type counts
+numerical_cols += [
+    "pair_GC_count",
+    "pair_AU_count",
+    "pair_GU_count",
+    "pair_noncanon_count",
+]
+
+# pair-type contents
+numerical_cols += [
+    "pair_GC_content",
+    "pair_AU_content",
+    "pair_GU_content",
+    "pair_noncanon_content",
+]
+
+# local contexts (stem ends / hairpin closing)
+numerical_cols += [
+    "stem_end_GC_content",
+    "stem_end_AU_content",
+    "hairpin_close_GC_content",
+    "hairpin_close_AU_content",
+]
 
 ### extra features ###
 extra_cols = [
@@ -287,9 +408,9 @@ df_test["encoded_seq"] = df_test["kmer_seq"].apply(encode_seq)
 
 maxlen = df_fit["encoded_seq"].apply(len).max() if len(df_fit) > 0 else 1
 
-X_seq_fit  = tf.keras.preprocessing.sequence.pad_sequences(df_fit["encoded_seq"],  maxlen=maxlen).astype(np.int32)
-X_seq_val  = tf.keras.preprocessing.sequence.pad_sequences(df_val["encoded_seq"],  maxlen=maxlen).astype(np.int32)
-X_seq_test = tf.keras.preprocessing.sequence.pad_sequences(df_test["encoded_seq"], maxlen=maxlen).astype(np.int32)
+X_seq_fit  = tf.keras.preprocessing.sequence.pad_sequences(df_fit["encoded_seq"],  maxlen=maxlen, padding="post", truncating="post").astype(np.int32)
+X_seq_val  = tf.keras.preprocessing.sequence.pad_sequences(df_val["encoded_seq"],  maxlen=maxlen, padding="post", truncating="post").astype(np.int32)
+X_seq_test = tf.keras.preprocessing.sequence.pad_sequences(df_test["encoded_seq"], maxlen=maxlen, padding="post", truncating="post").astype(np.int32)
 
 ### secondary structure (OPTIONAL, no leak) ###
 if STRUCTURE:
@@ -381,18 +502,54 @@ EMB_DIM = 16
 CONV_FILTERS = 32
 DENSE_UNITS = 32
 
-seq_input = layers.Input(shape=(maxlen,))
-x = layers.Embedding(input_dim=len(token2idx) + 2, output_dim=EMB_DIM)(seq_input)
-x = layers.Conv1D(CONV_FILTERS, 5, activation='relu')(x)
+seq_input = layers.Input(shape=(maxlen,), dtype="int32")
+
+# (2) embedding: tell Keras that 0 is padding
+emb = layers.Embedding(
+    input_dim=len(token2idx) + 2,
+    output_dim=EMB_DIM,
+    mask_zero=True
+)(seq_input)
+
+# (3) conv: keep same length so we can mask padded positions correctly
+x = layers.Conv1D(
+    CONV_FILTERS,
+    5,
+    activation="relu",
+    padding="same"
+)(emb)
+
+# explicit mask from token ids: 1 for real tokens, 0 for padding
+mask = tf.cast(tf.not_equal(seq_input, 0), tf.float32)  # shape (B, L)
+mask = tf.expand_dims(mask, axis=-1)                    # shape (B, L, 1)
+
+# zero-out conv activations at padded positions
+x = layers.Multiply()([x, mask])
+
+# you can keep MaxPooling if you want, but apply it AFTER masking
 x = layers.MaxPooling1D(2)(x)
+
+# global pooling
 x = layers.GlobalMaxPooling1D()(x)
 
 other_input = layers.Input(shape=(X_other_fit.shape[1],))
 
 if STRUCTURE:
-    str_input = layers.Input(shape=(maxlen2,))
-    x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=EMB_DIM)(str_input)
-    x2 = layers.Conv1D(CONV_FILTERS, 5, activation='relu')(x2)
+    str_input = layers.Input(shape=(maxlen2,), dtype="int32")
+
+    emb2 = layers.Embedding(
+        input_dim=len(token2idx2) + 1,
+        output_dim=EMB_DIM,
+        mask_zero=True
+    )(str_input)
+
+    x2 = layers.Conv1D(CONV_FILTERS, 5, activation="relu", padding="same")(emb2)
+
+    mask2 = tf.cast(tf.not_equal(str_input, 0), tf.float32)
+    mask2 = tf.expand_dims(mask2, axis=-1)
+
+    x2 = layers.Multiply()([x2, mask2])
+
     x2 = layers.MaxPooling1D(2)(x2)
     x2 = layers.GlobalMaxPooling1D()(x2)
 
@@ -534,7 +691,7 @@ n_val = int(np.floor(0.1 * n_train))
 n_fit = n_train - n_val
 n_test = len(df_test)
 
-save_path_vis = os.path.join(RESULTSPATH, 'reg', 'visuals', data, strain, segment, intersects)
+save_path_vis = os.path.join(RESULTSPATH, folder, 'visuals', data, strain, segment, intersects)
 os.makedirs(save_path_vis, exist_ok=True)
 
 if BEST_MODEL:
@@ -556,7 +713,7 @@ hub_last_tr = float(history.history["huber"][-1])
 hub_last_va = float(history.history["val_huber"][-1])
 
 ### MSE curve (train, val) ###
-title_name = 'MSE lerarning curve (training, validation) - curve plot'
+title_name = 'reg. CNN: MSE lerarning curve (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
@@ -599,7 +756,7 @@ plt.close()
 print("✔ training MSE curve saved")
 
 ### MAE curve (train, val) ###
-title_name = 'MAE lerarning curve (training, validation) - curve plot'
+title_name = 'reg. CNN: MAE across epochs (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
@@ -642,7 +799,7 @@ plt.close()
 print("✔ training MAE curve saved")
 
 ### Huber curve (train, val) ###
-title_name = f'Huber (delta={HUBER_DELTA:g}) lerarning curve (training, validation) - curve plot'
+title_name = f'reg. CNN: Huber (delta={HUBER_DELTA:g}) across epochs (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
@@ -714,18 +871,18 @@ modification = get_feature_modification_name()
 
 ### R2 & residual (test)  ###
 create_feature_residual_plot(
-    plot_name="NGS read count - residual (testing) - scatter plot",
+    plot_name="reg. CNN: residual as a function of true NGS read count (testing) - scatter plot",
     df=df_test_val,
     x_feature_name="norm_log_NGS_read_count",
     x_axis_name=f"{modification} NGS count (reads)",
     y_pred_feature_name="y_val",
-    y_axis_name="residual (predicted - true)",
+    y_axis_name="residual (prediction - true value)",
     selector=selector,
     show_zero_line=True,
     reg_metrics=True,
     fname=f"{NAME_MOD}_residual",
-    path="networks",
-    folder="reg",
+    path="reg_network",
+    folder=folder,
     subfolder="visuals",
     data=data,
     strain=strain,
@@ -735,19 +892,21 @@ create_feature_residual_plot(
 
 ### scatter plot (test)  ###
 create_feature_scatter_plot(
-    plot_name="NGS read count - predictions (testing) - scatter plot",
+    plot_name="reg. CNN: prediction as a function of true NGS read count (testing) - scatter plot",
     df=df_test_val,
     x_feature_name="norm_log_NGS_read_count",
     x_axis_name=f"{modification} NGS count (reads)",
     y_feature_name="y_val",
-    y_axis_name=f"predicted {modification} NGS count (reads)",
+    y_axis_name=f"predicted value",
     selector=selector,
+    show_rolling_median=False,
+    rolling_window=50,
     show_identity_line=True,
     reg_metrics=True,
-    huber_delta=HUBER_DELTA,
+    huber_delta=0.0,
     fname=f"{NAME_MOD}_prediction",
-    path="networks",
-    folder="reg",
+    path="reg_network",
+    folder=folder,
     subfolder="visuals",
     data=data,
     strain=strain,
@@ -760,20 +919,23 @@ print("✔ prediction scatter plot saved")
 print(f"\n✔ R² residual plot saved")
 
 ### density (train, test) ###
-create_train_test_density_plot(
-    plot_name="NGS read count - KDE (training, testing) - curve plot",
-    df_train=df_train,
-    df_test=df_test,
+### density (train, test) ###
+create_multi_density_plot(
+    plot_name="NGS read count distribution via KDE (testing) - scatter plot",
+    df_list=[df_train, df_test],
+    df_names=["train", "test"],
     x_feature_name="norm_log_NGS_read_count",
     x_axis_name=f"{modification} NGS count (reads)",
     fname=f"{NAME_MOD}_density",
-    path="networks",
-    folder="reg",
+    path="reg_network",
+    folder=folder,
     subfolder="visuals",
     data=data,
     strain=strain,
     segment=segment,
     intersects=intersects,
+    show_js=False,
+    show_n_in_legend=False,
 )
 
 print("✔ train/test density plot saved")
@@ -930,15 +1092,15 @@ def importance_x_other_mse_increase(
 
 # plot permutation (test subset)
 plot_df = imp_perm.head(TOP_N).iloc[::-1]
-title_name = f'top {TOP_N} permutation importances (testing) - bar plot'
+title_name = f'reg. CNN: feature importance via permuation occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
-title_name += f'\nMAE={base_mae_perm:.{DECIMALS}f}, MSE={base_mse_perm:.{DECIMALS}f}, Huber={base_hub_perm:.{DECIMALS}f}, R²={base_r2_perm:.{DECIMALS}f}'
+title_name += f'\nMAE={base_mae_perm:.{DECIMALS}f}, MSE={base_mse_perm:.{DECIMALS}f}, R²={base_r2_perm:.{DECIMALS}f}'
 
 plt.figure(figsize=(10, 6))
 plt.barh(plot_df["feature"], plot_df["mse_increase"], color=COLORS[6], edgecolor="white", linewidth=1)
 plt.xlabel("MSE increase (when permuted)")
-plt.ylabel("feature")
+plt.ylabel(f"feature ({TOP_N})")
 plt.title(title_name)
 plt.tight_layout()
 plt.grid(True, axis="x")
@@ -951,15 +1113,15 @@ print("✔ permutation importance saved")
 
 # plot zero-occlusion (test subset)
 plot_df = imp_zero.head(TOP_N).iloc[::-1]
-title_name = f'top {TOP_N} occlusion importances (testing) - bar plot'
+title_name = f'reg. CNN: feature importance via zero occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
-title_name += f'\nMAE={base_mae_zero:.{DECIMALS}f}, MSE={base_mse_zero:.{DECIMALS}f}, Huber={base_hub_zero:.{DECIMALS}f}, R²={base_r2_zero:.{DECIMALS}f}'
+title_name += f'\nMAE={base_mae_zero:.{DECIMALS}f}, MSE={base_mse_zero:.{DECIMALS}f}, R²={base_r2_zero:.{DECIMALS}f}'
 
 plt.figure(figsize=(10, 6))
 plt.barh(plot_df["feature"], plot_df["mse_increase"], color=COLORS[6], edgecolor="white", linewidth=1)
 plt.xlabel("MSE increase (when set to 0)")
-plt.ylabel("feature")
+plt.ylabel(f"feature ({TOP_N})")
 plt.title(title_name)
 plt.tight_layout()
 plt.grid(True, axis="x")
@@ -1022,26 +1184,25 @@ def sequence_window_occlusion_mse(
 x_center = (seq_imp_df["start_tok"] + seq_imp_df["end_tok"]) / 2.0
 y_inc = seq_imp_df["mse_increase"].to_numpy()
 
-title_name = f'sequence window occlusion (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) importances (testing) - curve plot'
+title_name = f'reg. CNN: sequence importance (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) via window occlusion (testing) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
-title_name += f'\nMAE={base_mae_seq:.{DECIMALS}f}, MSE={base_mse_seq:.{DECIMALS}f}, Huber={base_hub_seq:.{DECIMALS}f}, R²={base_r2_seq:.{DECIMALS}f}'
+title_name += f'\nMAE={base_mae_seq:.{DECIMALS}f}, MSE={base_mse_seq:.{DECIMALS}f}, R²={base_r2_seq:.{DECIMALS}f}'
 
 df_eval_meta = df_test.iloc[idx_eval].copy()
 
 start_med_tok = np.nan
 end_med_tok = np.nan
 
-if ("Start" in df_eval_meta.columns) and ("End" in df_eval_meta.columns):
-    start_med_tok = float(np.nanmedian(df_eval_meta["Start"].astype(float).to_numpy())) // KMER_SIZE
-    end_med_tok   = float(np.nanmedian(df_eval_meta["End"].astype(float).to_numpy()))   // KMER_SIZE
-elif ("5_end_length" in df_eval_meta.columns) and ("deletion_length" in df_eval_meta.columns):
-    five = df_eval_meta["5_end_length"].astype(float).to_numpy()
-    dele = df_eval_meta["deletion_length"].astype(float).to_numpy()
-    start_nt = five + 1.0
-    end_nt   = five + dele
-    start_med_tok = float(np.nanmedian(start_nt)) // KMER_SIZE
-    end_med_tok   = float(np.nanmedian(end_nt))   // KMER_SIZE
+start_med_tok = float(np.nanmedian(df_eval_meta["start"].astype(float).to_numpy())) // KMER_SIZE
+if MARKED:
+    end_med_tok = float(np.nanmedian(df_eval_meta["end"].astype(float).to_numpy()))   // KMER_SIZE
+    start_label = f"start median ({int(start_med_tok)})"
+    end_label = f"end median ({int(end_med_tok)})"
+else:
+    end_med_tok = float(np.nanmedian(df_eval_meta["5_end_length"].astype(float).to_numpy() + df_eval_meta["3_end_length"].astype(float).to_numpy()))   // KMER_SIZE
+    start_label = f"deletion site median ({int(start_med_tok)})"
+    end_label = f"padding start median ({int(end_med_tok)})"
 
 plt.figure(figsize=(10, 6))
 plt.plot(x_center, y_inc, linewidth=2, color=COLORS[6], label="test")
@@ -1052,18 +1213,19 @@ if np.isfinite(start_med_tok):
         color="grey",
         linestyle="--",
         linewidth=1.5,
-        label=f"start median ({int(start_med_tok)})"
+        label=start_label,
     )
+
 if np.isfinite(end_med_tok):
     plt.axvline(
         end_med_tok,
         color="grey",
         linestyle="--",
         linewidth=1.5,
-        label=f"end median ({int(end_med_tok)})"
+        label=end_label
     )
 
-plt.xlabel("k-mer (k={KMER_SIZE}) position (window center)")
+plt.xlabel(f"k-mer (k={KMER_SIZE}) position (window center)")
 plt.ylabel("MSE increase (when window masked)")
 plt.title(title_name)
 plt.tight_layout()
@@ -1088,15 +1250,15 @@ top_windows = seq_imp_df.sort_values("mse_increase", ascending=False).head(TOP_N
 top_windows["window"] = top_windows.apply(lambda r: f'{int(r.start_tok)}-{int(r.end_tok)}', axis=1)
 top_windows = top_windows.sort_values("mse_increase", ascending=True)
 
-title_name = f'top {TOP_N} sequence window (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) importances (testing) - bar plot'
+title_name = f'reg. CNN: sequence importance (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) via window occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
-title_name += f'\nMAE={base_mae_seq:.{DECIMALS}f}, MSE={base_mse_seq:.{DECIMALS}f}, Huber={base_hub_seq:.{DECIMALS}f}, R²={base_r2_seq:.{DECIMALS}f}'
+title_name += f'\nMAE={base_mae_seq:.{DECIMALS}f}, MSE={base_mse_seq:.{DECIMALS}f}, R²={base_r2_seq:.{DECIMALS}f}'
 
 plt.figure(figsize=(10, 6))
 plt.barh(top_windows["window"], top_windows["mse_increase"], color=COLORS[6], edgecolor="white", linewidth=1)
 plt.xlabel("MSE increase (when window masked)")
-plt.ylabel("k-mer (k={KMER_SIZE}) window [start-end)")
+plt.ylabel(f"k-mer (k={KMER_SIZE}) window (top {TOP_N})")
 plt.title(title_name)
 plt.tight_layout()
 plt.grid(True, axis="x")
@@ -1161,14 +1323,14 @@ importance_df = (
 
 bar_color = COLORS[6]
 
-title_name = f'top {TOP_N} SHAP importances via RandomForest (testing) - bar plot'
+title_name = f'reg. CNN: SHAP feature importance via RandomForest (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={bg_n}, n_test={eval_n_shap})'
 
 plt.figure(figsize=(10, 6))
 plt.barh(importance_df["feature"], importance_df["importance"], color=bar_color, edgecolor='white', linewidth=1)
 plt.xlabel("mean |SHAP value|")
-plt.ylabel("feature")
+plt.ylabel(f"feature (top {TOP_N})")
 plt.title(title_name)
 plt.gca().invert_yaxis()
 plt.tight_layout()

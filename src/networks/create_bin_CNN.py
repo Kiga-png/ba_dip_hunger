@@ -68,12 +68,12 @@ MAX_NUMBER_TEST  = 100
 selector = 'dataset_name'
 
 folder = 'unpooled'
-subfolder = 'secondary'
+subfolder = 'primary'
 
 data = 'IAV'
 strain = 'PR8'
 segment = 'PB1'
-intersects = 'median_global'
+intersects = 'median_global_5'
 motif_length = 3
 
 dfnames = get_dataset_names(DATASET_CUTOFF, data)
@@ -96,7 +96,7 @@ categorical_cols = []
 # technical metadata (NOT recommended)
 # categorical_cols += ['library_layout', 'library_selection', 'library_source']
 
-# bilogical metadata (recommended)
+# biological metadata (recommended)
 categorical_cols += ['system_type', 'host']
 # only available for unpooled data
 # categorical_cols += ['cell_system', 'localization', 'resolution']
@@ -115,6 +115,119 @@ numerical_cols = []
 numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
 # second group
 # numerical_cols += ["start", "end", "full_seq_length"]
+
+### primary ###
+
+# repeats
+numerical_cols += [
+    "direct_repeat_length",
+]
+
+# nucleotide + dinucleotide composition
+numerical_cols += [
+    "GC_content",
+    "AU_content",
+    "UpA_content",
+    "CpG_content",
+    "GC_skew",
+]
+
+# entropy / complexity
+numerical_cols += [
+    "sequence_entropy",
+    "kmer_richness",
+]
+
+# homopolymers
+numerical_cols += [
+    "poly_U_max_run",
+    "poly_U_tracts",
+    "poly_A_max_run",
+    "poly_A_tracts",
+]
+
+# motif-like patterns
+numerical_cols += [
+    "palindrome_density",
+]
+
+### secondary ###
+
+# energy
+numerical_cols += [
+    "MFE",
+]
+
+# pairing (global)
+numerical_cols += [
+    "bp_count",
+    "bp_density",
+    "unpaired_count",
+    "unpaired_density",
+    "external_unpaired_density",
+]
+
+# stems
+numerical_cols += [
+    "stem_count",
+    "stem_len_max",
+    "stem_len_mean",
+    "stem_len_min",
+]
+
+# hairpins
+numerical_cols += [
+    "hairpin_count",
+    "hairpin_size_mean",
+    "hairpin_size_min",
+    "hairpin_size_max",
+]
+
+# pair span
+numerical_cols += [
+    "pair_span_mean",
+    "pair_span_min",
+    "pair_span_max",
+]
+
+# free ends
+numerical_cols += [
+    "free_5prime_len",
+    "free_3prime_len",
+]
+
+### hybrid ###
+
+# GC by context
+numerical_cols += [
+    "GC_overall",
+    "GC_paired",
+    "GC_unpaired",
+]
+
+# pair-type counts
+numerical_cols += [
+    "pair_GC_count",
+    "pair_AU_count",
+    "pair_GU_count",
+    "pair_noncanon_count",
+]
+
+# pair-type contents
+numerical_cols += [
+    "pair_GC_content",
+    "pair_AU_content",
+    "pair_GU_content",
+    "pair_noncanon_content",
+]
+
+# local contexts (stem ends / hairpin closing)
+numerical_cols += [
+    "stem_end_GC_content",
+    "stem_end_AU_content",
+    "hairpin_close_GC_content",
+    "hairpin_close_AU_content",
+]
 
 ### extra features ###
 extra_cols = [
@@ -308,9 +421,9 @@ df_test["encoded_seq"] = df_test["kmer_seq"].apply(encode_seq)
 
 maxlen = df_fit["encoded_seq"].apply(len).max() if len(df_fit) > 0 else 1
 
-X_seq_fit  = tf.keras.preprocessing.sequence.pad_sequences(df_fit["encoded_seq"],  maxlen=maxlen).astype(np.int32)
-X_seq_val  = tf.keras.preprocessing.sequence.pad_sequences(df_val["encoded_seq"],  maxlen=maxlen).astype(np.int32)
-X_seq_test = tf.keras.preprocessing.sequence.pad_sequences(df_test["encoded_seq"], maxlen=maxlen).astype(np.int32)
+X_seq_fit  = tf.keras.preprocessing.sequence.pad_sequences(df_fit["encoded_seq"],  maxlen=maxlen, padding="post", truncating="post").astype(np.int32)
+X_seq_val  = tf.keras.preprocessing.sequence.pad_sequences(df_val["encoded_seq"],  maxlen=maxlen, padding="post", truncating="post").astype(np.int32)
+X_seq_test = tf.keras.preprocessing.sequence.pad_sequences(df_test["encoded_seq"], maxlen=maxlen, padding="post", truncating="post").astype(np.int32)
 
 ### sec structure ###
 if STRUCTURE:
@@ -383,18 +496,54 @@ EMB_DIM = 16
 CONV_FILTERS = 32
 DENSE_UNITS = 32
 
-seq_input = layers.Input(shape=(maxlen,))
-x = layers.Embedding(input_dim=len(token2idx) + 2, output_dim=EMB_DIM)(seq_input)
-x = layers.Conv1D(CONV_FILTERS, 5, activation='relu')(x)
+seq_input = layers.Input(shape=(maxlen,), dtype="int32")
+
+# (2) embedding: tell Keras that 0 is padding
+emb = layers.Embedding(
+    input_dim=len(token2idx) + 2,
+    output_dim=EMB_DIM,
+    mask_zero=True
+)(seq_input)
+
+# (3) conv: keep same length so we can mask padded positions correctly
+x = layers.Conv1D(
+    CONV_FILTERS,
+    5,
+    activation="relu",
+    padding="same"
+)(emb)
+
+# explicit mask from token ids: 1 for real tokens, 0 for padding
+mask = tf.cast(tf.not_equal(seq_input, 0), tf.float32)  # shape (B, L)
+mask = tf.expand_dims(mask, axis=-1)                    # shape (B, L, 1)
+
+# zero-out conv activations at padded positions
+x = layers.Multiply()([x, mask])
+
+# you can keep MaxPooling if you want, but apply it AFTER masking
 x = layers.MaxPooling1D(2)(x)
+
+# global pooling
 x = layers.GlobalMaxPooling1D()(x)
 
 other_input = layers.Input(shape=(X_other_fit.shape[1],))
 
 if STRUCTURE:
-    str_input = layers.Input(shape=(maxlen2,))
-    x2 = layers.Embedding(input_dim=len(token2idx2) + 1, output_dim=EMB_DIM)(str_input)
-    x2 = layers.Conv1D(CONV_FILTERS, 5, activation='relu')(x2)
+    str_input = layers.Input(shape=(maxlen2,), dtype="int32")
+
+    emb2 = layers.Embedding(
+        input_dim=len(token2idx2) + 1,
+        output_dim=EMB_DIM,
+        mask_zero=True
+    )(str_input)
+
+    x2 = layers.Conv1D(CONV_FILTERS, 5, activation="relu", padding="same")(emb2)
+
+    mask2 = tf.cast(tf.not_equal(str_input, 0), tf.float32)
+    mask2 = tf.expand_dims(mask2, axis=-1)
+
+    x2 = layers.Multiply()([x2, mask2])
+
     x2 = layers.MaxPooling1D(2)(x2)
     x2 = layers.GlobalMaxPooling1D()(x2)
 
@@ -604,7 +753,7 @@ plt.style.use('seaborn-darkgrid')
 plt.rc('font', size=12)
 
 ### loss curve (train, val) ###
-title_name = 'loss lerarning curve (training, validation) - curve plot'
+title_name = 'bin. CNN: loss across epochs (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
@@ -634,7 +783,7 @@ plt.close()
 print("✔ training loss curve saved")
 
 ### accuracy curve (train, val) ###
-title_name = 'accuracy lerarning curve (training, validation) - curve plot'
+title_name = 'bin. CNN: accuracy across epochs (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
@@ -663,7 +812,7 @@ if "accuracy" in history.history and "val_accuracy" in history.history:
     print("✔ training accuracy curve saved")
 
 ### PR-AUC curve (train, val) ###
-title_name = 'PR-AUC lerarning curve (training, validation) - curve plot'
+title_name = 'bin. CNN: PR-AUC across epochs (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
 
@@ -766,7 +915,7 @@ def safe_f1(y_true, y_proba, threshold=0.5):
 
 ### ROC-AUC & PR-AUC & F1 (test) ###
 create_feature_pr_auc_plot(
-    plot_name="NGS read count - PR-AUC (testing) - curve plot",
+    plot_name="bin. CNN: PR-AUC (testing) - curve plot",
     df=df_test_proba,
     y_true_feature_name="y_true",
     y_pred_proba_feature_name="y_proba",
@@ -785,7 +934,7 @@ create_feature_pr_auc_plot(
 print(f"✔ test PR-AUC curve saved")
 
 create_feature_roc_auc_plot(
-    plot_name="NGS read count - ROC-AUC (testing) - curve plot",
+    plot_name="bin. CNN: ROC-AUC (testing) - curve plot",
     df=df_test_proba,
     y_true_feature_name="y_true",
     y_pred_proba_feature_name="y_proba",
@@ -805,7 +954,7 @@ print(f"✔ test ROC-AUC curve saved")
 
 ### density (train, test) ###
 create_multi_density_plot(
-    plot_name="NGS read count - predictions (testing) - scatter plot",
+    plot_name="NGS read count distribution via KDE (testing) - scatter plot",
     df_list=[df_train, df_test],
     df_names=["train", "test"],
     x_feature_name="norm_log_NGS_read_count",
@@ -818,7 +967,8 @@ create_multi_density_plot(
     strain=strain,
     segment=segment,
     intersects=intersects,
-    show_js=True,
+    show_js=False,
+    show_n_in_legend=False,
 )
 
 print("✔ train/test density plot saved")
@@ -951,7 +1101,7 @@ base_zero_s = "nan" if not np.isfinite(base_zero) else f"{base_zero:.{DECIMALS}f
 
 # plot permutation (test subset)
 plot_df = imp_perm.head(TOP_N).iloc[::-1]
-title_name = f'top {TOP_N} permutation importances (testing) - bar plot'
+title_name = f'bin. CNN: feature importance via permuation occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
 title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={D_THRESHOLD})'
@@ -959,7 +1109,7 @@ title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (th
 plt.figure(figsize=(10, 6))
 plt.barh(plot_df["feature"], plot_df["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
 plt.xlabel("PR-AUC drop (when permuted)")
-plt.ylabel("feature")
+plt.ylabel(f"feature ({TOP_N})")
 plt.title(title_name)
 plt.tight_layout()
 plt.grid(True, axis="x")
@@ -972,7 +1122,7 @@ print("✔ permutation importance saved")
 
 # plot zero-occlusion (test subset)
 plot_df = imp_zero.head(TOP_N).iloc[::-1]
-title_name = f'top {TOP_N} occlusion importances (testing) - bar plot'
+title_name = f'bin. CNN: feature importance via zero occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
 title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={D_THRESHOLD})'
@@ -980,7 +1130,7 @@ title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (th
 plt.figure(figsize=(10, 6))
 plt.barh(plot_df["feature"], plot_df["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
 plt.xlabel("PR-AUC drop (when set to 0)")
-plt.ylabel("feature")
+plt.ylabel(f"feature ({TOP_N})")
 plt.title(title_name)
 plt.tight_layout()
 plt.grid(True, axis="x")
@@ -1041,7 +1191,7 @@ base_seq_s = "nan" if not np.isfinite(base_seq) else f"{base_seq:.{DECIMALS}f}"
 x_center = (seq_imp_df["start_tok"] + seq_imp_df["end_tok"]) / 2.0
 y_drop = seq_imp_df["pr_auc_drop"].to_numpy()
 
-title_name = f'sequence window occlusion (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) importances (testing) - curve plot'
+title_name = f'bin. CNN: sequence importance (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) via window occlusion (testing) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
 title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={D_THRESHOLD})'
@@ -1051,16 +1201,15 @@ df_eval_meta = df_test.iloc[idx_eval].copy()
 start_med_tok = np.nan
 end_med_tok = np.nan
 
-if ("Start" in df_eval_meta.columns) and ("End" in df_eval_meta.columns):
-    start_med_tok = float(np.nanmedian(df_eval_meta["Start"].astype(float).to_numpy())) // KMER_SIZE
-    end_med_tok   = float(np.nanmedian(df_eval_meta["End"].astype(float).to_numpy()))   // KMER_SIZE
-elif ("5_end_length" in df_eval_meta.columns) and ("deletion_length" in df_eval_meta.columns):
-    five = df_eval_meta["5_end_length"].astype(float).to_numpy()
-    dele = df_eval_meta["deletion_length"].astype(float).to_numpy()
-    start_nt = five + 1.0
-    end_nt   = five + dele
-    start_med_tok = float(np.nanmedian(start_nt)) // KMER_SIZE
-    end_med_tok   = float(np.nanmedian(end_nt))   // KMER_SIZE
+start_med_tok = float(np.nanmedian(df_eval_meta["start"].astype(float).to_numpy())) // KMER_SIZE
+if MARKED:
+    end_med_tok = float(np.nanmedian(df_eval_meta["end"].astype(float).to_numpy()))   // KMER_SIZE
+    start_label = f"start median ({int(start_med_tok)})"
+    end_label = f"end median ({int(end_med_tok)})"
+else:
+    end_med_tok = float(np.nanmedian(df_eval_meta["5_end_length"].astype(float).to_numpy() + df_eval_meta["3_end_length"].astype(float).to_numpy()))   // KMER_SIZE
+    start_label = f"deletion site median ({int(start_med_tok)})"
+    end_label = f"padding start median ({int(end_med_tok)})"
 
 plt.figure(figsize=(10, 6))
 plt.plot(x_center, y_drop, linewidth=2, color=COLORS[6], label="test")
@@ -1071,15 +1220,16 @@ if np.isfinite(start_med_tok):
         color="grey",
         linestyle="--",
         linewidth=1.5,
-        label=f"start median ({int(start_med_tok)})"
+        label=start_label,
     )
+
 if np.isfinite(end_med_tok):
     plt.axvline(
         end_med_tok,
         color="grey",
         linestyle="--",
         linewidth=1.5,
-        label=f"end median ({int(end_med_tok)})"
+        label=end_label
     )
 
 plt.xlabel(f"k-mer (k={KMER_SIZE}) position (window center)")
@@ -1107,7 +1257,7 @@ top_windows = seq_imp_df.sort_values("pr_auc_drop", ascending=False).head(TOP_N)
 top_windows["window"] = top_windows.apply(lambda r: f'{int(r.start_tok)}-{int(r.end_tok)}', axis=1)
 top_windows = top_windows.sort_values("pr_auc_drop", ascending=True)
 
-title_name = f'top {TOP_N} sequence window (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) importances (testing) - bar plot'
+title_name = f'bin. CNN: sequence importance (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) via window occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
 title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={D_THRESHOLD})'
@@ -1115,7 +1265,7 @@ title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (th
 plt.figure(figsize=(10, 6))
 plt.barh(top_windows["window"], top_windows["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
 plt.xlabel("PR-AUC drop (when window masked)")
-plt.ylabel(f"k-mer (k={KMER_SIZE}) window [start-end)")
+plt.ylabel(f"k-mer (k={KMER_SIZE}) window (top {TOP_N})")
 plt.title(title_name)
 plt.tight_layout()
 plt.grid(True, axis="x")
@@ -1180,14 +1330,14 @@ importance_df = (
 
 bar_color = COLORS[6]
 
-title_name = f'top {TOP_N} SHAP importances via RandomForest - bar plot'
+title_name = f'bin. CNN: SHAP feature importance via RandomForest (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={bg_n}, n_test={eval_n_shap})'
 
 plt.figure(figsize=(10, 6))
 plt.barh(importance_df["feature"], importance_df["importance"], color=bar_color, edgecolor='white', linewidth=1)
 plt.xlabel("mean |SHAP value|")
-plt.ylabel("features")
+plt.ylabel(f"feature (top {TOP_N})")
 plt.title(title_name)
 plt.gca().invert_yaxis()
 plt.tight_layout()
