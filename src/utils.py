@@ -28,10 +28,10 @@ from sklearn.linear_model import LinearRegression
 
 ### STATIC VALUES ###
 # load config and assign values to global variables
-DATAPATH = "/home/erikl/ubudocuments/ba_dip_hunger/data"
-# DATAPATH = "/home/eriklinushunger/ba_dip_hunger/data"
-RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
-# RESULTSPATH = "/home/eriklinushunger/ba_dip_hunger/results"
+# DATAPATH = "/home/erikl/ubudocuments/ba_dip_hunger/data"
+DATAPATH = "/home/eriklinushunger/ba_dip_hunger/data"
+# RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
+RESULTSPATH = "/home/eriklinushunger/ba_dip_hunger/results"
 
 # segments, nucleotides, and strains
 CMAP = "Accent"
