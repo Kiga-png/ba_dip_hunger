@@ -31,14 +31,14 @@ from utils import manage_separate_specifiers, clean_data_string
 from utils import rename_feature, split_by_threshold, add_feature_quantile_rank, get_feature_modification_name
 from utils import add_ikey, add_metadata_ikey, add_intersect_ngs_features, remove_by_ngs_cutoff
 
-from utils import make_candidate_descriptor, pick_colors
+from utils import make_candidate_descriptor, make_pseudo_candidate_descriptor, make_legend_descriptor, pick_colors
 from utils import generate_motifs, add_site_motifs, add_lin_reg_rows, compute_full_seq_motif_freq_df
 from utils import compute_quantile_rank_count_df, compute_seq_feature_count_df, compute_feature_count_df, compute_feature_freq_df, subtract_freq_dfs
 from utils import compute_feature_count_heatmap_df, compute_feature_count_heatmap_sum_df, compute_feature_freq_heatmap_df
 
 from utils import p_to_stars, fisher_exact_for_category, bh_fdr
 
-from utils import DATAPATH, RESULTSPATH, SEED, DATASET_CUTOFF, DATASET_STRAIN_DICT, CUTOFF, STRAINS, SEGMENTS
+from utils import DATAPATH, RESULTSPATH, SEED, DATASET_CUTOFF, PSEUDO_DATASETS, DATASET_STRAIN_DICT, CUTOFF, STRAINS, SEGMENTS
 from utils import COLORS, RANK_THRESHOLD, DECIMALS, TOP_N, K_MER_LENGTH, PALINDROMIC_K_MER_LENGTH, MIN_TRACT_LENGTH, DIRECT_REPEAT_LENGTH_CAP, MAX_MOTIF_LENGTH
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
@@ -47,6 +47,9 @@ RESULTSPATH = os.path.join(RESULTSPATH, 'visuals')
 # must be set after analysis #
 POOLED_THRESHOLD = 0.43
 UNPOOLED_THRESHOLD = 1.00
+
+### SETUP AFTER CNN ###
+DECISION_THRESHOLD = 0.4
 
 ###############
 ### scripts ###
@@ -227,94 +230,6 @@ def run_intersect_analysis(dfs: list, folder: str, data: str, strain: str, segme
 
     create_intersect_bar_plot(df, y_feature_name, 'intersects', folder, 'bar', data, strain, segment, intersects)
 
-# outdated
-def run_old_intersect_analysis(dfnames: list, data: str, strain: str, segment: str, intersects: str):
-    '''
-
-    '''
-    dfs1 = load_all_preprocessed(dfnames, 'unpooled', 'primary')
-    dfs2 = load_all_preprocessed(dfnames, 'pooled', 'primary')
-
-    dfs1 = manage_separate_specifiers(dfs1, data, strain, segment)
-    dfs1 = add_separate_ngs_features(dfs1, True)
-    concat_df1 = pd.concat(dfs1, ignore_index=True)
-    dfs1.append(concat_df1)
-
-    dfs2 = manage_separate_specifiers(dfs2, data, strain, segment)
-    dfs2 = add_separate_ngs_features(dfs2, True)
-    concat_df2 = pd.concat(dfs2, ignore_index=True)
-    dfs2.append(concat_df2)
-
-    dfnames.append('all')
-
-    mod_dfs1 = []
-    mod_dfs2 = []
-
-    for df1, df2 in zip(dfs1, dfs2):
-        if intersects == "raw":
-            df1 = add_ikey(df1)
-        elif intersects == "metadata":
-            df1 = add_metadata_ikey(df1)
-        else:
-            raise ValueError(f"invalid intersects modifier: raw' or 'metadata'.")
-        df2 = add_ikey(df2)
-
-        mod_dfs1.append(df1)
-        mod_dfs2.append(df2)
-
-    create_old_intersect_bar_plot(mod_dfs1, mod_dfs2, dfnames, 'dataset', 'dataset', 'intersects', 'bar', data, strain, segment, intersects)
-
-# outdated
-def run_old_intersect_analysis_by_strain(dfnames: list, data: str, strain: str, segment: str, intersects: str): 
-    '''
-
-    '''
-    dfs1 = load_all_preprocessed(dfnames, 'unpooled', 'base')
-    dfs2 = load_all_preprocessed(dfnames, 'pooled', 'base')
-
-    dfs1 = manage_separate_specifiers(dfs1, data, strain, segment)
-    dfs1 = add_separate_ngs_features(dfs1, True)
-    concat_df1 = pd.concat(dfs1, ignore_index=True)
-
-    dfs2 = manage_separate_specifiers(dfs2, data, strain, segment)
-    dfs2 = add_separate_ngs_features(dfs2, True)
-    concat_df2 = pd.concat(dfs2, ignore_index=True)
-
-    strain_values = concat_df1["Strain"].dropna().unique()
-    strain_values = sorted(strain_values)
-
-    strain_dfs1 = []
-    strain_dfs2 = []
-    strain_names = []
-
-    for s in strain_values:
-        df1_s = concat_df1[concat_df1["Strain"] == s].copy()
-        df2_s = concat_df2[concat_df2["Strain"] == s].copy()
-        strain_dfs1.append(df1_s)
-        strain_dfs2.append(df2_s)
-        strain_names.append(str(s))
-
-    strain_dfs1.append(concat_df1)
-    strain_dfs2.append(concat_df2)
-
-    mod_dfs1 = []
-    mod_dfs2 = []
-
-    for df1, df2 in zip(strain_dfs1, strain_dfs2):
-        if intersects == "raw":
-            df1 = add_ikey(df1)
-        elif intersects == "metadata":
-            df1 = add_metadata_ikey(df1)
-        else:
-            raise ValueError(f"invalid intersects modifier: raw' or 'metadata'.")
-        df2 = add_ikey(df2)
-
-        mod_dfs1.append(df1)
-        mod_dfs2.append(df2)
-        strain_names.append('all')
-
-    create_old_intersect_bar_plot(mod_dfs1, mod_dfs2, strain_names, 'strain', 'strain', 'intersects', 'bar', data, strain, segment, intersects)
-
 ### bar, violin, scatter ###
 
 def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder: str, data: str, strain: str, segment: str, intersects: str):
@@ -329,7 +244,7 @@ def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder
         ("end", "deletion end position", "position where deletion ends (nucleotide)", "length"),
 
         # ("full_seq_length", "full sequence length", "length of the full reference sequence (nucleotides)", "length"),
-        ("DelVG_length", "DVG sequence length", "length of the DVG sequence (nucleotides)", "length"),
+        ("DelVG_length", "DelVG sequence length", "length of the DelVG sequence (nucleotides)", "length"),
         ("deletion_length", "deletion length", "length of the deleted fragment (nucleotides)", "length"),
 
         ("5_end_length", "5′ end length", "length of the retained 5′ end fragment (nucleotides)", "length"),
@@ -345,9 +260,9 @@ def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder
         ("GC_skew", "GC skew", "relative skew between G and C nucleotides", "composition"),
         ("sequence_entropy", "sequence entropy", "Shannon entropy of nucleotide composition", "entropy"),
 
-        ("poly_U_max_run", "poly-U maximum run length", "longest consecutive run of U (nucleotides)", "length"),
+        # ("poly_U_max_run", "poly-U maximum run length", "longest consecutive run of U (nucleotides)", "length"),
         ("poly_U_tracts", f"poly-U tract (min_length={MIN_TRACT_LENGTH}) count", "number of U tracts (nucleotides)", "length"),
-        ("poly_A_max_run", "poly-A maximum run length", "longest consecutive run of A (nucleotides)", "length"),
+        # ("poly_A_max_run", "poly-A maximum run length", "longest consecutive run of A (nucleotides)", "length"),
         ("poly_A_tracts", f"poly-A tract (min_length={MIN_TRACT_LENGTH}) count", "number of A tracts (nucleotides)", "length"),
 
         ("palindrome_density", f"palindromic k-mer (k={PALINDROMIC_K_MER_LENGTH}) density", "density of palindromic k-mers (1/k-mer)", "motifs"),
@@ -381,13 +296,13 @@ def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder
     if call_spearman:
         make_spearman_heatmap_analysis(df, folder, y_feature_name, num_feature_names, 'primary', data, strain, segment, intersects)
 
-    print(f'features added successfully')
+    print(f'spearman made successfully')
 
     subfolder = 'scatter'
 
     feature_index = 0
     for y_feature_name, y_feature_title, y_axis_name, category in num_features:
-            create_feature_scatter_plot(f'{y_feature_title} as a function of NGS read count - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, 50, False, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
+            create_feature_scatter_plot(f'{y_feature_title} as a function of NGS read count - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, 50, False, "", 0.0, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
             feature_index += 1
 
     print(f'numerical features completed')
@@ -515,13 +430,13 @@ def run_delvg_sec_features_analysis(dfs: list, selector: str, folder: str, data:
     if call_spearman:
         make_spearman_heatmap_analysis(df, folder, y_feature_name, num_feature_names, 'secondary', data, strain, segment, intersects)
 
-    print(f'features added successfully')
+    print(f'spearman made successfully')
 
     subfolder = 'scatter'
 
     feature_index = 0
     for y_feature_name, y_feature_title, y_axis_name, category in num_features:
-            create_feature_scatter_plot(f'{y_feature_title} as a function of NGS read count - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, 50, False, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
+            create_feature_scatter_plot(f'{y_feature_title} as a function of NGS read count - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, 50, False, "", 0.0, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
             feature_index += 1
 
     print(f'numerical features completed')
@@ -616,13 +531,13 @@ def run_delvg_hybrid_features_analysis(dfs: list, selector: str, folder: str, da
     if call_spearman:
         make_spearman_heatmap_analysis(df, folder, y_feature_name, num_feature_names, 'hybrid', data, strain, segment, intersects)
 
-    print(f'features added successfully')
+    print(f'spearman made successfully')
 
     subfolder = 'scatter'
 
     feature_index = 0
     for y_feature_name, y_feature_title, y_axis_name, category in num_features:
-            create_feature_scatter_plot(f'{y_feature_title} as a function of NGS read count - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, 50, False, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
+            create_feature_scatter_plot(f'{y_feature_title} as a function of NGS read count - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, 50, False, "", 0.0, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
             feature_index += 1
 
     print(f'numerical features completed')
@@ -646,44 +561,53 @@ def run_length_mfe_analysis(dfs: list, selector: str, folder: str, data: str, st
     ]
 
     for y_feature_name, y_feature_title, y_axis_name, category in features:
-        create_feature_scatter_plot(f'{y_feature_title} as a function of NGS read count - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, False, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
+        create_feature_scatter_plot(f'{y_feature_title} as a function of NGS read count - scatter plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, True, 50, False, "", 0.0, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
     
     print(f'numerical features completed')
 
-def run_ngs_prediction_analysis(df: pd.DataFrame, selector: str, folder: str, subfolder: str, data: str, strain: str, segment: str, intersects: str):
+### prediction ###
+
+def run_pred_analysis(selector: str, data: str, strain: str, segment: str, intersects: str):
     '''
 
     '''
-    if subfolder == "bin":
-        if folder == 'pooled':
-            THRESHOLD = POOLED_THRESHOLD
-        elif folder == 'unpooled':
-            THRESHOLD = UNPOOLED_THRESHOLD
+    num_features = [
+        ("start", "deletion start position", "position where deletion begins (nucleotide)", "length"),
+        ("end", "deletion end position", "position where deletion ends (nucleotide)", "length"),
 
-        df["class"] = (df["norm_log_NGS_read_count"] > THRESHOLD).astype(int)
+        # ("full_seq_length", "full sequence length", "length of the full reference sequence (nucleotides)", "length"),
+        ("DelVG_length", "DelVG sequence length", "length of the DelVG sequence (nucleotides)", "length"),
+        ("deletion_length", "deletion length", "length of the deleted fragment (nucleotides)", "length"),
 
-        features = [
-            ("class", "predicted_probability", "prediction"),
-        ]
+        ("5_end_length", "5′ end length", "length of the retained 5′ end fragment (nucleotides)", "length"),
+        ("3_end_length", "3′ end length", "length of the retained 3′ end fragment (nucleotides)", "length"),
+    ]
 
-        ### TODO: use functions fom CNN implementation !!! ###
-        for y_true_feature_name, y_pred_proba_feature_name, y_feature_title in features:
-            create_feature_roc_auc_plot(f'{y_feature_title} - ROC-AUC - curve plot', df, y_true_feature_name, y_pred_proba_feature_name, selector, 0.5, y_true_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
+    dfnames = PSEUDO_DATASETS
+    pseudo_prefix = ['homopolymer', 'tandem repeat', 'synthetic']
+    subfolder = 'prediction'
+    modification = get_feature_modification_name()
 
-    elif subfolder == "reg":
+    bin_dfs = load_all_preprocessed(dfnames, "pseudo", "bin_prediction", data, strain, segment, intersects)
+    reg_dfs = load_all_preprocessed(dfnames, "pseudo", "reg_prediction", data, strain, segment, intersects)
 
-        modification = get_feature_modification_name()
-         
-        x_feature_name = 'norm_log_NGS_read_count'
-        x_axis_name = f'{modification} NGS count (reads)'
-         
-        features = [
-            ("predicted_value", "prediction", "NGS count residual (predicted - true)"),
-        ]
+    prefix_index = 0
+    for dfname, bin_df in zip(dfnames, bin_dfs):
+        x_feature_name = 'cnn_pred_proba'
+        x_axis_name = f'predicted probabilty for high NGS read count'
+        for y_feature_name, y_feature_title, y_axis_name, category in num_features:
+            create_feature_scatter_plot(f'bin. CNN: {y_feature_title} as a function of predicted probabilty - scatter plot', bin_df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, False, 50, False, pseudo_prefix[prefix_index], DECISION_THRESHOLD, False, 0.0, f'bin_{dfname}_{y_feature_name}', 'visuals', folder, subfolder, data, strain, segment, intersects)
+        prefix_index += 1
 
-        ### TODO: use functions fom CNN implementation !!! ###
-        for y_pred_feature_name, y_feature_title, y_axis_name in features:
-            create_feature_residual_plot(f'{y_feature_title} - ROC-AUC - curve plot', df, x_feature_name, x_axis_name, y_pred_feature_name, y_axis_name, selector, True, y_pred_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)
+    prefix_index = 0
+    for dfname, reg_df in zip(dfnames, reg_dfs):
+        x_feature_name = 'cnn_pred_value'
+        x_axis_name = f'predicted value ({modification} NGS read count)'
+        for y_feature_name, y_feature_title, y_axis_name, category in num_features:
+            create_feature_scatter_plot(f'reg. CNN: {y_feature_title} as a function of predicted value - scatter plot', reg_df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, False, 50, True, pseudo_prefix[prefix_index], 0.0, False, 0.0, f'reg_{dfname}_{y_feature_name}', 'visuals', folder, subfolder, data, strain, segment, intersects)
+        prefix_index += 1
+
+    print(f'numerical features completed')
 
 ### other ###
 
@@ -1256,7 +1180,7 @@ def create_freq_diff_plot(
         loc='upper left',
         bbox_to_anchor=(1.02, 1),
         borderaxespad=0.,
-        title='type',
+        title=make_legend_descriptor(x_feature_name),
         frameon=True
     )
 
@@ -1321,7 +1245,7 @@ def create_spline_plot(
         loc='upper left',
         bbox_to_anchor=(1.02, 1),
         borderaxespad=0.,
-        title='type',
+        title=make_legend_descriptor('type'),
         frameon=True
     )
 
@@ -1500,7 +1424,7 @@ def create_single_density_plot(
         loc="upper left",
         bbox_to_anchor=(1.02, 1),
         borderaxespad=0.0,
-        title="type",
+        title=make_legend_descriptor('type'),
         frameon=True
     )
 
@@ -1642,7 +1566,7 @@ def create_freq_bar_plot(
         x - width/2,
         bars_true,
         width=width,
-        label=f'NGS rank {threshold} (high)',
+        label=f'high NGS rank ({threshold})',
         color=color_true,
         edgecolor='white',
         linewidth=0.5
@@ -1729,7 +1653,7 @@ def create_freq_bar_plot(
     plt.ylabel('relative frequency (%)')
 
     title_name = f'{plot_name}'
-    title_name += f'\ndata: {data}, strain: {strain}, segment: {segment}'
+    title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title_name += f' (n={delvg_count})'
     plt.title(title_name)
 
@@ -1737,7 +1661,7 @@ def create_freq_bar_plot(
         loc='upper left',
         bbox_to_anchor=(1.02, 1),
         borderaxespad=0.,
-        title='type',
+        title=make_legend_descriptor(selector),
         frameon=True
     )
 
@@ -1870,6 +1794,8 @@ def create_feature_scatter_plot(
     show_rolling_median: bool,
     rolling_window: int,
     show_identity_line: bool,
+    pseudo_prefix: str,
+    show_decision_threshold: float,
     reg_metrics: bool,
     huber_delta: float,
     fname: str,
@@ -1920,6 +1846,8 @@ def create_feature_scatter_plot(
     # keep final order consistent with chosen ordering
     uniq = [label_map[u] for u in uniq]
 
+    values = values.sample(frac=1.0, random_state=SEED).reset_index(drop=True)
+
     picked_colors = pick_colors(COLORS, len(uniq))
     palette = dict(zip(uniq, picked_colors))
 
@@ -1928,10 +1856,11 @@ def create_feature_scatter_plot(
         x=x_feature_name,
         y=y_feature_name,
         hue=selector,
+        hue_order=uniq,          
         palette=palette,
         edgecolor='white',
         s=50,
-        alpha=0.7,
+        alpha=0.5,
     )
 
     # rolling median (graph element, robust trend)
@@ -1965,7 +1894,7 @@ def create_feature_scatter_plot(
                 med_x,
                 med_y,
                 linewidth=2,
-                color="silver",
+                color="grey",
                 label=f"rolling median (window={rolling_window})"
             )
 
@@ -1974,7 +1903,6 @@ def create_feature_scatter_plot(
         x_vals = values[x_feature_name].to_numpy(dtype=float)
         y_vals = values[y_feature_name].to_numpy(dtype=float)
 
-        # choose visible span based on BOTH axes so the line covers the data range
         lo = np.nanmin([np.nanmin(x_vals), np.nanmin(y_vals)])
         hi = np.nanmax([np.nanmax(x_vals), np.nanmax(y_vals)])
 
@@ -1986,6 +1914,16 @@ def create_feature_scatter_plot(
                 color="grey",
                 label="identity"
             )
+
+    # decision threshold
+    if show_decision_threshold != 0:
+        plt.axhline(
+            float(show_decision_threshold),
+            linestyle="--",
+            linewidth=2,
+            color="grey",
+            label=f"decision_threshold={show_decision_threshold:.{DECIMALS}f}",
+        )
 
     # regression metrics (predictions vs truth)
     mae = None
@@ -2017,8 +1955,13 @@ def create_feature_scatter_plot(
             if ss_tot > 0:
                 r2_pred = 1 - ss_res / ss_tot
 
+    if pseudo_prefix:
+        title_descriptor = make_pseudo_candidate_descriptor(pseudo_prefix, folder, data, strain, segment, intersects)
+    else:
+        title_descriptor = make_candidate_descriptor(folder, data, strain, segment, intersects)
+
     title = f'{plot_name}'
-    title += make_candidate_descriptor(folder, data, strain, segment, intersects)
+    title += title_descriptor
     title += f' (n={n})'
 
     if reg_metrics:
@@ -2056,7 +1999,7 @@ def create_feature_scatter_plot(
         loc='upper left',
         bbox_to_anchor=(1.02, 1),
         borderaxespad=0.,
-        title='type',
+        title=make_legend_descriptor(selector),
         frameon=True
     )
 
@@ -2116,6 +2059,14 @@ def create_multi_density_plot(
     # reorder df_list + df_names together#
     names = [str(n) for n in df_names]
     present = list(pd.unique(names))
+
+    
+    if "PB2" in names:
+        legend_title = 'segment'
+    elif any(x in names for x in ("PR8", "Yamagata")):
+        legend_title = 'strain'
+    else:
+        legend_title = 'type'
 
     # decide which ordering to use based on names present
     if all(n in SEGMENTS for n in present):
@@ -2288,7 +2239,7 @@ def create_multi_density_plot(
     if leg is not None:
         leg.set_bbox_to_anchor((1.02, 1))
         leg._loc = 2  # "upper left"
-        leg.set_title("type")
+        leg.set_title(legend_title)
         leg.set_frame_on(True)
 
     clean_data = clean_data_string(data)
@@ -2298,6 +2249,120 @@ def create_multi_density_plot(
 
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, fname + ".png"), dpi=300, bbox_inches="tight")
+    plt.close()
+
+def create_prediction_probability_density_plot(
+    plot_name: str,
+    df: pd.DataFrame,
+    x_feature_name: str,
+    x_axis_name: str,
+    decision_threshold: float,
+    path: str,
+    fname: str,
+    folder: str,
+    subfolder: str,
+    data: str,
+    strain: str,
+    segment: str,
+    intersects: str,
+    kde_bw_adjust: float = 1.0,
+    kde_grid: int = 512,
+    clip=(0, 1),
+):
+    """
+    KDE-only density plot (no histogram) for predicted class probabilities of a binary CNN,
+    with a decision threshold indicator line.
+
+    - Computes KDE from raw sample values
+    - Draws a grey dashed vertical line at `decision_threshold`
+    - Keeps your styling + save path conventions
+    """
+
+    plt.style.use("seaborn-darkgrid")
+    plt.figure(figsize=(10, 6))
+
+    # extract + clean (numeric coercion + drop NaNs)
+    s = pd.to_numeric(df[x_feature_name], errors="coerce").dropna()
+    values = s.to_numpy()
+    n = len(values)
+    if n == 0:
+        raise ValueError(
+            f"no numeric data in column '{x_feature_name}' after dropping NaNs/coercion."
+        )
+
+    # basic bounds
+    xmin = float(np.nanmin(values))
+    xmax = float(np.nanmax(values))
+    if not np.isfinite(xmin) or not np.isfinite(xmax):
+        raise ValueError(f"no finite numeric data in column '{x_feature_name}' after cleaning.")
+
+    # constant distribution: create a tiny window so KDE evaluation is well-defined
+    if xmin == xmax:
+        xmin -= 0.5
+        xmax += 0.5
+
+    # optional clip
+    if clip is not None:
+        c0, c1 = clip
+        if c0 is not None:
+            xmin = max(xmin, float(c0))
+        if c1 is not None:
+            xmax = min(xmax, float(c1))
+        if xmin == xmax:
+            xmin -= 0.5
+            xmax += 0.5
+
+    xs = np.linspace(xmin, xmax, int(kde_grid))
+
+    # KDE via scipy
+    kde = stats.gaussian_kde(values)
+    if kde_bw_adjust != 1.0:
+        base_cf = kde.covariance_factor()
+        kde.covariance_factor = lambda: base_cf * kde_bw_adjust
+        kde._compute_covariance()
+
+    pdf = kde(xs)
+
+    # plot KDE curve
+    plt.plot(xs, pdf, color=COLORS[6], linewidth=2.0, label="test")
+    plt.fill_between(xs, 0, pdf, color=COLORS[6], alpha=0.15)
+
+    # decision threshold line (grey dashed)
+    plt.axvline(
+        float(decision_threshold),
+        color="grey",
+        linestyle="--",
+        linewidth=1.8,
+        label=f"decision_threshold={decision_threshold}",
+    )
+
+    # title / labels
+    title = f"{plot_name}"
+    title += make_candidate_descriptor(folder, data, strain, segment, intersects)
+    title += f" (n={n})"
+    plt.title(title)
+
+    plt.xlabel(f"{x_axis_name}")
+    plt.ylabel("density (area under curve = 1)")
+
+    # legend outside
+    plt.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        borderaxespad=0.0,
+        title=make_legend_descriptor("type"),
+        frameon=True,
+    )
+
+    # save path
+    clean_data = clean_data_string(data)
+    result_path, _ = os.path.split(RESULTSPATH)
+    save_path = os.path.join(result_path, path, folder, subfolder, clean_data, strain, segment, intersects)
+    os.makedirs(save_path, exist_ok=True)
+
+    fname += ".png"
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, fname), dpi=300, bbox_inches="tight")
     plt.close()
 
 def create_feature_roc_auc_plot(
@@ -2596,7 +2661,7 @@ def create_feature_residual_plot(
         loc='upper left',
         bbox_to_anchor=(1.02, 1),
         borderaxespad=0.,
-        title='type',
+        title=make_legend_descriptor('type'),
         frameon=True
     )
 
@@ -2636,28 +2701,27 @@ def create_intersect_bar_plot(
     Plot side-by-side horizontal bars in the desired order (based on y_feature_name).
     """
 
-    # ---- checks ----
+    # checks
     required = {"ikey", "dataset_name", y_feature_name}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
 
-    # ---- normalize feature column ----
+    # normalize feature column
     df_global = df.copy()
     df_global[y_feature_name] = df_global[y_feature_name].astype(object)
     df_global[y_feature_name] = df_global[y_feature_name].where(
         df_global[y_feature_name].notna(), "NA"
     )
 
-    # ---- derive dataset-collapsed df (one row per dataset_name + ikey) ----
-    # Grouping idea: collapse within (dataset_name, ikey) and keep the first row as representative
+    # derive dataset-collapsed df (one row per dataset_name + ikey)
     df_dataset = (
         df_global.sort_values(["dataset_name", "ikey"])
         .groupby(["dataset_name", "ikey"], as_index=False)
         .first()
     )
 
-    # ---- helpers ----
+    # helpers
     def pct_nonunique_within_group(g: pd.DataFrame) -> float:
         n = len(g)
         if n == 0:
@@ -2674,7 +2738,7 @@ def create_intersect_bar_plot(
             stats[group_name] = (pct_nonunique_within_group(g), int(len(g)))
         return stats
 
-    # ---- compute stats ----
+    # compute stats
     stats_g = compute_group_stats(df_global)
     stats_d = compute_group_stats(df_dataset)
 
@@ -2760,7 +2824,7 @@ def create_intersect_bar_plot(
         bbox_to_anchor=(1.02, 1),
         borderaxespad=0.0,
         frameon=True,
-        title="type",
+        title=make_legend_descriptor(y_feature_name),
     )
 
     plt.tight_layout()
@@ -2772,123 +2836,6 @@ def create_intersect_bar_plot(
 
     outname = fname + ".png"
     plt.savefig(os.path.join(save_path, outname), dpi=300, bbox_inches="tight")
-    plt.close()
-
-# outdated
-def create_old_intersect_bar_plot(
-    dfs1: list,
-    dfs2: list,
-    dfnames: list,
-    y_feature_name: str,
-    fname: str,
-    folder: str,
-    subfolder: str,
-    data: str,
-    strain: str,
-    segment: str,
-    intersects: str,
-    ):
-    """
-
-    """
-
-    combined = list(zip(dfnames, dfs1, dfs2))
-    combined.sort(key=lambda x: x[0])
-
-    sorted_names = []
-    perc_nonunique_1 = []
-    perc_nonunique_2 = []
-    n_rows_1 = []
-    n_rows_2 = []
-
-    for name, df1, df2 in combined:
-        n_u = len(df1)
-        if n_u > 0:
-            dup_mask1 = df1.duplicated(subset=["ikey"], keep=False)
-            nonunique_count1 = dup_mask1.sum()
-            pct1 = 100.0 * nonunique_count1 / n_u
-        else:
-            pct1 = 0.0
-
-        n_p = len(df2)
-        if n_p > 0:
-            dup_mask2 = df2.duplicated(subset=["ikey"], keep=False)
-            nonunique_count2 = dup_mask2.sum()
-            pct2 = 100.0 * nonunique_count2 / n_p
-        else:
-            pct2 = 0.0
-
-        sorted_names.append(name)
-        perc_nonunique_1.append(pct1)
-        perc_nonunique_2.append(pct2)
-        n_rows_1.append(n_u)
-        n_rows_2.append(n_p)
-
-    plt.style.use("seaborn-darkgrid")
-    num_datasets = len(sorted_names)
-
-    y_positions = np.arange(num_datasets)
-    bar_height = 0.4
-    offset = bar_height / 2
-
-    fig, ax = plt.subplots(figsize=(12, max(6, num_datasets * 0.4)))
-
-    color_unpooled = COLORS[0] 
-    color_pooled = COLORS[8]
-
-    ax.barh(
-        y_positions,
-        perc_nonunique_1,
-        height=bar_height,
-        label="unpooled",
-        edgecolor="white",
-        linewidth=0.5,
-        color=color_unpooled,
-    )
-
-    ax.barh(
-        y_positions,
-        perc_nonunique_2,
-        height=bar_height,
-        label="pooled",
-        edgecolor="white",
-        linewidth=0.5,
-        color=color_pooled,
-    )
-
-    y_labels = [
-        f"{name} (n_u={n_u}, n_p={n_p})"
-        for name, n_u, n_p in zip(sorted_names, n_rows_1, n_rows_2)
-    ]
-    ax.set_yticks(y_positions)
-    ax.set_yticklabels(y_labels)
-
-    ax.set_xlabel("intersecting candidates (%)")
-    ax.set_ylabel(f"{y_feature_name}s")
-
-    title_name = f"intersecting candidates per {y_feature_name}"
-    title_name += make_candidate_descriptor("all", data, strain, segment, intersects)
-    ax.set_title(title_name)
-
-    ax.legend(
-        loc="upper left",
-        bbox_to_anchor=(1.02, 1),
-        borderaxespad=0.0,
-        frameon=True,
-        title="type",
-    )
-
-    plt.tight_layout()
-
-    clean_data = clean_data_string(data)
-    save_path = os.path.join(RESULTSPATH, folder, subfolder)
-    save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
-    os.makedirs(save_path, exist_ok=True)
-
-    fname += '.png'
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_path, fname), dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -2925,8 +2872,8 @@ if __name__ == "__main__":
 
     data = 'IAV'
     strain = 'PR8'
-    segment = 'all'
-    intersects = 'median_global_5'
+    segment = 'PB1'
+    intersects = 'median_global_0'
 
     dfnames = get_dataset_names(DATASET_CUTOFF, data)
     dfs = load_all_preprocessed(dfnames, folder, subfolder)
@@ -2951,22 +2898,30 @@ if __name__ == "__main__":
     ### run scripts ###
     ###################
 
+    ### heatmaps ###
+
     # run_site_motif_heatmap_analysis(dfs, TOP_N, folder, data, strain, segment, intersects)
     # run_reg_site_motif_heatmap_analysis(dfs, TOP_N, folder, data, strain, segment, intersects)
-
     # run_repeat_heatmap_analysis(dfs, folder, data, strain, segment, intersects)
     # run_mfe_heatmap_analysis(dfs, folder, data, strain, segment, intersects)
 
+    ### distribution ###
+
     # run_ngs_single_density_analysis(dfs, folder, data, strain, segment, intersects)
     # run_ngs_multi_density_analysis(dfs, folder, data, strain, segment, intersects)
+    # run_intersect_analysis(dfs, folder,  data, strain, segment, intersects)
 
-    run_intersect_analysis(dfs, folder,  data, strain, segment, intersects)
+    ### features ###
 
     # run_delvg_pri_features_analysis(dfs, selector, TOP_N, folder, data, strain, segment, intersects)
     # run_delvg_sec_features_analysis(dfs, selector, folder, data, strain, segment, intersects)
     # run_delvg_hybrid_features_analysis(dfs, selector, folder, data, strain, segment, intersects)
     # run_length_mfe_analysis(dfs, selector, folder, data, strain, segment, intersects)
 
-    # run_ngs_prediction_analysis(df, selector, folder, f'{subfolder}_prediction', data, strain, segment, intersects)
+    ### prediction ###
+
+    run_pred_analysis(selector, data, strain, segment, intersects)
+
+    ### other ###
 
     # run_sec_structure_plot(dfs, data, strain, segment)

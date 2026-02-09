@@ -1,119 +1,87 @@
-
+'''
+    prediction function
+'''
 import os
 import sys
+from typing import Optional, Dict, Any, Tuple, List
+
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 sys.path.insert(0, "..")
 
-from utils import RESULTSPATH, DATASET_CUTOFF, K_MER_LENGTH
+from utils import RESULTSPATH, DATASET_CUTOFF, PSEUDO_DATASETS, K_MER_LENGTH
+from utils import get_dataset_names, load_all_preprocessed, manage_specifiers, save_df
+
+from analysis.visuals import DECISION_THRESHOLD
+
 from tensorflow.keras.models import load_model
 from tensorflow.keras import preprocessing as keras_preproc
 import joblib
 
-###############
-### helpers ###
-###############
+RESULTSPATH, _ = os.path.split(RESULTSPATH)
+RESULTSPATH = os.path.join(RESULTSPATH, 'preprocess')
 
-def ensure_preprocess_root(current_resultspath):
-    parent, last = os.path.split(current_resultspath)
-    if last != "preprocess":
-        return os.path.join(parent, "preprocess")
-    return current_resultspath
+####################
+### path helpers ###
+####################
 
-def kmer_tokenize(seq, k):
-    s = "" if pd.isna(seq) else str(seq)
-    return [s[i:i + k] for i in range(len(s) - k + 1)]
+def ensure_preprocess_root(resultspath: str) -> str:
+    """
+    RESULTSPATH typically points to .../results
+    this returns .../results/preprocess, unless RESULTSPATH already ends with preprocess.
+    """
+    parent, last = os.path.split(resultspath.rstrip("/"))
+    return resultspath if last == "preprocess" else os.path.join(resultspath, "preprocess")
 
-def encode_with_vocab(kmers, token2idx):
-    return [token2idx[k] for k in kmers if k in token2idx]
-
-def pad_sequences(seqs, maxlen):
-    return keras_preproc.sequence.pad_sequences(seqs, maxlen=maxlen)
-
-def has_X(series, sample_rows=500):
-    if series.empty:
-        return False
-    s = series.astype(str)
-    if len(s) > sample_rows:
-        s = s.sample(sample_rows, random_state=0)
-    return s.str.contains('X').any()
-
-def identify_marked_plain_columns(df):
-    for col in ("marked_DelVG_sequence", "marked_structure", "DelVG_sequence", "structure"):
-        if col not in df.columns:
-            df[col] = ""
-    return {
-        "marked": ("marked_DelVG_sequence", "marked_structure"),
-        "plain": ("DelVG_sequence", "structure"),
-    }
-
-def model_vocab_looks_marked(token2idx):
-    for kmer in token2idx.keys():
-        if 'X' in kmer:
-            return True
-    return False
-
-def choose_sequence_columns(df, artifacts, force_marked=None):
-    token2idx = artifacts["token2idx"]
-    STRUCTURE = int(artifacts.get("STRUCTURE", 0))
-    cols = identify_marked_plain_columns(df)
-
-    if force_marked is True:
-        seq_col, str_col = cols["marked"]
-        print("ℹ Using FORCED columns: marked_*")
-        return seq_col, (str_col if STRUCTURE else None)
-    if force_marked is False:
-        seq_col, str_col = cols["plain"]
-        print("ℹ Using FORCED columns: unmarked")
-        return seq_col, (str_col if STRUCTURE else None)
-
-    use_marked = model_vocab_looks_marked(token2idx)
-    choice = "marked" if use_marked else "plain"
-    seq_col, str_col = cols[choice]
-    print(f"ℹ Auto-selected columns by model vocab: {seq_col}"
-          f"{' + ' + str_col if STRUCTURE else ''} (choice={choice})")
-    return seq_col, (str_col if STRUCTURE else None)
-
-def detect_task(model):
-    try:
-        act = getattr(model.layers[-1], "activation", None)
-        act_name = getattr(act, "__name__", None)
-    except Exception:
-        act_name = None
-    return "classification" if act_name == "sigmoid" else "regression"
-
-def build_paths_flipped(preprocess_root, model_type, folder, data, strain, segment, intersects, name_mod):
-    root_parent = os.path.dirname(preprocess_root)
+def build_model_paths(
+    resultspath: str,
+    model_type: str,
+    folder: str,
+    data: str,
+    strain: str,
+    segment: str,
+    intersects: str,
+    name_mod: str,
+) -> Dict[str, str]:
+    """
+    Returns dict with paths to preprocessing joblib and best/final models.
+    """
+    preprocess_root = ensure_preprocess_root(resultspath)
 
     read_dir = os.path.join(preprocess_root, folder, "pseudo", data, strain, segment, intersects)
-    model_dir = os.path.join(root_parent, "networks", model_type, "CNN", data, strain, segment, intersects)
-
-    preproc_path = os.path.join(model_dir, f"{name_mod}_preproc.joblib")
-    best_path    = os.path.join(model_dir, f"{name_mod}_best_model.h5")
-    final_path   = os.path.join(model_dir, f"{name_mod}_final_model.h5")
+    
+    res_root = RESULTSPATH.replace("/preprocess", "").rstrip("/")
 
     if model_type == "bin":
-        write_dir = os.path.join(preprocess_root, folder, "bin_prediction", data, strain, segment, intersects)
-    elif model_type == "reg":
-        write_dir = os.path.join(preprocess_root, folder, "reg_prediction", data, strain, segment, intersects)
+        model_base = os.path.join(res_root, "bin_network")
+    else:  # "reg"
+        model_base = os.path.join(res_root, "reg_network")
 
-    os.makedirs(write_dir, exist_ok=True)
+    model_dir = os.path.join(model_base, folder, "CNN", data, strain, segment, intersects)
 
     return {
         "read_dir": read_dir,
-        "preproc_path": preproc_path,
-        "best_path": best_path,
-        "final_path": final_path,
-        "write_dir": write_dir,
+        "model_dir": model_dir,
+        "preproc": os.path.join(model_dir, f"{name_mod}_preproc.joblib"),
+        "best":    os.path.join(model_dir, f"{name_mod}_best_model.h5"),
+        "final":   os.path.join(model_dir, f"{name_mod}_final_model.h5"),
     }
 
-def load_artifacts_and_model(preproc_path, best_path, final_path, model_choice):
-    if not os.path.isfile(preproc_path):
-        raise FileNotFoundError(f"Preprocessing artifacts not found: {preproc_path}")
+def load_artifacts_and_model(
+    paths: Dict[str, str],
+    model_choice: str = "final",   # "best" | "final"
+) -> Tuple[Dict[str, Any], Any, str]:
+    if not os.path.isfile(paths["preproc"]):
+        raise FileNotFoundError(f"Preprocessing artifacts not found: {paths['preproc']}")
 
-    artifacts = joblib.load(preproc_path)
+    artifacts = joblib.load(paths["preproc"])
 
+    best_path = paths["best"]
+    final_path = paths["final"]
+
+    model_path = None
     if model_choice == "best" and os.path.isfile(best_path):
         model_path = best_path
     elif model_choice == "final" and os.path.isfile(final_path):
@@ -122,115 +90,190 @@ def load_artifacts_and_model(preproc_path, best_path, final_path, model_choice):
         model_path = best_path
     elif os.path.isfile(final_path):
         model_path = final_path
-    else:
+
+    if model_path is None:
         raise FileNotFoundError(f"No model file found. Checked: {best_path} and {final_path}")
 
-    model = load_model(model_path)
+    model = load_model(model_path, compile=False) 
     return artifacts, model, model_path
 
-def assemble_features(df, artifacts, seq_col, struct_col):
-    token2idx  = artifacts["token2idx"]
-    token2idx2 = artifacts.get("token2idx2", {})
-    maxlen  = int(artifacts["maxlen"])
-    maxlen2 = int(artifacts.get("maxlen2", 0))
-    categorical_cols = list(artifacts["categorical_cols"])
-    numerical_cols   = list(artifacts["numerical_cols"])
-    encoder = artifacts["encoder"]
-    scaler  = artifacts["scaler"]
+###################
+### seq helpers ###
+###################
+
+def kmer_tokenize(seq: Any, k: int) -> List[str]:
+    s = "" if pd.isna(seq) else str(seq)
+    if k <= 0 or len(s) < k:
+        return []
+    return [s[i:i + k] for i in range(len(s) - k + 1)]
+
+def encode_with_vocab(kmers: List[str], token2idx: Dict[str, int], unk_idx: Optional[int] = 1) -> List[int]:
+    """
+    Your newer training code typically reserves 0 for PAD and 1 for UNK.
+    If unk_idx is None, unknown kmers are dropped (useful for structure vocab if trained that way).
+    """
+    if unk_idx is None:
+        return [token2idx[k] for k in kmers if k in token2idx]
+    return [token2idx.get(k, unk_idx) for k in kmers]
+
+def pad(seqs, maxlen: int):
+    return keras_preproc.sequence.pad_sequences(seqs, maxlen=maxlen)
+
+def ensure_input_columns(df: pd.DataFrame) -> None:
+    """
+    Ensure canonical columns exist so selection never KeyErrors.
+    """
+    for col in ("DelVG_sequence", "marked_DelVG_sequence", "structure", "marked_structure"):
+        if col not in df.columns:
+            df[col] = ""
+
+def model_vocab_looks_marked(token2idx: Dict[str, int]) -> bool:
+    """
+    Heuristic: if vocab contains X, model likely trained on marked sequences.
+    """
+    for kmer in token2idx.keys():
+        if "X" in kmer:
+            return True
+    return False
+
+def choose_sequence_columns(
+    df: pd.DataFrame,
+    artifacts: Dict[str, Any],
+    force_marked: Optional[bool] = None,  # True -> marked, False -> plain, None -> auto
+) -> Tuple[str, Optional[str]]:
+    ensure_input_columns(df)
+
     STRUCTURE = int(artifacts.get("STRUCTURE", 0))
 
-    for col in categorical_cols:
-        if col not in df.columns:
-            df[col] = "unknown"
-    for col in numerical_cols:
-        if col not in df.columns:
-            df[col] = 0.0
+    if force_marked is True:
+        return "marked_DelVG_sequence", ("marked_structure" if STRUCTURE else None)
 
-    if len(token2idx) > 0:
-        any_kmer = next(iter(token2idx.keys()))
-        K = len(any_kmer)
-    else:
-        K = 3
+    if force_marked is False:
+        return "DelVG_sequence", ("structure" if STRUCTURE else None)
 
-    df["_kmer_seq"] = df[seq_col].apply(lambda s: kmer_tokenize(s, K))
-    df["_enc_seq"]  = df["_kmer_seq"].apply(lambda km: encode_with_vocab(km, token2idx))
-    X_seq = pad_sequences(df["_enc_seq"], maxlen=maxlen)
+    # auto
+    use_marked = model_vocab_looks_marked(artifacts.get("token2idx", {}))
+    seq_col = "marked_DelVG_sequence" if use_marked else "DelVG_sequence"
+    str_col = ("marked_structure" if use_marked else "structure") if STRUCTURE else None
+    return seq_col, str_col
 
+#####################
+### feature build ###
+#####################
+
+def assemble_features(
+    df: pd.DataFrame,
+    artifacts: Dict[str, Any],
+    seq_col: str,
+    struct_col: Optional[str],
+):
+    """
+    Rebuild the exact model inputs using the saved preprocessing artifacts:
+      - token2idx/maxlen for sequences
+      - token2idx2/maxlen2 for structure (if STRUCTURE=1)
+      - encoder/scaler + categorical_cols/numerical_cols for tabular branch
+    """
+    token2idx = artifacts["token2idx"]
+    maxlen = int(artifacts["maxlen"])
+
+    token2idx2 = artifacts.get("token2idx2", {})
+    maxlen2 = int(artifacts.get("maxlen2", 0))
+
+    categorical_cols = list(artifacts.get("categorical_cols", []))
+    numerical_cols = list(artifacts.get("numerical_cols", []))
+
+    encoder = artifacts["encoder"]
+    scaler = artifacts["scaler"]
+
+    STRUCTURE = int(artifacts.get("STRUCTURE", 0))
+
+    # infer K from vocab
+    if len(token2idx) == 0:
+        raise ValueError("token2idx in artifacts is empty; cannot infer k-mer length.")
+    K = len(next(iter(token2idx.keys())))
+
+    # sequence branch
+    kmers_seq = df[seq_col].apply(lambda s: kmer_tokenize(s, K))
+    enc_seq = kmers_seq.apply(lambda km: encode_with_vocab(km, token2idx, unk_idx=1))
+    X_seq = pad(enc_seq, maxlen=maxlen).astype(np.int32)
+
+    # structure branch (optional)
     X_str = None
     if STRUCTURE:
         if struct_col is None:
-            raise ValueError("STRUCTURE=1 in artifacts but no structure column selected.")
+            raise ValueError("STRUCTURE=1 but no structure column was selected.")
         if not token2idx2:
-            raise ValueError("STRUCTURE=1 in artifacts but token2idx2 is empty.")
-        df["_kmer_str"] = df[struct_col].apply(lambda s: kmer_tokenize(s, K))
-        df["_enc_str"]  = df["_kmer_str"].apply(lambda km: encode_with_vocab(km, token2idx2))
-        X_str = pad_sequences(df["_enc_str"], maxlen=maxlen2)
+            raise ValueError("STRUCTURE=1 but token2idx2 is missing/empty in artifacts.")
+        kmers_str = df[struct_col].apply(lambda s: kmer_tokenize(s, K))
+        # often structure vocab is exact; drop unknowns rather than forcing UNK
+        enc_str = kmers_str.apply(lambda km: encode_with_vocab(km, token2idx2, unk_idx=None))
+        X_str = pad(enc_str, maxlen=maxlen2).astype(np.int32)
 
-    X_cat = encoder.transform(df[categorical_cols])
-    X_num = scaler.transform(df[numerical_cols].astype(float).fillna(0.0))
-    X_other = np.hstack([X_cat, X_num])
+    # tabular branch
+    for c in categorical_cols:
+        if c not in df.columns:
+            df[c] = "unknown"
+        df[c] = df[c].astype(str).fillna("unknown")
 
-    for c in ("_kmer_seq", "_enc_seq", "_kmer_str", "_enc_str"):
-        if c in df.columns:
-            del df[c]
+    for c in numerical_cols:
+        if c not in df.columns:
+            df[c] = 0.0
+
+    X_cat = encoder.transform(df[categorical_cols]) if categorical_cols else np.zeros((len(df), 0), dtype=np.float32)
+    X_num = scaler.transform(df[numerical_cols].astype(float).fillna(0.0)) if numerical_cols else np.zeros((len(df), 0), dtype=np.float32)
+    X_other = np.hstack([X_cat, X_num]).astype(np.float32)
 
     return X_seq, X_str, X_other, STRUCTURE
 
-############
-### main ###
-############
+def detect_task(model) -> str:
+    """
+    If last activation is sigmoid -> classification, else regression.
+    """
+    try:
+        act = getattr(model.layers[-1], "activation", None)
+        act_name = getattr(act, "__name__", None)
+    except Exception:
+        act_name = None
+    return "classification" if act_name == "sigmoid" else "regression"
 
-if __name__ == "__main__":
-    '''
+######################
+### prediction API ###
+######################
 
-    '''
+def run_cnn_prediction(
+    df: pd.DataFrame,
+    *,
+    model_type: str,           # "bin" | "reg"
+    folder: str,
+    data: str,
+    strain: str,
+    segment: str,
+    intersects: str,
+    name_mod: str,
+    model_choice: str = "final",
+    force_marked: Optional[bool] = None,
+    decision_threshold: float = 0.5,
+    # output columns
+    proba_col: str = "cnn_pred_proba",
+    class_col: str = "cnn_pred_class",
+    value_col: str = "cnn_pred_value",
+) -> pd.DataFrame:
+    """
+    Adds predictions to df and returns df (same object).
+      - bin: proba_col + class_col
+      - reg: value_col
 
-    #################
-    ### SELECTION ###
-    #################
-    
-    ### COMBINED MULTI ###
+    Does NOT save. You will add saving later.
+    """
+    if model_type not in {"bin", "reg"}:
+        raise ValueError("model_type must be 'bin' or 'reg'")
 
-    folder = 'pooled'
-    data      = "IAV"
-    strain    = "PR8"
-    segment   = "PB1"
-    intersects = "median"
-
-    model_type = "reg"
-
-    motif_length = K_MER_LENGTH
-    version      = "1"
-    NAME_MOD     = f"{version}_motif_length_{motif_length}"
-
-    model_choice = "final"
-    input_csv_name = None    # optional override filename
-
-    FORCE_MARKED = None
-
-    ### main ###
-
-    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
-    preprocess_root = ensure_preprocess_root(RESULTSPATH)
-
-    paths = build_paths_flipped(preprocess_root, model_type, folder, data, strain, segment, intersects, NAME_MOD)
-
-    if input_csv_name is None:
-        in_csv = os.path.join(paths["read_dir"], f"motif_length_{motif_length}.csv")
-    else:
-        in_csv = os.path.join(paths["read_dir"], input_csv_name)
-    if not os.path.isfile(in_csv):
-        raise FileNotFoundError(f"Input CSV not found: {in_csv}")
-
-    df = pd.read_csv(in_csv, keep_default_na=False, na_values=[])
-
-    artifacts, model, model_path = load_artifacts_and_model(
-        paths["preproc_path"], paths["best_path"], paths["final_path"], model_choice
+    paths = build_model_paths(
+        RESULTSPATH, model_type, folder, data, strain, segment, intersects, name_mod
     )
+    artifacts, model, model_path = load_artifacts_and_model(paths, model_choice=model_choice)
 
-    TASK = detect_task(model)
-    seq_col, struct_col = choose_sequence_columns(df, artifacts, force_marked=FORCE_MARKED)
-
+    seq_col, struct_col = choose_sequence_columns(df, artifacts, force_marked=force_marked)
     X_seq, X_str, X_other, STRUCTURE = assemble_features(df, artifacts, seq_col, struct_col)
 
     if STRUCTURE:
@@ -238,17 +281,129 @@ if __name__ == "__main__":
     else:
         y_pred = model.predict([X_seq, X_other], verbose=0).ravel()
 
-    out_col = "predicted_probability" if TASK == "classification" else "predicted_value"
-    if TASK == "classification":
-        y_pred = np.clip(y_pred, 0.0, 1.0)
-    df[out_col] = y_pred
+    task = detect_task(model)
 
-    base_name = os.path.splitext(os.path.basename(in_csv))[0]
-    out_csv = os.path.join(paths["write_dir"], f"{base_name}.csv")
-    df.to_csv(out_csv, index=False)
+    if model_type == "bin":
+        # be strict: classification output
+        y_pred = np.clip(y_pred.astype(float), 0.0, 1.0)
+        df[proba_col] = y_pred
+        df[class_col] = (y_pred >= float(decision_threshold)).astype(int)
+    else:
+        # regression
+        df[value_col] = y_pred.astype(float)
 
-    print(f"✔ Loaded model: {model_path}")
-    print(f"✔ Read from:    {in_csv}")
-    print(f"✔ Wrote to:     {out_csv}")
-    print(f"✔ Task:         {TASK} | STRUCTURE={STRUCTURE} | Columns: {seq_col}"
-          f"{' + ' + struct_col if STRUCTURE and struct_col else ''}")
+    # optional metadata columns (handy for debugging)
+    df["_cnn_model_path"] = model_path
+    df["_cnn_seq_col_used"] = seq_col
+    df["_cnn_structure_used"] = int(STRUCTURE)
+    df["_cnn_task_detected"] = task
+
+    return df
+
+##############################
+### example runner helpers ###
+##############################
+
+def run_prediction_on_loaded_dfs(
+    dfs: List[pd.DataFrame],
+    *,
+    model_type: str,
+    folder: str,
+    data: str,
+    strain: str,
+    segment: str,
+    intersects: str,
+    name_mod: str,
+    model_choice: str = "final",
+    force_marked: Optional[bool] = None,
+    decision_threshold: float = 0.5,
+) -> List[pd.DataFrame]:
+    """
+    Convenience wrapper that runs prediction on a list of dfs and returns updated list.
+    """
+    out = []
+    for df in dfs:
+        df = df.copy()
+        df = manage_specifiers(df, data, strain, segment)
+        df = run_cnn_prediction(
+            df,
+            model_type=model_type,
+            folder=folder,
+            data=data,
+            strain=strain,
+            segment=segment,
+            intersects=intersects,
+            name_mod=name_mod,
+            model_choice=model_choice,
+            force_marked=force_marked,
+            decision_threshold=decision_threshold,
+        )
+        out.append(df)
+    return out
+
+############
+### main ###
+############
+
+
+if __name__ == "__main__":
+    """
+
+    """
+
+    plt.style.use("seaborn")
+    plt.rc("font", size=12)
+
+    #################
+    ### SELECTION ###
+    #################
+
+    # pooled | unpooled
+    folder = "unpooled"
+
+    model_type = "reg"          # "bin" | "reg"
+    model_choice = "final"      # "best" | "final"
+
+    data = "IAV"
+    strain = "PR8"
+    segment = "PB1"
+    intersects = "median_global_0"
+
+    VERSION = "0"
+    NAME_MOD = f"{VERSION}_motif_length_{K_MER_LENGTH}"
+
+    # optional
+    FORCE_MARKED = None         # None=auto
+
+    #################
+    ### load data ###
+    #################
+
+    subfolder = "primary"
+    dfnames = PSEUDO_DATASETS
+    dfs = load_all_preprocessed(dfnames, "pseudo", subfolder)
+
+    ###################
+    ### run scripts ###
+    ###################
+
+    dfs_pred = run_prediction_on_loaded_dfs(
+        dfs,
+        model_type=model_type,
+        folder=folder,
+        data=data,
+        strain=strain,
+        segment=segment,
+        intersects=intersects,
+        name_mod=NAME_MOD,
+        model_choice=model_choice,
+        force_marked=FORCE_MARKED,
+        decision_threshold=DECISION_THRESHOLD,
+    )
+
+    for dfname, df in zip(dfnames, dfs_pred):
+        save_df(df, dfname, RESULTSPATH, "pseudo", f"{model_type}_prediction", data, strain, segment, intersects)
+
+    # quick sanity output
+    print("✔ CNN prediction finished")
+    print(f"✔ Updated {len(dfs_pred)} dataframes")

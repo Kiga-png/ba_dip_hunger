@@ -54,7 +54,7 @@ TOP_N = 10
 MAX_MOTIF_LENGTH = 6
 
 LOGARITHM = "log10"   # "none" | "log10" | "log2"
-NORMALIZATION = "robust"   # "none" | "min-max" | "z-score" | "robust" | "euclidean"
+NORMALIZATION = "none"   # "none" | "min-max" | "z-score" | "robust" | "euclidean"
 
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
 
@@ -70,6 +70,8 @@ IBV_DATASETS = ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018
 STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui", "BLEE", "Victoria", "Brisbane", "Yamagata"]
 SEGMENTS = list(["PB2", "PB1", "PA", "HA", "NP", "NA", "M", "NS"])
 NUCLEOTIDES = dict({"A": "Adenine", "C": "Cytosin", "G": "Guanine", "U": "Uracil"})
+
+PSEUDO_DATASETS = ['mono', 'motif', 'sequence']
 
 DATASET_STRAIN_DICT = dict({
     # H1N1
@@ -965,8 +967,6 @@ def get_dataset_names(cutoff: int=0, selection: str="")-> list:
         select_names = H5N1_DATASETS
     elif selection == "H7N9":
         select_names = H7N9_DATASETS
-    elif selection == "IBV":
-        select_names = IBV_DATASETS
     else:
         select_names = names
 
@@ -1588,6 +1588,8 @@ def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
     '''
     if data == 'all':
         pass
+    else:
+         df = df[df['type'] == data]
 
     if strain == 'all':
         pass
@@ -1779,6 +1781,56 @@ def add_metadata_features(dfnames: list, dfs: list) -> list:
 
     return updated_dfs
 
+def add_metadata_features_pseudo(dfs: list[pd.DataFrame]) -> list[pd.DataFrame]:
+    """
+    Add metadata columns to each df in `dfs` using per-row `dataset_name`.
+    `dataset_name` may vary within a single dataframe.
+    """
+    meta_fields = [
+        "system_type",
+        "host",
+        "library_layout",
+        "library_selection",
+        "library_source",
+        "subtype",
+        "type",
+    ]
+
+    # Build per-field lookup maps once
+    field_maps = {
+        field: {
+            ds_name: (meta.get(field, "unknown") if isinstance(meta, dict) else "unknown")
+            for ds_name, meta in METADATA_DICTS.items()
+        }
+        for field in meta_fields
+    }
+
+    updated_dfs = []
+    for df in dfs:
+        df = df.copy()
+
+        if "dataset_name" not in df.columns:
+            raise KeyError(
+                "Expected column 'dataset_name' in dataframe. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        ds = df["dataset_name"].astype("object")
+
+        for field in meta_fields:
+            mapped = ds.map(field_maps[field])
+
+            # Always end with a value; if dataset_name missing/unknown -> "unknown"
+            if field in df.columns:
+                df[field] = df[field].where(df[field].notna(), mapped)
+                df[field] = df[field].fillna("unknown")
+            else:
+                df[field] = mapped.fillna("unknown")
+
+        updated_dfs.append(df)
+
+    return updated_dfs
+
 ### intersects ###
 
 def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.DataFrame:
@@ -1823,6 +1875,12 @@ def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.
         df = median_by_ikey(df, feature_name)
         df = collapse_meta_features_by_ikey(df)
         df = df.drop_duplicates(subset=['ikey'], keep='first')
+    elif modifier == 'sum_global' or modifier == 'sum_dataset':
+        df = add_ikey(df)
+        df['count'] = df.groupby('ikey')['ikey'].transform('size')
+        df = sum_by_ikey(df, feature_name)
+        df = collapse_meta_features_by_ikey(df)
+        df = df.drop_duplicates(subset=['ikey'], keep='first')
     elif modifier == 'remove_global_metadata' or modifier == 'remove_dataset_metadata':
         df = add_metadata_ikey(df)
         df = remove_by_ikey(df, 1)
@@ -1838,8 +1896,14 @@ def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.
         df = median_by_ikey(df, feature_name)
         df = collapse_meta_features_by_ikey(df)
         df = df.drop_duplicates(subset=['ikey'], keep='first')
+    elif modifier == 'sum_global_metadata' or modifier == 'sum_dataset_metadata':
+        df = add_metadata_ikey(df)
+        df['count'] = df.groupby('ikey')['ikey'].transform('size')
+        df = sum_by_ikey(df, feature_name)
+        df = collapse_meta_features_by_ikey(df)
+        df = df.drop_duplicates(subset=['ikey'], keep='first')
     else:
-        print('unvalid intersects modifier')
+        print(f'unvalid intersects modifier: {modifier}')
         return
 
     df = df.drop(columns=['ikey'])
@@ -1914,79 +1978,18 @@ def median_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
 
     return df
 
-### pseudo (outdated) ###
-
-def set_intersect_proportion(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
-    '''
-
-    '''
-    count = required_pseudo_intersects_for_threshold(df, threshold)
-    if count >= 0:
-        df = add_pseudo_intersects(df, count)
-        print("pseudo candidates have been added")
-    else:
-        df = remove_intersects(df, abs(count))
-
-    return df
-
-def required_pseudo_intersects_for_threshold(df: pd.DataFrame, threshold: float) -> int:
+def sum_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
     '''
     
     '''
-    if 'ikey' not in df.columns:
-        raise ValueError("DataFrame must contain an 'ikey' column.")
-    if not (0 < threshold < 1):
-        raise ValueError("threshold must be a float between 0 and 1 (exclusive).")
-    
-    total_rows = len(df)
-    ikey_counts = df['ikey'].value_counts()
-    non_unique_count = ikey_counts[ikey_counts > 1].sum()
-
-    numerator = threshold * total_rows - non_unique_count
-    denominator = 1 - threshold
-    adjustment = numerator / denominator
-
-    return int(round(adjustment))
-
-def add_pseudo_intersects(df: pd.DataFrame, pseudo_count: int) -> pd.DataFrame:
-    '''
-    
-    '''
-    feature_name = 'norm_log_NGS_read_count'
-    
-    np.random.seed(SEED)
-    value_probs = df[feature_name].value_counts(normalize=True)
-    sampled_rows = df.sample(n=pseudo_count, replace=True, random_state=SEED).copy()
-
-    sampled_rows[feature_name] = np.random.choice(
-        value_probs.index, 
-        size=pseudo_count, 
-        p=value_probs.values
+    df = df.copy()
+    sum_values = df.groupby('ikey')[feature_name].transform(
+        lambda x: x.sum() if len(x) > 1 else x
     )
 
-    return pd.concat([df, sampled_rows], ignore_index=True)
-
-def remove_intersects(df: pd.DataFrame, remove_count: int) -> pd.DataFrame:
-    '''
+    df[feature_name] = sum_values
     
-    '''
-    if 'ikey' not in df.columns:
-        raise ValueError("DataFrame must contain an 'ikey' column.")
-
-    if remove_count <= 0:
-        return df.copy()
-
-    ikey_counts = df['ikey'].value_counts()
-    non_unique_ikeys = ikey_counts[ikey_counts > 1].index
-    non_unique_rows = df[df['ikey'].isin(non_unique_ikeys)]
-
-    if remove_count > len(non_unique_rows):
-        raise ValueError(f"cannot remove {remove_count} rows — only {len(non_unique_rows)} non-unique 'ikey' rows available.")
-
-    rows_to_remove = non_unique_rows.sample(n=remove_count, random_state=SEED)
-    df_cleaned = df.drop(index=rows_to_remove.index).reset_index(drop=True)
-
-    return df_cleaned
+    return df
 
 ### augment data ###
 
@@ -2301,25 +2304,25 @@ def add_intersect_ngs_features(
     '''
     feature_name = 'NGS_read_count'
 
-    new_dfs = []
+    # parse once
+    m = re.search(r'_(\d+)$', intersects)
+    cutoff = int(m.group(1)) if m else None
+    intersects_base = intersects[:m.start()] if m else intersects
 
+    # apply cutoff per df
+    new_dfs = []
     for df in dfs:
-        cutoff = None
-        m = re.search(r'_(\d+)$', intersects)
-        if m:
-            cutoff = int(m.group(1))
-            intersects = intersects[:m.start()]
+        if cutoff is not None:
             df = remove_by_ngs_cutoff(df, feature_name, cutoff)
         new_dfs.append(df)
-
     dfs = new_dfs
 
-    if 'dataset' in intersects:
+    if 'dataset' in intersects_base:
         updated_dfs = []
         learned = {}
 
         for i, df in enumerate(dfs):
-            df = manage_intersects(df, intersects, feature_name)
+            df = manage_intersects(df, intersects_base, feature_name)
 
             # pick dataset key (prefer dataset_name if it exists)
             if 'dataset_name' in df.columns and len(df) > 0:
@@ -2344,9 +2347,9 @@ def add_intersect_ngs_features(
 
         return final_df
 
-    if 'global' in intersects or 'all' in intersects:
+    if 'global' in intersects_base or 'all' in intersects_base:
         concat_df = pd.concat(dfs, ignore_index=True)
-        concat_df = manage_intersects(concat_df, intersects, feature_name)
+        concat_df = manage_intersects(concat_df, intersects_base, feature_name)
 
         if norm_params is None:
             concat_df, learned = add_ngs_features(concat_df, feature=feature_name, return_norm_params=True)
@@ -3718,7 +3721,11 @@ def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str,
         else:
             base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
 
-    suffix = f"{intersects_mod}-wise" if "dataset" in intersects_mod else intersects_mod
+    suffix = (
+        f"{intersects_mod}-wise"
+        if "dataset" in intersects_mod
+        else intersects_mod.replace(" metadata", "")
+    )
 
     if intersects_mod.endswith('metadata'):
         intersects_mod = intersects_mod[:-(len('metadata'))].rstrip()
@@ -3733,6 +3740,70 @@ def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str,
             descriptor = '\n' + base + f' with {suffix} intersects'
 
     return descriptor
+
+def make_pseudo_candidate_descriptor(pseudo_prefix: str, folder: str, data: str, strain: str, segment: str, intersects: str, cut_intersects: bool=False):
+    '''
+
+    '''
+    parts = []
+
+    intersects_mod = intersects.replace('_', ' ')
+
+    # extract trailing number (if present)
+    m = re.search(r'\s(\d+)$', intersects_mod)
+    cutoff = None
+    if m:
+        cutoff = m.group(1)
+        intersects_mod = intersects_mod[:m.start()].rstrip()
+
+    if data != 'all':
+        parts.append(data)
+
+    if strain != 'all':
+        parts.append(strain)
+
+    if segment != 'all':
+        parts.append(segment)
+
+    if folder != 'all':
+        if len(parts) == 0:
+            base = f'all candidates (cutoff≥{cutoff})'
+        else:
+            base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
+    else:
+        if len(parts) == 0:
+            base = f'all candidates (cutoff≥{cutoff})'
+        else:
+            base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
+
+    suffix = (
+        f"{intersects_mod}-wise"
+        if "dataset" in intersects_mod
+        else intersects_mod.replace(" metadata", "")
+    )
+
+    if intersects_mod.endswith('metadata'):
+        intersects_mod = intersects_mod[:-(len('metadata'))].rstrip()
+        if cut_intersects:
+            descriptor = '\n' + pseudo_prefix + ' ' + base + f' with metadata-intersects'
+        else:
+            descriptor = '\n' + pseudo_prefix + ' ' + base + f' with {suffix} metadata-intersects'
+    else:
+        if cut_intersects:
+            descriptor = '\n' + pseudo_prefix + ' ' + base + f' with intersects'
+        else:
+            descriptor = '\n' + pseudo_prefix + ' ' + base + f' with {suffix} intersects'
+
+    return descriptor
+
+def make_legend_descriptor(title: str) -> str:
+    """
+    Replace '_' with ' ' and convert 'dataset_name' -> 'dataset'.
+    """
+    if not isinstance(title, str):
+        return title
+
+    return title.replace("dataset_name", "dataset").replace("_", " ")
 
 ### color ###
 

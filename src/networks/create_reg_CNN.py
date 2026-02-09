@@ -11,7 +11,7 @@ from analysis.visuals import create_feature_residual_plot, create_feature_scatte
 from utils import reduce_rows, get_feature_modification_name, make_candidate_descriptor
 from utils import add_ikey, add_metadata_ikey, get_dataset_names, load_all_preprocessed, add_intersect_ngs_features, manage_separate_specifiers
 
-from utils import RESULTSPATH, DATASET_CUTOFF, SEED, TOP_N, DATASET_STRAIN_DICT
+from utils import RESULTSPATH, DATASET_CUTOFF, SEED, TOP_N, K_MER_LENGTH, DATASET_STRAIN_DICT
 from utils import COLORS, DECIMALS
 
 from sklearn.ensemble import RandomForestRegressor
@@ -65,16 +65,16 @@ MAX_NUMBER_TEST  = 100
 selector = 'dataset_name'
 
 folder = 'unpooled'
-subfolder = 'primary'
+subfolder = f'motif_length_{K_MER_LENGTH}'
 
 data = 'IAV'
 strain = 'PR8'
 segment = 'PB1'
-intersects = 'median_global_5'
-motif_length = 3
+intersects = 'median_global_0'
+motif_length = K_MER_LENGTH
 
 dfnames = get_dataset_names(DATASET_CUTOFF, data)
-dfnames = [dfnames[0]]
+# dfnames = [dfnames[0]]
 dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
 dfs = manage_separate_specifiers(dfs, data, strain, segment)
@@ -123,116 +123,29 @@ numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
 
 ### primary ###
 
-# repeats
-numerical_cols += [
-    "direct_repeat_length",
-]
+# numerical_cols += ["direct_repeat_length"]
+# numerical_cols += ["GC_content", "AU_content", "UpA_content", "CpG_content", "GC_skew"]
+# numerical_cols += ["sequence_entropy", "kmer_richness"]
+# numerical_cols += ["poly_U_max_run", "poly_U_tracts", "poly_A_max_run", "poly_A_tracts"]
+# numerical_cols += ["palindrome_density"]
 
-# nucleotide + dinucleotide composition
-numerical_cols += [
-    "GC_content",
-    "AU_content",
-    "UpA_content",
-    "CpG_content",
-    "GC_skew",
-]
-
-# entropy / complexity
-numerical_cols += [
-    "sequence_entropy",
-    "kmer_richness",
-]
-
-# homopolymers
-numerical_cols += [
-    "poly_U_max_run",
-    "poly_U_tracts",
-    "poly_A_max_run",
-    "poly_A_tracts",
-]
-
-# motif-like patterns
-numerical_cols += [
-    "palindrome_density",
-]
 
 ### secondary ###
 
-# energy
-numerical_cols += [
-    "MFE",
-]
+# numerical_cols += ["MFE"]
+# numerical_cols += ["bp_count", "bp_density", "unpaired_count", "unpaired_density", "external_unpaired_density"]
+# numerical_cols += ["stem_count", "stem_len_max", "stem_len_mean", "stem_len_min"]
+# numerical_cols += ["hairpin_count", "hairpin_size_mean", "hairpin_size_min", "hairpin_size_max"]
+# numerical_cols += ["pair_span_mean", "pair_span_min", "pair_span_max"]
+# numerical_cols += ["free_5prime_len", "free_3prime_len"]
 
-# pairing (global)
-numerical_cols += [
-    "bp_count",
-    "bp_density",
-    "unpaired_count",
-    "unpaired_density",
-    "external_unpaired_density",
-]
-
-# stems
-numerical_cols += [
-    "stem_count",
-    "stem_len_max",
-    "stem_len_mean",
-    "stem_len_min",
-]
-
-# hairpins
-numerical_cols += [
-    "hairpin_count",
-    "hairpin_size_mean",
-    "hairpin_size_min",
-    "hairpin_size_max",
-]
-
-# pair span
-numerical_cols += [
-    "pair_span_mean",
-    "pair_span_min",
-    "pair_span_max",
-]
-
-# free ends
-numerical_cols += [
-    "free_5prime_len",
-    "free_3prime_len",
-]
 
 ### hybrid ###
 
-# GC by context
-numerical_cols += [
-    "GC_overall",
-    "GC_paired",
-    "GC_unpaired",
-]
-
-# pair-type counts
-numerical_cols += [
-    "pair_GC_count",
-    "pair_AU_count",
-    "pair_GU_count",
-    "pair_noncanon_count",
-]
-
-# pair-type contents
-numerical_cols += [
-    "pair_GC_content",
-    "pair_AU_content",
-    "pair_GU_content",
-    "pair_noncanon_content",
-]
-
-# local contexts (stem ends / hairpin closing)
-numerical_cols += [
-    "stem_end_GC_content",
-    "stem_end_AU_content",
-    "hairpin_close_GC_content",
-    "hairpin_close_AU_content",
-]
+# numerical_cols += ["GC_overall", "GC_paired", "GC_unpaired"]
+# numerical_cols += ["pair_GC_count", "pair_AU_count", "pair_GU_count", "pair_noncanon_count"]
+# numerical_cols += ["pair_GC_content", "pair_AU_content", "pair_GU_content", "pair_noncanon_content"]
+# numerical_cols += ["stem_end_GC_content", "stem_end_AU_content", "hairpin_close_GC_content", "hairpin_close_AU_content"]
 
 ### extra features ###
 extra_cols = [
@@ -902,7 +815,9 @@ create_feature_scatter_plot(
     show_rolling_median=False,
     rolling_window=50,
     show_identity_line=True,
-    reg_metrics=True,
+    pseudo_prefix="",
+    show_decision_threshold=0.0,
+    reg_metrics=False,
     huber_delta=0.0,
     fname=f"{NAME_MOD}_prediction",
     path="reg_network",
@@ -921,7 +836,7 @@ print(f"\n✔ R² residual plot saved")
 ### density (train, test) ###
 ### density (train, test) ###
 create_multi_density_plot(
-    plot_name="NGS read count distribution via KDE (testing) - scatter plot",
+    plot_name="NGS read count distribution via KDE (testing) - density plot",
     df_list=[df_train, df_test],
     df_names=["train", "test"],
     x_feature_name="norm_log_NGS_read_count",
@@ -1194,13 +1109,13 @@ df_eval_meta = df_test.iloc[idx_eval].copy()
 start_med_tok = np.nan
 end_med_tok = np.nan
 
-start_med_tok = float(np.nanmedian(df_eval_meta["start"].astype(float).to_numpy())) // KMER_SIZE
+start_med_tok = float(np.nanmedian(df_eval_meta["start"].astype(float).to_numpy())) // KMER_STEP
 if MARKED:
-    end_med_tok = float(np.nanmedian(df_eval_meta["end"].astype(float).to_numpy()))   // KMER_SIZE
+    end_med_tok = float(np.nanmedian(df_eval_meta["end"].astype(float).to_numpy()))   // KMER_STEP
     start_label = f"start median ({int(start_med_tok)})"
     end_label = f"end median ({int(end_med_tok)})"
 else:
-    end_med_tok = float(np.nanmedian(df_eval_meta["5_end_length"].astype(float).to_numpy() + df_eval_meta["3_end_length"].astype(float).to_numpy()))   // KMER_SIZE
+    end_med_tok = float(np.nanmedian(df_eval_meta["5_end_length"].astype(float).to_numpy() + df_eval_meta["3_end_length"].astype(float).to_numpy()))   // KMER_STEP
     start_label = f"deletion site median ({int(start_med_tok)})"
     end_label = f"padding start median ({int(end_med_tok)})"
 

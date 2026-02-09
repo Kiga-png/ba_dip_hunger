@@ -6,7 +6,7 @@ import pandas as pd
 
 sys.path.insert(0, "..")
 
-from analysis.visuals import create_multi_density_plot, create_feature_roc_auc_plot, create_feature_pr_auc_plot
+from analysis.visuals import create_multi_density_plot, create_feature_roc_auc_plot, create_feature_pr_auc_plot, create_prediction_probability_density_plot, create_feature_scatter_plot
 
 from analysis.visuals import POOLED_THRESHOLD, UNPOOLED_THRESHOLD
 
@@ -14,7 +14,7 @@ from utils import balance_by_threshold, reduce_rows, get_feature_modification_na
 from utils import add_ikey, add_metadata_ikey, get_dataset_names, load_all_preprocessed, add_intersect_ngs_features, manage_separate_specifiers
 from utils import make_candidate_descriptor
 
-from utils import RESULTSPATH, DATASET_CUTOFF, SEED, TOP_N, DATASET_STRAIN_DICT
+from utils import RESULTSPATH, DATASET_CUTOFF, SEED, TOP_N, K_MER_LENGTH, DATASET_STRAIN_DICT
 from utils import COLORS, DECIMALS
 
 from sklearn.metrics import roc_auc_score, precision_recall_curve, average_precision_score, f1_score
@@ -68,16 +68,16 @@ MAX_NUMBER_TEST  = 100
 selector = 'dataset_name'
 
 folder = 'unpooled'
-subfolder = 'primary'
+subfolder = f'motif_length_{K_MER_LENGTH}'
 
 data = 'IAV'
 strain = 'PR8'
 segment = 'PB1'
-intersects = 'median_global_5'
-motif_length = 3
+intersects = 'median_global_0'
+motif_length = K_MER_LENGTH
 
 dfnames = get_dataset_names(DATASET_CUTOFF, data)
-dfnames = [dfnames[0]]
+# dfnames = [dfnames[0]]
 dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
 dfs = manage_separate_specifiers(dfs, data, strain, segment)
@@ -88,7 +88,7 @@ categorical_cols = []
 # only for multi segment selection!
 # categorical_cols += ["segment"]
 
-# only for multi strain/subtype/type selection! only use one! strain recommended (most distinct)
+# only for multi segment/strain/subtype/type selection! only use one! strain recommended (most distinct)
 # categorical_cols += ["strain"]
 # categorical_cols += ["subtype"]
 # categorical_cols += ["type"]
@@ -118,116 +118,29 @@ numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
 
 ### primary ###
 
-# repeats
-numerical_cols += [
-    "direct_repeat_length",
-]
+# numerical_cols += ["direct_repeat_length"]
+# numerical_cols += ["GC_content", "AU_content", "UpA_content", "CpG_content", "GC_skew"]
+# numerical_cols += ["sequence_entropy", "kmer_richness"]
+# numerical_cols += ["poly_U_max_run", "poly_U_tracts", "poly_A_max_run", "poly_A_tracts"]
+# numerical_cols += ["palindrome_density"]
 
-# nucleotide + dinucleotide composition
-numerical_cols += [
-    "GC_content",
-    "AU_content",
-    "UpA_content",
-    "CpG_content",
-    "GC_skew",
-]
-
-# entropy / complexity
-numerical_cols += [
-    "sequence_entropy",
-    "kmer_richness",
-]
-
-# homopolymers
-numerical_cols += [
-    "poly_U_max_run",
-    "poly_U_tracts",
-    "poly_A_max_run",
-    "poly_A_tracts",
-]
-
-# motif-like patterns
-numerical_cols += [
-    "palindrome_density",
-]
 
 ### secondary ###
 
-# energy
-numerical_cols += [
-    "MFE",
-]
+# numerical_cols += ["MFE"]
+# numerical_cols += ["bp_count", "bp_density", "unpaired_count", "unpaired_density", "external_unpaired_density"]
+# numerical_cols += ["stem_count", "stem_len_max", "stem_len_mean", "stem_len_min"]
+# numerical_cols += ["hairpin_count", "hairpin_size_mean", "hairpin_size_min", "hairpin_size_max"]
+# numerical_cols += ["pair_span_mean", "pair_span_min", "pair_span_max"]
+# numerical_cols += ["free_5prime_len", "free_3prime_len"]
 
-# pairing (global)
-numerical_cols += [
-    "bp_count",
-    "bp_density",
-    "unpaired_count",
-    "unpaired_density",
-    "external_unpaired_density",
-]
-
-# stems
-numerical_cols += [
-    "stem_count",
-    "stem_len_max",
-    "stem_len_mean",
-    "stem_len_min",
-]
-
-# hairpins
-numerical_cols += [
-    "hairpin_count",
-    "hairpin_size_mean",
-    "hairpin_size_min",
-    "hairpin_size_max",
-]
-
-# pair span
-numerical_cols += [
-    "pair_span_mean",
-    "pair_span_min",
-    "pair_span_max",
-]
-
-# free ends
-numerical_cols += [
-    "free_5prime_len",
-    "free_3prime_len",
-]
 
 ### hybrid ###
 
-# GC by context
-numerical_cols += [
-    "GC_overall",
-    "GC_paired",
-    "GC_unpaired",
-]
-
-# pair-type counts
-numerical_cols += [
-    "pair_GC_count",
-    "pair_AU_count",
-    "pair_GU_count",
-    "pair_noncanon_count",
-]
-
-# pair-type contents
-numerical_cols += [
-    "pair_GC_content",
-    "pair_AU_content",
-    "pair_GU_content",
-    "pair_noncanon_content",
-]
-
-# local contexts (stem ends / hairpin closing)
-numerical_cols += [
-    "stem_end_GC_content",
-    "stem_end_AU_content",
-    "hairpin_close_GC_content",
-    "hairpin_close_AU_content",
-]
+# numerical_cols += ["GC_overall", "GC_paired", "GC_unpaired"]
+# numerical_cols += ["pair_GC_count", "pair_AU_count", "pair_GU_count", "pair_noncanon_count"]
+# numerical_cols += ["pair_GC_content", "pair_AU_content", "pair_GU_content", "pair_noncanon_content"]
+# numerical_cols += ["stem_end_GC_content", "stem_end_AU_content", "hairpin_close_GC_content", "hairpin_close_AU_content"]
 
 ### extra features ###
 extra_cols = [
@@ -952,11 +865,57 @@ create_feature_roc_auc_plot(
 
 print(f"✔ test ROC-AUC curve saved")
 
+create_prediction_probability_density_plot(
+    plot_name="bin. CNN: predicted probabilty distribution via KDE (testing) - density plot",
+    df=df_test_proba,
+    x_feature_name="y_proba",
+    x_axis_name="predicted probabilty for high NGS read count",
+    decision_threshold=D_THRESHOLD,
+    fname=f"{NAME_MOD}_pred_prob",
+    path="bin_network",
+    folder=folder,
+    subfolder="visuals",
+    data=data,
+    strain=strain,
+    segment=segment,
+    intersects=intersects,
+)
+
+### scatter plot (test)  ###
+create_feature_scatter_plot(
+    plot_name="bin. CNN: predicted probabilty as a function of true NGS read count (testing) - scatter plot",
+    df=df_test_proba,
+    x_feature_name="norm_log_NGS_read_count",
+    x_axis_name=f"{modification} NGS count (reads)",
+    y_feature_name="y_proba",
+    y_axis_name="predicted probabilty for high NGS read count",
+    selector=selector,
+    show_rolling_median=False,
+    rolling_window=50,
+    show_identity_line=False,
+    pseudo_prefix="",
+    show_decision_threshold=D_THRESHOLD,
+    reg_metrics=False,
+    huber_delta=0.0,
+    fname=f"{NAME_MOD}_prediction",
+    path="bin_network",
+    folder=folder,
+    subfolder="visuals",
+    data=data,
+    strain=strain,
+    segment=segment,
+    intersects=intersects,
+)
+
+print("✔ prediction scatter plot saved")
+
+print(f"✔ test prediction density curve saved")
+
 ### density (train, test) ###
 create_multi_density_plot(
-    plot_name="NGS read count distribution via KDE (testing) - scatter plot",
+    plot_name="NGS read count distribution via KDE (testing) - density plot",
     df_list=[df_train, df_test],
-    df_names=["train", "test"],
+    df_names=["training", "test"],
     x_feature_name="norm_log_NGS_read_count",
     x_axis_name=f"{modification} NGS count (reads)",
     fname=f"{NAME_MOD}_density",
@@ -1104,7 +1063,7 @@ plot_df = imp_perm.head(TOP_N).iloc[::-1]
 title_name = f'bin. CNN: feature importance via permuation occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
-title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={D_THRESHOLD})'
+title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (decision_threshold={D_THRESHOLD})'
 
 plt.figure(figsize=(10, 6))
 plt.barh(plot_df["feature"], plot_df["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
@@ -1125,7 +1084,7 @@ plot_df = imp_zero.head(TOP_N).iloc[::-1]
 title_name = f'bin. CNN: feature importance via zero occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
-title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={D_THRESHOLD})'
+title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (decision_threshold={D_THRESHOLD})'
 
 plt.figure(figsize=(10, 6))
 plt.barh(plot_df["feature"], plot_df["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
@@ -1194,20 +1153,20 @@ y_drop = seq_imp_df["pr_auc_drop"].to_numpy()
 title_name = f'bin. CNN: sequence importance (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) via window occlusion (testing) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
-title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={D_THRESHOLD})'
+title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (decision_threshold={D_THRESHOLD})'
 
 df_eval_meta = df_test.iloc[idx_eval].copy()
 
 start_med_tok = np.nan
 end_med_tok = np.nan
 
-start_med_tok = float(np.nanmedian(df_eval_meta["start"].astype(float).to_numpy())) // KMER_SIZE
+start_med_tok = float(np.nanmedian(df_eval_meta["start"].astype(float).to_numpy())) // KMER_STEP
 if MARKED:
-    end_med_tok = float(np.nanmedian(df_eval_meta["end"].astype(float).to_numpy()))   // KMER_SIZE
+    end_med_tok = float(np.nanmedian(df_eval_meta["end"].astype(float).to_numpy()))   // KMER_STEP
     start_label = f"start median ({int(start_med_tok)})"
     end_label = f"end median ({int(end_med_tok)})"
 else:
-    end_med_tok = float(np.nanmedian(df_eval_meta["5_end_length"].astype(float).to_numpy() + df_eval_meta["3_end_length"].astype(float).to_numpy()))   // KMER_SIZE
+    end_med_tok = float(np.nanmedian(df_eval_meta["5_end_length"].astype(float).to_numpy() + df_eval_meta["3_end_length"].astype(float).to_numpy()))   // KMER_STEP
     start_label = f"deletion site median ({int(start_med_tok)})"
     end_label = f"padding start median ({int(end_med_tok)})"
 
@@ -1260,7 +1219,7 @@ top_windows = top_windows.sort_values("pr_auc_drop", ascending=True)
 title_name = f'bin. CNN: sequence importance (window={SEQ_OCC_WINDOW}, stride={SEQ_OCC_STRIDE}) via window occlusion (testing) - bar plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n={eval_n})'
-title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (threshold={D_THRESHOLD})'
+title_name += f'\nROC-AUC={base_roc_s}, PR-AUC={base_perm_s}, F1={base_f1_s} (decision_threshold={D_THRESHOLD})'
 
 plt.figure(figsize=(10, 6))
 plt.barh(top_windows["window"], top_windows["pr_auc_drop"], color=COLORS[6], edgecolor="white", linewidth=1)
