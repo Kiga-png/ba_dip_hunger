@@ -89,7 +89,7 @@ order of features:
     seg, start, end, NGS_read_count,
     AN, Time, Localization, Resolution, Cells, MOI, Host,
     key, strain,
-    dataset_name, system_type, library_layout,
+    dataset, system_type, library_layout,
     library_selection, library_source, subtype
     + (full_seq_override) if needed
 """
@@ -144,12 +144,20 @@ def preprocess_primary_features(dfnames: list, dfs: list, folder: str):
     '''
 
     '''
+    updated_dfs = []
     if folder == 'pseudo':
         dfs = add_metadata_features_pseudo(dfs)
+        updated_dfs = dfs
     else:
         dfs = add_metadata_features(dfnames, dfs)
+        for df in dfs:
+            df = rename_feature(df, 'Segment', 'segment')
+            df = rename_feature(df, 'Strain', 'strain')
+            df = rename_feature(df, 'Start', 'start')
+            df = rename_feature(df, 'End', 'end')
+            updated_dfs.append(df)
 
-    for dfname, df in zip(dfnames, dfs):
+    for dfname, df in zip(dfnames, updated_dfs):
         save_primary_features(df, dfname, folder, 'primary')
 
 ### secondary features ###
@@ -180,8 +188,9 @@ def preprocess_modify_features(folder: str, subfolder: str):
     dfnames = get_dataset_names(DATASET_CUTOFF)
     dfs = load_all_preprocessed(dfnames, folder, subfolder)
     for dfname, df in zip(dfnames, dfs):
-        df = rename_feature(df, 'marked_dvg_sequence', 'marked_DelVG_sequence')
+        df = rename_feature(df, 'dataset_name', 'dataset')
         save_df(df, dfname, RESULTSPATH, folder, subfolder)
+        print(f'{dfname} done')
 
 ###############
 ### general ###
@@ -380,7 +389,7 @@ if __name__ == '__main__':
 
     ### BASE ###
 
-    # folder = 'unpooled'
+    # folder = 'pooled'
 
     # dfnames = get_dataset_names(DATASET_CUTOFF)
 
@@ -392,25 +401,17 @@ if __name__ == '__main__':
     # dfnames = [dfnames[index]]
     # dfs = [dfs[index]]
 
-    ### DATASETS SINGLE ###
+    ### DATASETS SINGLE/MULTI/PSEUDO ###
 
-    # folder = 'unpooled'
-    # subfolder = 'primary'
-
-    # dfnames = get_dataset_names(DATASET_CUTOFF)
-
-    # index based or name based
-    # index = 0
-    # dfnames = [dfnames[index]]
-    # dfnames = ['mono', 'motif', 'sequence']
-    # dfs = load_all_preprocessed(dfnames, folder, subfolder)
-    
-    ### DATASETS MULTI ###
-
-    folder = 'unpooled'
+    folder = 'pseudo'
     subfolder = 'primary'
 
-    dfnames = get_dataset_names(DATASET_CUTOFF)
+    # dfnames = get_dataset_names(DATASET_CUTOFF)
+    dfnames = ['mono', 'motif', 'sequence']
+
+    # index = 0
+    # dfnames = [dfnames[index]]
+
     dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
     ###################

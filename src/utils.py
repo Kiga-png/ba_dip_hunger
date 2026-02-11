@@ -28,10 +28,10 @@ from sklearn.linear_model import LinearRegression
 
 ### STATIC VALUES ###
 # load config and assign values to global variables
-# DATAPATH = "/home/erikl/ubudocuments/ba_dip_hunger/data"
-DATAPATH = "/home/eriklinushunger/ba_dip_hunger/data"
-# RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
-RESULTSPATH = "/home/eriklinushunger/ba_dip_hunger/results"
+DATAPATH = "/home/erikl/ubudocuments/ba_dip_hunger/data"
+# DATAPATH = "/home/eriklinushunger/ba_dip_hunger/data"
+RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
+# RESULTSPATH = "/home/eriklinushunger/ba_dip_hunger/results"
 
 # segments, nucleotides, and strains
 CMAP = "Accent"
@@ -67,11 +67,22 @@ H7N9_DATASETS = ['Lui2019']
 IAV_DATASETS = H1N1_DATASETS + H3N2_DATASETS + H5N1_DATASETS + H7N9_DATASETS
 IBV_DATASETS = ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018", "Berry2021_B_Yam", "Southgate2019","Valesano2020_Yam"]
 
+DATASETS = IAV_DATASETS + IBV_DATASETS
 STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui", "BLEE", "Victoria", "Brisbane", "Yamagata"]
 SEGMENTS = list(["PB2", "PB1", "PA", "HA", "NP", "NA", "M", "NS"])
 NUCLEOTIDES = dict({"A": "Adenine", "C": "Cytosin", "G": "Guanine", "U": "Uracil"})
 
 PSEUDO_DATASETS = ['mono', 'motif', 'sequence']
+
+THRESHOLD_SPLIT_DICT = {
+    ("unpooled", "IAV", "PR8", "all", "median_dataset_5"): 0.60,
+    
+}
+
+THRESHOLD_DEC_DICT = {
+    ("unpooled", "IAV", "PR8", "all", "median_dataset_5"): 0.60,
+    
+}
 
 DATASET_STRAIN_DICT = dict({
     # H1N1
@@ -160,7 +171,7 @@ ACCNUMDICT = dict({
         "SRR15720527": dict({"Replicate": "d22", "Cells": "A549", "Localization:": "extracellular", "Resolution": "bulk", "Time": "48", "MOI": "unknown", "Host:": "human"})
     }),
     "Pelz2021": dict({
-        "SRR15084925": dict({"Time": "seed", "Localization:": "unknown", "Cells": "unknown", "Resolution": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "unknown"}),
+        "SRR15084925": dict({"Time": "seed", "Localization:": "unknown", "Cells": "unknown", "Resolution": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
         "SRR15084924": dict({"Time": "12", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
         "SRR15084913": dict({"Time": "24", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
         "SRR15084908": dict({"Time": "34", "Cells": "MDCK", "Localization:": "extracellular", "Resolution": "bulk", "Multi-timepoint": True, "MOI": "unknown", "Replicate": "unknown", "Host:": "dog"}),
@@ -363,46 +374,46 @@ ACCNUMDICT = dict({
         "ERR4566037": dict({"Cells": "WI38", "Time": "48", "Replicate": "2", "Localization:": "intracellular", "Resolution": "singlecell", "MOI": "unknown", "Host:": "human"})
     }),
     "Berry2021_A": dict({
-        "SRR15182178": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15182177": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15182176": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15182175": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15182174": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15182173": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15182172": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15182171": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"})
+        "SRR15182178": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15182177": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15182176": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15182175": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15182174": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15182173": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15182172": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15182171": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"})
     }),
     "Berry2021_B": dict({
-        "SRR15183345": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15183344": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15183352": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15183353": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196408": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196409": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196410": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196411": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "5-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196412": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "5-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196413": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196414": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "6-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196415": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "6-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196416": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "7-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196417": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "7-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196419": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "9-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196418": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "8-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196420": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "9-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196421": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "8-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196422": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "10-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196423": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "10-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196424": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "11-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15196425": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "11-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"})
+        "SRR15183345": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15183344": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15183352": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15183353": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196408": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196409": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196410": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196411": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "5-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196412": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "5-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196413": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "4-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196414": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "6-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196415": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "6-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196416": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "7-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196417": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "7-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196419": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "9-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196418": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "8-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196420": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "9-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196421": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "8-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196422": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "10-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196423": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "10-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196424": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "11-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15196425": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "11-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"})
     }),
     "Berry2021_B_Yam": dict({
-        "SRR15183338": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15183343": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15183342": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15183341": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15183340": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"}),
-        "SRR15183339": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "unknown"})
+        "SRR15183338": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15183343": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15183342": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "3-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15183341": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "1-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15183340": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-2", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"}),
+        "SRR15183339": dict({"Localization:": "extracellular", "Resolution": "bulk", "Replicate": "2-1", "Cells": "unknown", "Time": "unknown", "MOI": "unknown", "Host:": "human"})
     }),
     "Valesano2020_Vic": dict({
         "SRR10013092": dict({"Cells": "unknown", "Localization:": "extracellular", "Resolution": "bulk", "Time": "unknown", "MOI": "unknown", "Replicate": "unknown", "Host:": "human"}),
@@ -735,170 +746,32 @@ SEGMENT_DICTS = dict({
     })
 })
 
-METADATA_DICTS = dict({
-    "Alnaji2019_BLEE": dict({
+METADATA_DICTS = {
+
+    # 0
+    "Alnaji2021": {
         "system_type": "in_vitro",
         "host": "dog",
-        "library_layout": "paired",
-        "library_selection": "RT-PCR",
-        "library_source": "viral_RNA",
-        "subtype": "IBV",
-        "type": "IBV",
-    }),
-    "Alnaji2019_Cal07": dict({
-        "system_type": "in_vitro",
-        "host": "dog",
-        "library_layout": "paired",
-        "library_selection": "RT-PCR",
-        "library_source": "viral_RNA",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Alnaji2019_NC": dict({
-        "system_type": "in_vitro",
-        "host": "dog",
-        "library_layout": "paired",
-        "library_selection": "RT-PCR",
-        "library_source": "viral_RNA",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Alnaji2021": dict({
-        "system_type": "in_vitro",
-        "host": "unknown",
         "library_layout": "paired",
         "library_selection": "PCR",
         "library_source": "genomic",
         "subtype": "H1N1",
         "type": "IAV",
-    }),
-    "Amorim2013": dict({
+    },
+
+    # 1
+    "Pelz2021": {
         "system_type": "in_vitro",
-        "host": "unknown",
-        "library_layout": "paired",
-        "library_selection": "PCR",
-        "library_source": "viral_RNA",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Boon2011": dict({
-        "system_type": "in_vivo",
-        "host": "mouse",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Chua2023": dict({
-        "system_type": "in_vivo",
-        "host": "human",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H3N2",
-        "type": "IAV",
-    }),
-    "Hutchinson2010": dict({
-        "system_type": "in_vitro",
-        "host": "unknown",
-        "library_layout": "paired",
-        "library_selection": "PCR",
-        "library_source": "viral_RNA",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Khan2021": dict({
-        "system_type": "in_vivo",
-        "host": "human",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Klein2023": dict({
-        "system_type": "in_vivo",
-        "host": "human",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Kuo2017": dict({
-        "system_type": "in_vitro",
-        "host": "unknown",
-        "library_layout": "paired",
-        "library_selection": "PCR",
-        "library_source": "viral_RNA",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Lui2019": dict({
-        "system_type": "in_vivo",
-        "host": "mouse",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Pelz2021": dict({
-        "system_type": "in_vitro",
-        "host": "unknown",
+        "host": "dog",
         "library_layout": "paired",
         "library_selection": "PCR",
         "library_source": "genomic",
         "subtype": "H1N1",
         "type": "IAV",
-    }),
-    "Penn2022": dict({
-        "system_type": "in_vivo",
-        "host": "mouse",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Russell2018": dict({
-        "system_type": "in_vitro",
-        "host": "unknown",
-        "library_layout": "paired",
-        "library_selection": "PCR",
-        "library_source": "viral_RNA",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Southgate2019": dict({
-        "system_type": "in_vivo",
-        "host": "human",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Valesano2020": dict({
-        "system_type": "in_vivo",
-        "host": "human",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Wang2020": dict({
-        "system_type": "in_vitro",
-        "host": "human",
-        "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
-        "subtype": "H1N1",
-        "type": "IAV",
-    }),
-    "Wang2023": dict({
+    },
+
+    # 2
+    "Wang2023": {
         "system_type": "in_vivo",
         "host": "mouse",
         "library_layout": "paired",
@@ -906,8 +779,21 @@ METADATA_DICTS = dict({
         "library_source": "genomic",
         "subtype": "H1N1",
         "type": "IAV",
-    }),
-    "Zhuravlev2020": dict({
+    },
+
+    # 3
+    "Wang2020": {
+        "system_type": "in_vitro",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "cDNA",
+        "library_source": "transcriptomic",
+        "subtype": "H1N1",
+        "type": "IAV",
+    },
+
+    # 4
+    "Zhuravlev2020": {
         "system_type": "in_vitro",
         "host": "human",
         "library_layout": "single",
@@ -915,26 +801,195 @@ METADATA_DICTS = dict({
         "library_source": "transcriptomic",
         "subtype": "H1N1",
         "type": "IAV",
-    }),
-    "Zhu2021": dict({
-        "system_type": "in_vivo",
+    },
+
+    # 5
+    "Kupke2020": {
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "PolyA & PCR",
+        "library_source": "unknown",
+        "subtype": "H1N1",
+        "type": "IAV",
+    },
+
+    # 6
+    "VdHoecke2015": {
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    },
+
+    # 7
+    "Alnaji2019_Cal07": {
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    },
+
+    # 8
+    "Alnaji2019_NC": {
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H1N1",
+        "type": "IAV",
+    },
+
+    # 9
+    "Mendes2021": {
+        "system_type": "in_vitro",
         "host": "human",
         "library_layout": "paired",
         "library_selection": "cDNA",
         "library_source": "transcriptomic",
         "subtype": "H1N1",
         "type": "IAV",
-    }),
-    "Zost2021": dict({
+    },
+
+    # 10
+    "Boussier2020": {
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "unknown",
+        "library_source": "unknown",
+        "subtype": "H1N1",
+        "type": "IAV",
+    },
+
+    # 11
+    "Alnaji2019_Perth": {
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "H3N2",
+        "type": "IAV",
+    },
+
+    # 12
+    "Berry2021_A": {
         "system_type": "in_vivo",
         "host": "human",
         "library_layout": "paired",
-        "library_selection": "cDNA",
-        "library_source": "transcriptomic",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
         "subtype": "H3N2",
         "type": "IAV",
-    }),
-})
+    },
+
+    # 13
+    "Penn2022": {
+        "system_type": "in_vivo",
+        "host": "mouse",
+        "library_layout": "paired",
+        "library_selection": "WGA",
+        "library_source": "viral_RNA",
+        "subtype": "H5N1",
+        "type": "IAV",
+    },
+
+    # 14
+    "Lui2019": {
+        "system_type": "in_vivo",
+        "host": "mouse",
+        "library_layout": "single_and_paired",
+        "library_selection": "unknown",
+        "library_source": "unknown",
+        "subtype": "H7N9",
+        "type": "IAV",
+    },
+
+    # 15
+    "Alnaji2019_BLEE": {
+        "system_type": "in_vitro",
+        "host": "dog",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "IBV",
+        "type": "IBV",
+    },
+
+    # 16
+    "Berry2021_B": {
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "IBV",
+        "type": "IBV",
+    },
+
+    # 17
+    "Valesano2020_Vic": {
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "IBV",
+        "type": "IBV",
+    },
+
+    # 18
+    "Sheng2018": {
+        "system_type": "in_vitro",
+        "host": "human",
+        "library_layout": "single",
+        "library_selection": "PolyA",
+        "library_source": "transcriptomic",
+        "subtype": "IBV",
+        "type": "IBV",
+    },
+
+    # 19
+    "Berry2021_B_Yam": {
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "IBV",
+        "type": "IBV",
+    },
+
+    # 20
+    "Southgate2019": {
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "unknown",
+        "subtype": "IBV",
+        "type": "IBV",
+    },
+
+    # 21
+    "Valesano2020_Yam": {
+        "system_type": "in_vivo",
+        "host": "human",
+        "library_layout": "paired",
+        "library_selection": "RT-PCR",
+        "library_source": "viral_RNA",
+        "subtype": "IBV",
+        "type": "IBV",
+    },
+}
 
 ### FUNCTIONS ###
 
@@ -1589,7 +1644,7 @@ def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
     if data == 'all':
         pass
     else:
-         df = df[df['type'] == data]
+        df = df[df['type'] == data]
 
     if strain == 'all':
         pass
@@ -1749,33 +1804,32 @@ def add_dataset_keys(dfs):
     return updated_dfs
 
 def add_metadata_features(dfnames: list, dfs: list) -> list:
-    '''
-
-    '''
+    """
+    Add metadata columns to each df based on its dfname (dataset key) using METADATA_DICTS.
+    Fails loudly if metadata for any dataset is missing.
+    """
     updated_dfs = []
+
     for dfname, df in zip(dfnames, dfs):
+        if dfname not in METADATA_DICTS:
+            print(f"[ERROR] No metadata found for dataset: '{dfname}'")
+            print("Available metadata keys:")
+            for k in METADATA_DICTS.keys():
+                print(f"  - {k}")
+            return
+
+        meta = METADATA_DICTS[dfname]
+
         df = df.copy()
-        df['dataset_name'] = dfname
+        df["dataset"] = dfname
 
-        meta = METADATA_DICTS.get(dfname, None)
-        if meta is None:
-            meta = dict({
-                "system_type": "unknown",
-                "host": "unknown",
-                "library_layout": "unknown",
-                "library_selection": "unknown",
-                "library_source": "unknown",
-                "subtype": "unknown",
-                "type": "unknown",
-            })
-
-        df['system_type'] = meta['system_type']
-        df['host'] = meta['host']
-        df['library_layout'] = meta['library_layout']
-        df['library_selection'] = meta['library_selection']
-        df['library_source'] = meta['library_source']
-        df['subtype'] = meta['subtype']
-        df['type'] = meta['type']
+        df["system_type"] = meta["system_type"]
+        df["host"] = meta["host"]
+        df["library_layout"] = meta["library_layout"]
+        df["library_selection"] = meta["library_selection"]
+        df["library_source"] = meta["library_source"]
+        df["subtype"] = meta["subtype"]
+        df["type"] = meta["type"]
 
         updated_dfs.append(df)
 
@@ -1783,8 +1837,8 @@ def add_metadata_features(dfnames: list, dfs: list) -> list:
 
 def add_metadata_features_pseudo(dfs: list[pd.DataFrame]) -> list[pd.DataFrame]:
     """
-    Add metadata columns to each df in `dfs` using per-row `dataset_name`.
-    `dataset_name` may vary within a single dataframe.
+    Add metadata columns to each df in `dfs` using per-row `dataset`.
+    `dataset` may vary within a single dataframe.
     """
     meta_fields = [
         "system_type",
@@ -1809,18 +1863,18 @@ def add_metadata_features_pseudo(dfs: list[pd.DataFrame]) -> list[pd.DataFrame]:
     for df in dfs:
         df = df.copy()
 
-        if "dataset_name" not in df.columns:
+        if "dataset" not in df.columns:
             raise KeyError(
-                "Expected column 'dataset_name' in dataframe. "
+                "Expected column 'dataset' in dataframe. "
                 f"Available columns: {list(df.columns)}"
             )
 
-        ds = df["dataset_name"].astype("object")
+        ds = df["dataset"].astype("object")
 
         for field in meta_fields:
             mapped = ds.map(field_maps[field])
 
-            # Always end with a value; if dataset_name missing/unknown -> "unknown"
+            # Always end with a value; if dataset missing/unknown -> "unknown"
             if field in df.columns:
                 df[field] = df[field].where(df[field].notna(), mapped)
                 df[field] = df[field].fillna("unknown")
@@ -1835,9 +1889,10 @@ def add_metadata_features_pseudo(dfs: list[pd.DataFrame]) -> list[pd.DataFrame]:
 
 def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.DataFrame:
     meta_features = [
-        'system_type', 'cell_system', 'host'
+        'system_type', 'cell_system', 'host',
         'localization', 'resolution', 'time_point', 'MOI',
         "library_layout", "library_selection", "library_source",
+        "dataset"
     ]
 
     def collapse_meta_features_by_ikey(df: pd.DataFrame) -> pd.DataFrame:
@@ -2079,7 +2134,6 @@ def remove_by_ngs_cutoff(df: pd.DataFrame, feature_name: str, cutoff: int):
     df = df[df[feature_name] >= cutoff]
     return df
 
-# better idea?
 def add_feature_quantile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int=RANK_THRESHOLD):
     """
 
@@ -2324,9 +2378,9 @@ def add_intersect_ngs_features(
         for i, df in enumerate(dfs):
             df = manage_intersects(df, intersects_base, feature_name)
 
-            # pick dataset key (prefer dataset_name if it exists)
-            if 'dataset_name' in df.columns and len(df) > 0:
-                dkey = str(df['dataset_name'].iloc[0])
+            # pick dataset key (prefer dataset if it exists)
+            if 'dataset' in df.columns and len(df) > 0:
+                dkey = str(df['dataset'].iloc[0])
             else:
                 dkey = str(i)
 
@@ -2361,6 +2415,16 @@ def add_intersect_ngs_features(
             return concat_df, learned
 
         return concat_df
+
+def get_threshold(dict: str, folder: str, data: str, strain: str, segment: str, intersects: str, default=0.00):
+    '''
+
+    '''
+    if dict == 'split':
+        return THRESHOLD_SPLIT_DICT.get((folder, data, strain, segment, intersects), default)
+    if dict == 'dec':
+        return THRESHOLD_DEC_DICT.get((folder, data, strain, segment, intersects), default)
+    print("unvalid modifiers")
 
 ################
 ### features ###
@@ -3698,7 +3762,7 @@ def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str,
     m = re.search(r'\s(\d+)$', intersects_mod)
     cutoff = None
     if m:
-        cutoff = m.group(1)
+        cutoff = int(m.group(1))
         intersects_mod = intersects_mod[:m.start()].rstrip()
 
     if data != 'all':
@@ -3710,16 +3774,18 @@ def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str,
     if segment != 'all':
         parts.append(segment)
 
+    cutoff_str = f' (cutoff≥{cutoff})' if cutoff >= 2 else ''
+
     if folder != 'all':
         if len(parts) == 0:
-            base = f'all candidates (cutoff≥{cutoff})'
+            base = f'all {folder} candidates{cutoff_str}'
         else:
-            base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
+            base = f'{folder} candidates{cutoff_str} from ' + '-'.join(parts)
     else:
         if len(parts) == 0:
-            base = f'all candidates (cutoff≥{cutoff})'
+            base = f'all candidates{cutoff_str}'
         else:
-            base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
+            base = f'candidates{cutoff_str} from ' + '-'.join(parts)
 
     suffix = (
         f"{intersects_mod}-wise"
@@ -3753,7 +3819,7 @@ def make_pseudo_candidate_descriptor(pseudo_prefix: str, folder: str, data: str,
     m = re.search(r'\s(\d+)$', intersects_mod)
     cutoff = None
     if m:
-        cutoff = m.group(1)
+        cutoff = int(m.group(1))
         intersects_mod = intersects_mod[:m.start()].rstrip()
 
     if data != 'all':
@@ -3765,16 +3831,18 @@ def make_pseudo_candidate_descriptor(pseudo_prefix: str, folder: str, data: str,
     if segment != 'all':
         parts.append(segment)
 
+    cutoff_str = f' (cutoff≥{cutoff})' if cutoff >= 2 else ''
+
     if folder != 'all':
         if len(parts) == 0:
-            base = f'all candidates (cutoff≥{cutoff})'
+            base = f'all candidates{cutoff_str}'
         else:
-            base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
+            base = f'candidates{cutoff_str} from ' + '-'.join(parts)
     else:
         if len(parts) == 0:
-            base = f'all candidates (cutoff≥{cutoff})'
+            base = f'all candidates{cutoff_str}'
         else:
-            base = f'candidates (cutoff≥{cutoff}) from ' + '-'.join(parts)
+            base = f'candidates{cutoff_str} from ' + '-'.join(parts)
 
     suffix = (
         f"{intersects_mod}-wise"
@@ -3798,12 +3866,12 @@ def make_pseudo_candidate_descriptor(pseudo_prefix: str, folder: str, data: str,
 
 def make_legend_descriptor(title: str) -> str:
     """
-    Replace '_' with ' ' and convert 'dataset_name' -> 'dataset'.
+    Replace '_' with ' ' and convert 'dataset' -> 'dataset'.
     """
     if not isinstance(title, str):
         return title
 
-    return title.replace("dataset_name", "dataset").replace("_", " ")
+    return title.replace("dataset", "dataset").replace("_", " ")
 
 ### color ###
 

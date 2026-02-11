@@ -12,9 +12,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, "..")
 
 from utils import RESULTSPATH, DATASET_CUTOFF, PSEUDO_DATASETS, K_MER_LENGTH
-from utils import get_dataset_names, load_all_preprocessed, manage_specifiers, save_df
-
-from analysis.visuals import DECISION_THRESHOLD
+from utils import get_dataset_names, load_all_preprocessed, manage_specifiers, save_df, get_threshold
 
 from tensorflow.keras.models import load_model
 from tensorflow.keras import preprocessing as keras_preproc
@@ -361,7 +359,7 @@ if __name__ == "__main__":
     # pooled | unpooled
     folder = "unpooled"
 
-    model_type = "reg"          # "bin" | "reg"
+    model_type = "bin"          # "bin" | "reg"
     model_choice = "final"      # "best" | "final"
 
     data = "IAV"
@@ -398,7 +396,7 @@ if __name__ == "__main__":
         name_mod=NAME_MOD,
         model_choice=model_choice,
         force_marked=FORCE_MARKED,
-        decision_threshold=DECISION_THRESHOLD,
+        decision_threshold=get_threshold('dec', folder, data, strain, segment, intersects),
     )
 
     for dfname, df in zip(dfnames, dfs_pred):

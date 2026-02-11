@@ -54,27 +54,26 @@ MAX_NUMBER = 25000
 BEST_MODEL = 0   # 0 | 1
 
 # occlussion and SHAP
-MAX_NUMBER_TRAIN = 100
-MAX_NUMBER_TEST  = 100
+MAX_NUMBER_TRAIN = 500
+MAX_NUMBER_TEST  = 500
 
 ###########
 ### CNN ###
 ###########
 
 ### load & save ###
-selector = 'dataset_name'
+selector = 'dataset'
 
 folder = 'unpooled'
 subfolder = f'motif_length_{K_MER_LENGTH}'
 
 data = 'IAV'
 strain = 'PR8'
-segment = 'PB1'
-intersects = 'median_global_0'
+segment = 'PB2'
+intersects = 'median_dataset_0'
 motif_length = K_MER_LENGTH
 
 dfnames = get_dataset_names(DATASET_CUTOFF, data)
-# dfnames = [dfnames[0]]
 dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
 dfs = manage_separate_specifiers(dfs, data, strain, segment)
@@ -103,27 +102,19 @@ categorical_cols += ['system_type', 'host']
 # categorical_cols += ["site1_motif", "site2_motif", "site3_motif", "site4_motif"]
 
 # use with datset intersects
-# categorical_cols += ["dataset_name"]
+# categorical_cols += ["dataset"]
 
 ### numerical features ###
 numerical_cols = []
 
 # length information (choose one group, because of redundant information)
-numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
-# second group
-# numerical_cols += ["start", "end", "full_seq_length"]
-
-### numerical features ###
-numerical_cols = []
-
-# length information (choose one group, because of redundant information)
-numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
+# numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
 # second group
 # numerical_cols += ["start", "end", "full_seq_length"]
 
 ### primary ###
 
-# numerical_cols += ["direct_repeat_length"]
+numerical_cols += ["direct_repeat_length"]
 # numerical_cols += ["GC_content", "AU_content", "UpA_content", "CpG_content", "GC_skew"]
 # numerical_cols += ["sequence_entropy", "kmer_richness"]
 # numerical_cols += ["poly_U_max_run", "poly_U_tracts", "poly_A_max_run", "poly_A_tracts"]
@@ -133,23 +124,16 @@ numerical_cols += ["deletion_length", "5_end_length", "3_end_length"]
 ### secondary ###
 
 # numerical_cols += ["MFE"]
-# numerical_cols += ["bp_count", "bp_density", "unpaired_count", "unpaired_density", "external_unpaired_density"]
-# numerical_cols += ["stem_count", "stem_len_max", "stem_len_mean", "stem_len_min"]
-# numerical_cols += ["hairpin_count", "hairpin_size_mean", "hairpin_size_min", "hairpin_size_max"]
-# numerical_cols += ["pair_span_mean", "pair_span_min", "pair_span_max"]
+# numerical_cols += ["bp_count", "unpaired_count"]
+# numerical_cols += ["bp_density", "unpaired_density"]
+# numerical_cols += ["external_unpaired_density"]
+# numerical_cols += ["stem_count"]
+# numerical_cols += ["hairpin_count"]
 # numerical_cols += ["free_5prime_len", "free_3prime_len"]
-
-
-### hybrid ###
-
-# numerical_cols += ["GC_overall", "GC_paired", "GC_unpaired"]
-# numerical_cols += ["pair_GC_count", "pair_AU_count", "pair_GU_count", "pair_noncanon_count"]
-# numerical_cols += ["pair_GC_content", "pair_AU_content", "pair_GU_content", "pair_noncanon_content"]
-# numerical_cols += ["stem_end_GC_content", "stem_end_AU_content", "hairpin_close_GC_content", "hairpin_close_AU_content"]
 
 ### extra features ###
 extra_cols = [
-    "dataset_name",
+    "dataset",
     "norm_log_NGS_read_count",
     "marked_DelVG_sequence",
     "DelVG_sequence",
@@ -192,7 +176,7 @@ def _add_split_ikey(df: pd.DataFrame, intersects: str) -> pd.DataFrame:
 
     # dataset-wise uniqueness: treat same sequence in different datasets as different candidates
     if 'dataset' in intersects:
-        df['ikey'] = df['dataset_name'].astype(str) + '|' + df['ikey'].astype(str)
+        df['ikey'] = df['dataset'].astype(str) + '|' + df['ikey'].astype(str)
 
     return df
 
@@ -477,7 +461,7 @@ dense = layers.Dense(
     activation='relu',
     kernel_regularizer=tf.keras.regularizers.l2(1e-4)
 )(concat)
-dense = layers.Dropout(0.5)(dense)
+dense = layers.Dropout(0.1)(dense)
 output = layers.Dense(1, activation='linear')(dense)
 
 model = models.Model(inputs=inputs, outputs=output)
@@ -512,16 +496,13 @@ checkpoint_cb = callbacks.ModelCheckpoint(
 early_cb = callbacks.EarlyStopping(
     monitor="val_loss",
     mode="min",
-    patience=2,
+    patience=6,
     restore_best_weights=True
 )
 
-### sample weights (count) ###
-w_fit = df_fit["count"].to_numpy().astype(np.float32) if "count" in df_fit.columns else np.ones(len(df_fit), dtype=np.float32)
-w_val = df_val["count"].to_numpy().astype(np.float32) if "count" in df_val.columns else np.ones(len(df_val), dtype=np.float32)
-
-w_fit = w_fit / (np.mean(w_fit) + 1e-12)
-w_val = w_val / (np.mean(w_val) + 1e-12)
+### sample weights (disabled for diagnostics) ###
+w_fit = np.ones(len(df_fit), dtype=np.float32)
+w_val = np.ones(len(df_val), dtype=np.float32)
 
 ### train ###
 if STRUCTURE:
@@ -803,6 +784,8 @@ create_feature_residual_plot(
     intersects=intersects
 )
 
+print(f"\n✔ residual plot saved")
+
 ### scatter plot (test)  ###
 create_feature_scatter_plot(
     plot_name="reg. CNN: prediction as a function of true NGS read count (testing) - scatter plot",
@@ -830,8 +813,6 @@ create_feature_scatter_plot(
 )
 
 print("✔ prediction scatter plot saved")
-
-print(f"\n✔ R² residual plot saved")
 
 ### density (train, test) ###
 ### density (train, test) ###
