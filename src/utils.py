@@ -33,6 +33,10 @@ DATAPATH = "/home/erikl/ubudocuments/ba_dip_hunger/data"
 RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
 # RESULTSPATH = "/home/eriklinushunger/ba_dip_hunger/results"
 
+# visuals
+SHOW_LEGEND = 0
+SHOW_TITLE = 0
+
 # segments, nucleotides, and strains
 CMAP = "Accent"
 CUTOFF = 15
@@ -48,13 +52,13 @@ MIN_TRACT_LENGTH = 6
 DIRECT_REPEAT_LENGTH_CAP = 5
 
 # do not split to high
-RANK_THRESHOLD = 20
+RANK_THRESHOLD = 10
 TOP_N = 10
 
 MAX_MOTIF_LENGTH = 6
 
-LOGARITHM = "log10"   # "none" | "log10" | "log2"
-NORMALIZATION = "none"   # "none" | "min-max" | "z-score" | "robust" | "euclidean"
+LOGARITHM = "$\log_{10}$"          # "none" | "$\log_{10}$" | "$\log_{2}$"
+NORMALIZATION = "none"             # "none" | "min-max" | "z-score" | "robust" | "euclidean"
 
 RESULTSPATH = os.path.join(RESULTSPATH, f"cutoff_{CUTOFF}")
 
@@ -68,6 +72,9 @@ IAV_DATASETS = H1N1_DATASETS + H3N2_DATASETS + H5N1_DATASETS + H7N9_DATASETS
 IBV_DATASETS = ["Alnaji2019_BLEE", "Berry2021_B", "Valesano2020_Vic", "Sheng2018", "Berry2021_B_Yam", "Southgate2019","Valesano2020_Yam"]
 
 DATASETS = IAV_DATASETS + IBV_DATASETS
+DIFF_DATASETS = {'Kupke2020', 'VdHoecke2015'}
+CLEAN_DATASETS = [d for d in DATASETS if d not in DIFF_DATASETS]
+
 STRAINS = ["PR8", "Cal07", "NC", "WSN_Mendes_rev", "WSN", "Perth", "Connecticut", "Turkey", "Anhui", "BLEE", "Victoria", "Brisbane", "Yamagata"]
 SEGMENTS = list(["PB2", "PB1", "PA", "HA", "NP", "NA", "M", "NS"])
 NUCLEOTIDES = dict({"A": "Adenine", "C": "Cytosin", "G": "Guanine", "U": "Uracil"})
@@ -75,13 +82,43 @@ NUCLEOTIDES = dict({"A": "Adenine", "C": "Cytosin", "G": "Guanine", "U": "Uracil
 PSEUDO_DATASETS = ['mono', 'motif', 'sequence']
 
 THRESHOLD_SPLIT_DICT = {
-    ("unpooled", "IAV", "PR8", "all", "median_dataset_5"): 0.60,
-    
+    ("pooled", "IAV", "all", "all", "mean_dataset_0"): 1.88,                       #  | 
+    ("pooled", "IAV", "PR8", "all", "mean_dataset_0"): 2.20,                       #  | 
+    ("pooled", "IAV", "PR8", "PB2", "mean_dataset_0"): 2.01,                       #  | 
+    ("pooled", "IAV", "PR8", "PB1", "mean_dataset_0"): 2.17,                       #  | 
+    ("pooled", "IAV", "PR8", "PA", "mean_dataset_0"): 3.13,                        #  | 
+    ("pooled", "IAV", "WSN_Mendes_rev", "PB2", "mean_dataset_0"): 3.36,            #  | 
+    ("pooled", "IAV", "WSN_Mendes_rev", "PB1", "mean_dataset_0"): 2.19,            #  | 
+    ("pooled", "IAV", "WSN_Mendes_rev", "PA", "mean_dataset_0"): 2.84,             #  | 
+    ("pooled", "IBV", "all", "all", "mean_dataset_0"): 1.88,                       #  | 
+    ("pooled", "IBV", "Yamagata", "PB2", "mean_dataset_0"): 1.92,                  #  | 
+    ("pooled", "IBV", "Yamagata", "PB1", "mean_dataset_0"): 2.22,                  #  | 
+    ("pooled", "IBV", "Yamagata", "PA", "mean_dataset_0"): 1.82,                   #  | 
+    ("pooled", "IBV", "Victoria", "PB2", "mean_dataset_0"): 2.35,                  #  | 
+    ("pooled", "IBV", "Victoria", "PB1", "mean_dataset_0"): 2.08,                  #  | 
+    ("pooled", "IBV", "Victoria", "PA", "mean_dataset_0"): 2.09,                   #  | 
+
+
+    ("unpooled", "IAV", "all", "all", "mean_dataset_0"): 0.41,                     #  | 
+    ("unpooled", "IAV", "PR8", "all", "mean_dataset_0"): 0.41,                     #  | 
+    ("unpooled", "IAV", "PR8", "PB2", "mean_dataset_0"): 0.43,                     #  | 
+    ("unpooled", "IAV", "PR8", "PB1", "mean_dataset_0"): 0.44,                     #  | 
+    ("unpooled", "IAV", "PR8", "PA", "mean_dataset_0"): 0.41,                      #  | 
+    ("unpooled", "IAV", "WSN_Mendes_rev", "PB2", "mean_dataset_0"): 0.56,          #  | 
+    ("unpooled", "IAV", "WSN_Mendes_rev", "PB1", "mean_dataset_0"): 0.59,          #  | 
+    ("unpooled", "IAV", "WSN_Mendes_rev", "PA", "mean_dataset_0"): 0.55,           #  | 
+    ("unpooled", "IBV", "all", "all", "mean_dataset_0"): 0.44,                     #  | 
+    ("unpooled", "IBV", "Yamagata", "PB2", "mean_dataset_0"): 0.50,                #  | 
+    ("unpooled", "IBV", "Yamagata", "PB1", "mean_dataset_0"): 0.55,                #  | 
+    ("unpooled", "IBV", "Yamagata", "PA", "mean_dataset_0"): 0.52,                 #  | 
+    ("unpooled", "IBV", "Victoria", "PB2", "mean_dataset_0"): 0.30,                #  | 
+    ("unpooled", "IBV", "Victoria", "PB1", "mean_dataset_0"): 0.30,                #  | 
+    ("unpooled", "IBV", "Victoria", "PA", "mean_dataset_0"): 0.31,                 #  | 
 }
 
 THRESHOLD_DEC_DICT = {
-    ("unpooled", "IAV", "PR8", "all", "median_dataset_5"): 0.60,
-    
+
+
 }
 
 DATASET_STRAIN_DICT = dict({
@@ -1022,6 +1059,8 @@ def get_dataset_names(cutoff: int=0, selection: str="")-> list:
         select_names = H5N1_DATASETS
     elif selection == "H7N9":
         select_names = H7N9_DATASETS
+    elif selection == "clean":
+        select_names = CLEAN_DATASETS
     else:
         select_names = names
 
@@ -2153,10 +2192,10 @@ def add_log_feature(df: pd.DataFrame, feature_name: str, new_name: str, log_type
     """
     if log_type == "none":
         df[new_name] = df[feature_name]
-    elif log_type == "log10":
-        df[new_name] = np.log10(df[feature_name] + 1)
-    elif log_type == "log2":
-        df[new_name] = np.log2(df[feature_name] + 1)
+    elif log_type == "$\log_{10}$":
+        df[new_name] = np.log10(df[feature_name])
+    elif log_type == "$\log_{2}$":
+        df[new_name] = np.log2(df[feature_name])
     else:
         raise ValueError(f"invalid log_type '{log_type}'. choose from 'none', 'log10', 'log2'.")
     return df
@@ -2241,6 +2280,36 @@ def reduce_rows(df: pd.DataFrame, target_number: int) -> pd.DataFrame:
 
     return df.sample(n=target_number, random_state=SEED).reset_index(drop=True)
 
+def get_official_strain_name(strain_code: str) -> str:
+    """
+    Convert internal strain code to official influenza strain name
+    (without subtype information).
+    """
+
+    mapping = {
+        # Influenza A
+        "PR8": "A/Puerto Rico/8/1934",
+        "Cal07": "A/California/07/2009",
+        "NC": "A/North Carolina/09/2009",
+        "WSN": "A/WSN/1933",
+        "WSN_Mendes_rev": "A/WSN/1933 (M)",
+        "Perth": "A/Perth/16/2009",
+        "Connecticut": "A/Connecticut/2010",
+        "Turkey": "A/Turkey/Ontario/7732/1966",
+        "Anhui": "A/Anhui/1/2013",
+
+        # Influenza B
+        "BLEE": "B/Lee/1940",
+        "Victoria": "B/Victoria/2/1987",
+        "Brisbane": "B/Brisbane/60/2008",
+        "Yamagata": "B/Yamagata/16/1988",
+    }
+
+    if strain_code not in mapping:
+        raise ValueError(f"Unknown strain code: {strain_code}")
+
+    return mapping[strain_code]
+
 ###########
 ### CNN ###
 ###########
@@ -2308,7 +2377,7 @@ def add_ngs_features(
     norm_type: str=NORMALIZATION,
     norm_params: Optional[tuple]=None,
     return_norm_params: bool=False,
-):
+    ):
     """
 
     """
@@ -2332,7 +2401,7 @@ def add_intersect_ngs_features(
     intersects: str,
     norm_params: Optional[Union[dict, tuple]]=None,
     return_norm_params: bool=False,
-):
+    ):
     '''
     concat/loop dataset dfs and apply:
 
@@ -3872,6 +3941,81 @@ def make_legend_descriptor(title: str) -> str:
         return title
 
     return title.replace("dataset", "dataset").replace("_", " ")
+
+def capitalize_first(s) -> str:
+    if s is None:
+        return s
+
+    s = str(s)
+    if not s:
+        return s
+
+    # ---- exact feature name mappings (case-insensitive) ----
+    mapping = {
+        "start": "Deletion start",
+        "end": "Deletion end",
+    }
+
+    s_lower = s.lower()
+    if s_lower in mapping:
+        return mapping[s_lower]
+
+    # ---- substring replacements for motif feature names ----
+    motif_mapping = {
+        "site1_motif": "Motif before deletion",
+        "site2_motif": "Deletion start motif",
+        "site3_motif": "Deletion end motif",
+        "site4_motif": "Motif after deletion",
+    }
+
+    for key, value in motif_mapping.items():
+        s = re.sub(key, value, s, flags=re.IGNORECASE)
+
+    # --- protect underscores for specific dataset IDs (ONLY in those exact substrings) ---
+    protected_ids = [
+        "Alnaji2019_Cal07",
+        "Alnaji2019_NC",
+        "Alnaji2019_Perth",
+        "Berry2021_A",
+        "Alnaji2019_BLEE",
+        "Berry2021_B",
+        "Valesano2020_Vic",
+        "Berry2021_B_Yam",
+        "Valesano2020_Yam",
+    ]
+
+    placeholders = {}
+    for i, pid in enumerate(protected_ids):
+        token = f"__PROTECTED_DATASET_{i}__"
+        placeholders[token] = pid
+        s = s.replace(pid, token)
+
+    # replace underscores with spaces
+    s = s.replace("_", " ")
+
+    # restore protected dataset ids
+    for token, pid in placeholders.items():
+        s = s.replace(token, pid)
+
+    # normalize kmer -> K-mer
+    s = re.sub(r"\bkmer\b", "K-mer", s, flags=re.IGNORECASE)
+
+    # replace bp -> BP
+    s = re.sub(r"\bbp\b", "BP", s, flags=re.IGNORECASE)
+
+    # replace len -> length
+    s = re.sub(r"\blen\b", "length", s, flags=re.IGNORECASE)
+
+    # replace standalone 3 or 5 with RNA prime + hyphen
+    s = re.sub(r"\b3\b", "3′-", s)
+    s = re.sub(r"\b5\b", "5′-", s)
+
+    # remove accidental space after 3′- or 5′-
+    s = s.replace("3′- ", "3′-")
+    s = s.replace("5′- ", "5′-")
+
+    # capitalize first character
+    return s[0].upper() + s[1:]
 
 ### color ###
 

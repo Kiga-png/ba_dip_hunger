@@ -167,21 +167,22 @@ def run_pseudo_candidate_dfs():
 def print_df_sizes(dfnames: list, dfs: list) -> int:
     """
     Print the number of rows for each DataFrame and the total number of rows.
+    Then concatenate all DataFrames and report row counts grouped by:
+      (1) strain x segment
+      (2) strain (all segments combined)
 
     Parameters
-    ----------
+    dfnames : list of str
+        Readable names corresponding to the DataFrames.
     dfs : list of pd.DataFrame
         DataFrames to summarize.
-    names : list of str
-        Human-readable names corresponding to the DataFrames.
 
     Returns
-    -------
     int
         Total number of rows across all DataFrames.
     """
     if len(dfs) != len(dfnames):
-        raise ValueError("dfs and names must have the same length.")
+        raise ValueError("dfs and dfnames must have the same length.")
 
     total_rows = 0
 
@@ -194,7 +195,67 @@ def print_df_sizes(dfnames: list, dfs: list) -> int:
     print("-" * 40)
     print(f"Total rows: {total_rows:,}")
 
+    if total_rows == 0:
+        print("\nNo rows available for grouping (all DataFrames empty).")
+        return total_rows
+
+    # sanity check required columns
+    required_cols = {"strain", "segment"}
+    missing = required_cols - set(dfs[0].columns)
+    # check across all dfs (more robust)
+    for i, df in enumerate(dfs):
+        miss_i = required_cols - set(df.columns)
+        if miss_i:
+            raise ValueError(f"Missing columns {miss_i} in dfs[{i}] needed for grouping.")
+
+    df_all = pd.concat(dfs, ignore_index=True)
+
+    # normalize types (avoid weird group keys)
+    df_all["strain"] = df_all["strain"].astype(str)
+    df_all["segment"] = df_all["segment"].astype(str)
+
+    # (1) strain x segment
+    comb_counts = (
+        df_all
+        .groupby(["strain", "segment"], dropna=False)
+        .size()
+        .reset_index(name="n_rows")
+        .sort_values(["strain", "segment"])
+    )
+
+    print("\nCounts by strain × segment:")
+    for _, r in comb_counts.iterrows():
+        print(f"  {r['strain']} | {r['segment']}: {int(r['n_rows']):,}")
+
+    # (2) strain totals (all segments summed)
+    strain_counts = (
+        df_all
+        .groupby(["strain"], dropna=False)
+        .size()
+        .reset_index(name="n_rows")
+        .sort_values("n_rows", ascending=False)
+    )
+
+    print("\nCounts by strain (all segments combined):")
+    for _, r in strain_counts.iterrows():
+        print(f"  {r['strain']}: {int(r['n_rows']):,}")
+
     return total_rows
+
+### percentage ###
+
+def print_percentage_of_value(df: pd.DataFrame, column: str, value) -> float:
+    """
+    Returns the percentage of rows in `column` that equal `value`.
+    """
+    total_rows = len(df)
+    if total_rows == 0:
+        print(0)
+    
+    count = (df[column] == value).sum()
+    percentage = (count / total_rows) * 100
+    
+    print(percentage)
 
 ###############
 ### general ###
@@ -479,10 +540,24 @@ if __name__ == "__main__":
     ### DATASETS MULTI ###
 
     folder = 'unpooled'   # pooled | unpooled
-    subfolder = f'motif_length_{K_MER_LENGTH}'   # primary | secondary | motif_length_{K_MER_LENGTH}
+    subfolder = 'secondary'   # primary | secondary | motif_length_{K_MER_LENGTH}
 
     dfnames = get_dataset_names(DATASET_CUTOFF)
     dfs = load_all_preprocessed(dfnames, folder, subfolder)
+
+    ### PREPROCESS ###
+
+    data = 'IAV'
+    strain = 'PR8'
+    segment = 'PB1'
+    intersects = 'mean_dataset_0'
+
+    dfs = manage_separate_specifiers(dfs, data, strain, segment)
+    df = add_intersect_ngs_features(dfs, intersects)
+    dfs = [df[df["dataset"] == name].copy() for name in dfnames]
+
+    feature = 'time_point'
+    value = 'unknown'
 
     ###################
     ### run scripts ###
@@ -490,6 +565,8 @@ if __name__ == "__main__":
 
     # run_strain_segment_statistics(dfs)
 
-    run_pseudo_candidate_dfs()
+    # run_pseudo_candidate_dfs()
 
     # print_df_sizes(dfnames, dfs)
+
+    print_percentage_of_value(df, feature, value)

@@ -1,6 +1,4 @@
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.12157646.svg)](https://doi.org/10.5281/zenodo.12157646)
-
-# DelVG meta study
+# Sequence Feature Analysis of Defective Viral Genomes in Influenza A and B Viruses to Identify Potential Antiviral Candidates
 This is the code for the analyses performed in the publication ().
 
 ## setup
