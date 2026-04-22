@@ -1,6 +1,11 @@
 '''
     Performs an analysis of the metadata of the datasets
 '''
+
+##########################
+### FROM META-ANALYSIS ###
+##########################
+
 import os
 import sys
 
@@ -29,7 +34,6 @@ def load_all_metadata(dfnames: list)-> list:
         dfs.append(df)
 
     return dfs
-
 
 def analyse_metadata(dfs: list, dfnames: list)-> None:
     '''
@@ -66,7 +70,6 @@ def analyse_metadata(dfs: list, dfnames: list)-> None:
     if not os.path.exists(save_path):
         os.makedirs(save_path)
     result_df.to_csv(os.path.join(save_path, "metadata.csv"), float_format="%.2f", index=False)
-
 
 def dataset_distributions(dfs: list, dfnames: list)-> None:
     '''

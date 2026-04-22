@@ -1,6 +1,7 @@
 '''
-
+    visualization for preprocessed datasets
 '''
+
 import os
 import sys
 import subprocess
@@ -16,8 +17,6 @@ from scipy import stats
 from scipy.interpolate import CubicSpline
 
 from scipy.stats import spearmanr
-
-from sklearn.metrics import r2_score
 from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, average_precision_score, f1_score
 
 import RNA
@@ -29,17 +28,17 @@ from utils import get_dataset_names
 from utils import load_all_preprocessed
 from utils import manage_separate_specifiers, clean_data_string, capitalize_first, get_official_strain_name
 from utils import rename_feature, split_by_threshold, add_feature_quantile_rank, get_feature_modification_name
-from utils import add_ikey, add_metadata_ikey, add_intersect_ngs_features, remove_by_ngs_cutoff, get_threshold
+from utils import add_ikey, add_metadata_ikey, add_intersect_ngs_features, remove_by_ngs_cutoff
 
 from utils import make_candidate_descriptor, make_pseudo_candidate_descriptor, make_legend_descriptor, pick_colors
 from utils import generate_motifs, add_site_motifs, add_lin_reg_rows, compute_full_seq_motif_freq_df
-from utils import compute_quantile_rank_count_df, compute_seq_feature_count_df, compute_feature_count_df, compute_feature_freq_df, subtract_freq_dfs
+from utils import compute_quantile_rank_count_df, compute_feature_count_df, compute_feature_freq_df, subtract_freq_dfs
 from utils import compute_feature_count_heatmap_df, compute_feature_count_heatmap_sum_df, compute_feature_freq_heatmap_df
 
 from utils import p_to_stars, fisher_exact_for_category, bh_fdr
 
-from utils import SHOW_LEGEND, SHOW_TITLE
-from utils import DATAPATH, RESULTSPATH, SEED, DATASET_CUTOFF, PSEUDO_DATASETS, DATASET_STRAIN_DICT, CUTOFF, STRAINS, SEGMENTS, DATASETS
+from utils import SHOW_LEGEND, SHOW_TITLE, LIM_AXES
+from utils import RESULTSPATH, SEED, DATASET_CUTOFF, PSEUDO_DATASETS, DATASET_STRAIN_DICT, CUTOFF, STRAINS, SEGMENTS, DATASETS
 from utils import COLORS, RANK_THRESHOLD, DECIMALS, TOP_N, K_MER_LENGTH, PALINDROMIC_K_MER_LENGTH, MIN_TRACT_LENGTH, DIRECT_REPEAT_LENGTH_CAP, MAX_MOTIF_LENGTH
 
 RESULTSPATH, _ = os.path.split(RESULTSPATH)
@@ -60,41 +59,40 @@ def run_site_motif_heatmap_analysis_len3_by_segment(
     strain: str,
     intersects: str
 ):
-    """
-    Runs site-motif heatmap analysis ONLY for motif_length=3, but separately per segment.
+    '''
+        Run motif-site heatmap analysis for motif length 3 separately for each segment.
+        :param dfs: list of input dataframes
+        :param top_n: number of top motifs to retain per motif site
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param intersects: intersect mode descriptor
 
-    - No `segment` argument.
-    - The merged/processed dataframe is split by `segment` column.
-    - Plots are produced for each segment independently.
-
-    Returns
-    -------
-    results : dict
-        Mapping: segment -> {"mean_freq_diffs": ..., "top_freq_diffs": ..., "delvg_count": int, "skipped_count": int}
-    """
-
+        :return: dictionary mapping each segment to summary statistics of the analysis
+    '''
+    # fix motif length to 3 and define readable names for the four motif sites
     motif_length = 3
     plot_names = ['motif before deletion', 'deletion start motif', 'deletion end motif', 'motif after deletion']
 
-    # Keep your existing selection/management logic for data + strain.
-    # NOTE: If manage_separate_specifiers REQUIRES a segment string, pass a sentinel like "all"
-    # and ensure it means "no segment filtering" in that function.
+    # select data for the requested data/strain combination without restricting segment
     dfs = manage_separate_specifiers(dfs, data, strain, segment="all")
 
+    # add intersect-based features and NGS quantile ranks
     df = add_intersect_ngs_features(dfs, intersects)
     df = add_feature_quantile_rank(df, 'norm_log_NGS_read_count', 'NGS_quantile_rank')
 
-    # Build motifs once (length=3) for the whole dataframe
+    # compute motif windows once for the whole dataframe
     df_copy = df.copy()
     motif_df, skipped_count = add_site_motifs(df_copy, motif_length)
     print(f'{skipped_count} candidates have been left out (motif_length=3)')
 
+    # ensure segment information is available for splitting
     if 'segment' not in motif_df.columns:
         raise KeyError("Expected column 'segment' in motif_df, but it was not found.")
 
     results = {}
 
-    # Split by segment and run the plot function per segment
+    # split dataframe by segment and run the heatmap workflow per segment
     segments = [s for s in pd.unique(motif_df['segment']) if pd.notna(s)]
     segments = sorted(segments, key=str)
 
@@ -102,9 +100,11 @@ def run_site_motif_heatmap_analysis_len3_by_segment(
         seg_df = motif_df.loc[motif_df['segment'] == seg].copy()
         delvg_count = seg_df.shape[0]
 
+        # skip empty segment subsets
         if delvg_count == 0:
             continue
 
+        # run detailed motif heatmap analysis for the current segment
         mean_freq_diffs, top_freq_diffs = make_site_motif_heatmap_analysis(
             seg_df,
             plot_names,
@@ -114,10 +114,11 @@ def run_site_motif_heatmap_analysis_len3_by_segment(
             folder,
             data,
             strain,
-            seg,          # <-- pass segment here for correct saving paths + descriptor
+            seg,
             intersects
         )
 
+        # store summary results for the current segment
         results[seg] = {
             "mean_freq_diffs": mean_freq_diffs,
             "top_freq_diffs": top_freq_diffs,
@@ -137,11 +138,18 @@ def run_site_motif_len3_per_segment(
     strain: str,
     intersects: str
 ):
-    """
-    Runs site motif frequency bar plots for motif_length=3
-    separately for each segment.
-    """
+    '''
+        Run motif-site frequency bar-plot analysis for motif length 3 separately for each segment.
+        :param dfs: list of input dataframes
+        :param top_n: number of top motifs to retain per motif site
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param intersects: intersect mode descriptor
 
+        :return: None
+    '''
+    # fix motif length to 3 and define readable names for the four motif sites
     motif_length = 3
     plot_names = [
         'motif before deletion',
@@ -150,30 +158,36 @@ def run_site_motif_len3_per_segment(
         'motif after deletion'
     ]
 
+    # select data for the requested data/strain combination without restricting segment
     dfs = manage_separate_specifiers(dfs, data, strain, segment="all")
 
+    # add intersect-based features and NGS quantile ranks
     df = add_intersect_ngs_features(dfs, intersects)
     df = add_feature_quantile_rank(df, 'norm_log_NGS_read_count', 'NGS_quantile_rank')
 
-    # --- Compute motifs once ---
+    # compute motif windows once for the whole dataframe
     df_copy = df.copy()
     motif_df, skipped_count = add_site_motifs(df_copy, motif_length)
     print(f'{skipped_count} candidates have been left out (motif_length=3)')
 
+    # ensure segment information is available for splitting
     if 'segment' not in motif_df.columns:
         raise KeyError("Column 'segment' not found in motif_df")
 
     segments = sorted(pd.unique(motif_df['segment']))
 
+    # split dataframe by segment and create bar plots per segment
     for seg in segments:
         seg_df = motif_df[motif_df['segment'] == seg].copy()
         delvg_count = seg_df.shape[0]
 
+        # skip empty segment subsets
         if delvg_count == 0:
             continue
 
         print(f'Processing segment {seg} (n={delvg_count})')
 
+        # create one bar plot for each of the four motif sites
         for i in range(4):
             site_counter = i + 1
 
@@ -194,7 +208,7 @@ def run_site_motif_len3_per_segment(
                 'bar',
                 data,
                 strain,
-                seg,                 # <-- segment-specific
+                seg,
                 intersects,
                 f'motif_length_{motif_length}'
             )
@@ -205,132 +219,227 @@ def run_site_motif_len3_per_segment(
 
 def run_site_motif_heatmap_analysis(dfs: list, top_n: int, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run the motif-site heatmap workflow across multiple motif lengths and summarize the results with spline plots.
+        :param dfs: list of input dataframes
+        :param top_n: number of top motifs to retain per motif site
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # define the maximum motif length to evaluate
     max_motif_length = MAX_MOTIF_LENGTH
 
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # add NGS quantile ranks used for motif heatmap analyses
     df = add_feature_quantile_rank(df, 'norm_log_NGS_read_count', 'NGS_quantile_rank')
     plot_names = ['motif before deletion', 'deletion start motif', 'deletion end motif', 'motif after deletion']
 
+    # initialize containers for summary statistics across motif lengths
     all_mean_freq_diffs = [[None for _ in range(max_motif_length)] for _ in range(4)]
     all_top_freq_diffs  = [[None for _ in range(max_motif_length)] for _ in range(4)]
     for motif_length in range(1, max_motif_length + 1):
+        # add site motifs of current length and track skipped candidates
         df_copy = df.copy()
         motif_df, skipped_count = add_site_motifs(df_copy, motif_length)
         print(f'{skipped_count} candidates have been left out')
         delvg_count = df_copy.shape[0]
+
+        # run detailed site-motif analysis for current motif length
         mean_freq_diffs, top_freq_diffs = make_site_motif_heatmap_analysis(motif_df, plot_names, delvg_count, motif_length, top_n, folder, data, strain, segment, intersects)
 
+        # store mean and top frequency differences for later spline plotting
         for i in range(0, 4):
             all_mean_freq_diffs[i][motif_length - 1] = mean_freq_diffs[i]
             all_top_freq_diffs[i][motif_length - 1] = top_freq_diffs[i]
 
         print(f'motif_length {motif_length} completed')
 
+    # create spline summary plot for mean frequency differences across motif lengths
     create_spline_plot(f'mean frequency difference (site - sequence) of motif lengths - spline plot', 'length of motifs (nts)', 'mean frequency difference (%)', plot_names, all_mean_freq_diffs, delvg_count, 'site_mean_freq_diff', folder, 'spline', data, strain, segment, intersects)
-    # create_spline_plot(f'top frequency difference (site - sequence) of motif lengths  - spline plot', 'length of motifs (nts)', 'top frequency difference (%)', plot_names, all_top_freq_diffs, delvg_count, 'site_top_freq_diff', folder, 'spline', data, strain, segment, intersects)
 
 def run_reg_site_motif_heatmap_analysis(dfs: list, top_n: int, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run the regression-style motif-site heatmap workflow across multiple motif lengths and summarize the results with spline plots.
+        :param dfs: list of input dataframes
+        :param top_n: number of top motifs to retain per motif site
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # define the maximum motif length to evaluate
     max_motif_length = MAX_MOTIF_LENGTH
 
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # add NGS quantile ranks used for motif heatmap analyses
     df = add_feature_quantile_rank(df, 'norm_log_NGS_read_count', 'NGS_quantile_rank')
     plot_names = ['motif before deletion', 'deletion start motif', 'deletion end motif', 'motif after deletion']
 
+    # initialize containers for coefficient summaries across motif lengths
     all_mean_coefficients = [[None for _ in range(max_motif_length)] for _ in range(4)]
     all_top_coefficients  = [[None for _ in range(max_motif_length)] for _ in range(4)]
     for motif_length in range(1, max_motif_length + 1):
+        # add site motifs of current length and track skipped candidates
         df_copy = df.copy()
         motif_df, skipped_count = add_site_motifs(df_copy, motif_length)
         print(f'{skipped_count} candidates have been left out')
         delvg_count = df_copy.shape[0]
+
+        # run regression-style site-motif analysis for current motif length
         mean_coefficients, top_coefficients = make_reg_site_motif_heatmap_analysis(motif_df, plot_names, delvg_count, motif_length, top_n, folder, data, strain, segment, intersects)
 
+        # store mean and top coefficients for later spline plotting
         for i in range(0, 4):
             all_mean_coefficients[i][motif_length - 1] = mean_coefficients[i]
             all_top_coefficients[i][motif_length - 1] = top_coefficients[i]
 
         print(f'motif_length {motif_length} completed')
 
+    # create spline summary plot for mean coefficients across motif lengths
     create_spline_plot(f'mean coefficient (regressive) for motif lengths - spline plot', 'length of motifs (nucleotides)', 'mean coefficient (-)', plot_names, all_mean_coefficients, delvg_count, 'site_mean_coefficients', folder, 'spline', data, strain, segment, intersects)
+
+    # create spline summary plot for top coefficients across motif lengths
     create_spline_plot(f'top coefficient (regressive) for motif lengths - spline plot', 'length of motifs (nucleotides)', 'top coefficient (-)', plot_names, all_top_coefficients, delvg_count, 'site_top_coefficients', folder, 'spline', data, strain, segment, intersects)
 
 def run_repeat_heatmap_analysis(dfs: list, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run the quantile-wise direct-repeat heatmap analysis for a selected subset.
+        :param dfs: list of input dataframes
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # add NGS quantile ranks used for heatmap analysis
     df = add_feature_quantile_rank(df, 'norm_log_NGS_read_count', 'NGS_quantile_rank')
     delvg_count = df.shape[0]
     heatmap_name = 'direct repeat length'
 
+    # create direct-repeat heatmap analysis
     make_repeat_heatmap_analysis(df, heatmap_name, delvg_count, folder, data, strain, segment, intersects)
 
 def run_mfe_heatmap_analysis(dfs: list, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run the quantile-wise MFE-rank heatmap analysis for a selected subset.
+        :param dfs: list of input dataframes
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # add NGS quantile ranks used for heatmap analysis
     df = add_feature_quantile_rank(df, 'norm_log_NGS_read_count', 'NGS_quantile_rank')
     delvg_count = df.shape[0]
     heatmap_name = 'MFE'
 
+    # create MFE heatmap analysis
     make_mfe_heatmap_analysis(df, heatmap_name, delvg_count, folder, data, strain, segment, intersects)
 
 ### density and histo ###
 
 def run_ngs_single_density_analysis(dfs: list, folder: str, data: str, strain: str, segment: str, intersects: str, show_quantiles: str, curvature: str):
     '''
+        Run a single-density KDE analysis of NGS read counts for a selected subset.
+        :param dfs: list of input dataframes
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param show_quantiles: whether selected quantile lines should be shown
+        :param curvature: side on which to compute the curvature-based elbow
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # get display modifier for NGS read count axis label
     modification = get_feature_modification_name()
 
     x_feature_name = 'norm_log_NGS_read_count'
     x_axis_name = f'{modification} NGS count (reads)'
 
+    # create single KDE density plot of NGS read counts
     create_single_density_plot('NGS read count distribution via KDE with statistical moments - density plot', df, x_feature_name, x_axis_name, show_quantiles, 'single_ngs', folder, 'density', data, strain, segment, intersects, curvature)
 
 def run_ngs_multi_density_analysis(dfs: list, selector: str, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run a grouped multi-density KDE analysis of NGS read counts split by a selector feature.
+        :param dfs: list of input dataframes
+        :param selector: feature used to split the data into multiple density curves
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # split dataframe by selector values into separate sub-dataframes
     split_values = sorted(df[selector].dropna().unique().tolist())
     dfs = [df[df[selector] == val].copy() for val in split_values]
     df_names = [str(val) for val in split_values]
 
+    # get display modifier for NGS read count axis label
     modification = get_feature_modification_name()
 
     x_feature_name = 'norm_log_NGS_read_count'
     x_axis_name = f'{modification} NGS count (reads)'
 
+    # create multi-density KDE plot across selector groups
     create_multi_density_plot(f'{selector}-wise NGS read count distribution via KDE - density plot', dfs, df_names, x_feature_name, x_axis_name, 'ngs_multi', "visuals", folder, 'density', data, strain, segment, intersects)
 
 def run_intersect_analysis(dfs: list, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run an intersection analysis across selected datasets and create a grouped intersection bar plot.
+        :param dfs: list of input dataframes
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
 
     feature_name = 'NGS_read_count'
 
+    # optionally apply NGS cutoff encoded in the intersects string
     new_dfs = []
 
     for df in dfs:
@@ -343,6 +452,7 @@ def run_intersect_analysis(dfs: list, folder: str, data: str, strain: str, segme
 
     dfs = new_dfs
 
+    # add intersection keys depending on whether metadata-based intersects are requested
     new_dfs = []
     for df in dfs:
         if 'metadata' in intersects:
@@ -354,6 +464,7 @@ def run_intersect_analysis(dfs: list, folder: str, data: str, strain: str, segme
     dfs = new_dfs
     df = pd.concat(dfs, ignore_index=True)
     
+    # choose grouping feature for the intersection plot depending on selection granularity
     if (data != 'all') and (strain != 'all') and (segment != 'all'):
         print('use at leats one non-all specifier')
         return
@@ -364,54 +475,87 @@ def run_intersect_analysis(dfs: list, folder: str, data: str, strain: str, segme
     else:
         y_feature_name = 'segment'
 
+    # create grouped intersection bar plot
     create_intersect_bar_plot(df, y_feature_name, 'intersects', folder, 'intersects', data, strain, segment, intersects)
 
 def run_pooling_intersect_analysis(selector: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run an intersection comparison between pooled and unpooled preprocessing results.
+        :param selector: feature used to group bars in the comparison plot
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # get dataset names for the selected data subset
     dfnames = get_dataset_names(DATASET_CUTOFF, data)
 
+    # load and prepare pooled data
     poo_dfs = load_all_preprocessed(dfnames, 'pooled', 'primary')
     poo_dfs = manage_separate_specifiers(poo_dfs, data, strain, segment)
     poo_df = add_intersect_ngs_features(poo_dfs, intersects)
     poo_df = add_ikey(poo_df)
     print('loaded pooled')
 
+    # load and prepare unpooled data
     unp_dfs = load_all_preprocessed(dfnames, 'unpooled', 'primary')
     unp_dfs = manage_separate_specifiers(unp_dfs, data, strain, segment)
     unp_df = add_intersect_ngs_features(unp_dfs, intersects)
     unp_df = add_ikey(unp_df)
     print('loaded unpooled')
 
-
+    # create pooled vs unpooled intersection comparison plot
     create_pooling_intersect_bar_plot(poo_df, unp_df, selector, selector, folder, 'intersects', data, strain, segment, intersects)
 
 def run_advandced_intersect_plot(dfs: list, selector: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run an advanced intersection comparison between a processed selection and raw unpooled data.
+        :param dfs: list of processed input dataframes
+        :param selector: feature used to group bars in the comparison plot
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
-
+    # restrict processed dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
     df = add_ikey(df)
 
+    # load corresponding raw unpooled data and add intersection keys
     dfs_raw = load_all_preprocessed(dfnames, 'unpooled', 'primary')
     df_raw = pd.concat(dfs_raw, ignore_index=True)
     df_raw = add_ikey(df_raw)
     print('loaded raw')
 
+    # create advanced processed-vs-raw intersection comparison plot
     create_advandced_intersect_plot(df, df_raw, selector, 'intersects', folder, 'intersects', data, strain, segment, intersects)
 
 ### bar, violin, scatter ###
 
 def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run the primary DelVG feature analysis workflow, including Spearman heatmaps, scatter plots, bar plots and violin plots.
+        :param dfs: list of input dataframes
+        :param selector: grouping feature used for coloring or grouping plots
+        :param top_n: number of top categories or motifs to retain where applicable
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # define primary numerical features and their plot labels
     num_features = [
         ("start", "deletion start position", "Deletion start (-)", "length"),
         ("end", "deletion end position", "Deletion end (-)", "length"),
@@ -440,24 +584,24 @@ def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder
 
         # ("palindrome_density", f"palindromic k-mer (k={PALINDROMIC_K_MER_LENGTH}) density", "density of palindromic k-mers (1/k-mer)", "motifs"),
 
-        # ("longest_ORF_len", "longest ORF length", "length of longest open reading frame (nucleotides)", "ORF"),
-        # ("ORF_count", "ORF count ≥20 AA", "number of ORFs at least 20 amino acids long", "ORF"),
-
         ("kmer_richness", f"k-mer (k={K_MER_LENGTH}) richness", "Unique k-mer content (1/k-mer)", "complexity"),
-        # ("codon_usage_entropy", "codon usage entropy", "Shannon entropy of codon usage", "codon"),
     ]
 
+    # get display modifier for NGS read count axis labels
     modification = get_feature_modification_name()
 
     x_feature_name = 'norm_log_NGS_read_count'
     x_axis_name = f'{modification} NGS count (reads)'
 
+    # collect primary feature names for the Spearman heatmap
     num_feature_names = [f[0] for f in num_features]
 
+    # create dataset-/strain-/segment-wise Spearman heatmap for primary features
     make_spearman_heatmap_analysis(df, folder, selector, num_feature_names, 'Primary', data, strain, segment, intersects)
 
     print(f'spearman made successfully')
 
+    # create scatter plots for all numerical primary features
     subfolder = 'scatter'
 
     feature_index = 0
@@ -468,29 +612,32 @@ def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder
 
     print(f'numerical features completed')
 
+    # add NGS quantile ranks for subsequent categorical frequency comparisons
     df = add_feature_quantile_rank(df, 'norm_log_NGS_read_count', 'NGS_quantile_rank')
 
-    # motifs #
-    # max_motif_length = 7
-    # plot_names = ['motif before deletion', 'deletion start motif', 'deletion end motif', 'motif after deletion']
-    # for motif_length in range(1, max_motif_length + 1):
-    #     df_copy = df.copy()
-    #     motif_df, skipped_count = add_site_motifs(df_copy, motif_length)
-    #     print(f'{skipped_count} candidates have been left out')
-    #     delvg_count = df_copy.shape[0]
-    #     site_counter = 0
-    #     for i in range(0, 4):
-    #         bar_name = f'frequency comparison of {plot_names[i]}'
-    #         bar_name += f' (length={motif_length}) for NGS ranks with Fisher’s exact test (BH-FDR) - bar plot'
-    #         site_counter = i + 1
-    #         create_freq_bar_plot(bar_name, motif_df, f'site{site_counter}_motif', f'{plot_names[i]} (top {min(4 ** motif_length, top_n)})', delvg_count, top_n, f'site{site_counter}_motif', folder, 'bar', data, strain, segment, intersects, f'motif_lenght_{motif_length}')
+    # motifs 
+    max_motif_length = 7
+    plot_names = ['motif before deletion', 'deletion start motif', 'deletion end motif', 'motif after deletion']
+    for motif_length in range(1, max_motif_length + 1):
+        df_copy = df.copy()
+        motif_df, skipped_count = add_site_motifs(df_copy, motif_length)
+        print(f'{skipped_count} candidates have been left out')
+        delvg_count = df_copy.shape[0]
+        site_counter = 0
+        for i in range(0, 4):
+            bar_name = f'frequency comparison of {plot_names[i]}'
+            bar_name += f' (length={motif_length}) for NGS ranks with Fisher’s exact test (BH-FDR) - bar plot'
+            site_counter = i + 1
+            create_freq_bar_plot(bar_name, motif_df, f'site{site_counter}_motif', f'{plot_names[i]} (top {min(4 ** motif_length, top_n)})', delvg_count, top_n, f'site{site_counter}_motif', folder, 'bar', data, strain, segment, intersects, f'motif_lenght_{motif_length}')
 
-    #     print(f'motif_length {motif_length} completed')
+        print(f'motif_length {motif_length} completed')
 
+    # define bar-plot subfolder and total DelVG count
     subfolder = 'bar'
 
     delvg_count = df.shape[0]
 
+    # define categorical features for frequency and distribution analyses
     cat_features = [
         ("direct_repeat_length", f"direct repeat length (cap={DIRECT_REPEAT_LENGTH_CAP})", "length of direct repeat (nucleotides)", "repeats"),
 
@@ -502,29 +649,38 @@ def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder
         ("library_source", "library source", "library source", "metadata"),
     ]
 
+    # add additional metadata features available only for unpooled preprocessing
     if folder == "unpooled":
         cat_features.append(("time_point", "sampling time", "time point of sample collection", "metadata"))
         cat_features.append(("localization", "sample localization", "localization of sample", "metadata"))
         cat_features.append(("resolution", "sequencing resolution", "resolution of sequencing", "metadata"))
         cat_features.append(("cell_system", "host cell type", "cell type of host", "metadata"))
         cat_features.append(("MOI", "MOI", "MOI", "metadata"))
+
+    # add virus-type feature if all data types are included
     if data == "all":
         cat_features.append(("type", "virus type", "type of virus", "metadata"))
+
+    # add strain and subtype if all strains are included
     if strain == "all":
         cat_features.append(("strain", "virus strain", "strain of virus ", "metadata"))
         cat_features.append(("subtype", "virus subtype", "subtype of virus ", "metadata"))
 
+    # add segment if all segments are included
     if segment == "all":
         cat_features.append(("segment", "genome segment", "segment of genome", "metadata"))
 
+    # create bar plots comparing categorical feature frequencies across NGS-rank groups
     for y_feature_name, y_feature_title, y_axis_name, category in cat_features:
         create_freq_bar_plot(f'frequency comparison of {y_feature_title} for NGS ranks with Fisher’s exact test (BH-FDR) - bar plot', df, y_feature_name, y_axis_name, delvg_count, 0, y_feature_name, folder, subfolder, data, strain, segment, intersects)
 
+    # prepare violin plots of NGS read count distributions by categorical feature
     y_feature_name = 'norm_log_NGS_read_count'
     y_axis_name = f'{modification} NGS count (reads)'
 
     subfolder = 'violin'
 
+    # create violin plots for all categorical features
     for x_feature_name, x_feature_title, x_axis_name, category in cat_features:
         create_feature_violin_plot(f'NGS read count distributions of {x_feature_title} - violin plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, delvg_count, 0, x_feature_name, folder, subfolder, data, strain, segment, intersects)
 
@@ -532,11 +688,22 @@ def run_delvg_pri_features_analysis(dfs: list, selector: str, top_n: int, folder
 
 def run_delvg_sec_features_analysis(dfs: list, selector: str, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run the secondary-structure DelVG feature analysis workflow, including Spearman heatmaps and scatter plots.
+        :param dfs: list of input dataframes
+        :param selector: grouping feature used for coloring or grouping plots
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # define secondary-structure numerical features and their plot labels
     num_features = [
         ("MFE", "MFE", "MFE (kcal/mol)", "MFE"),
 
@@ -564,22 +731,24 @@ def run_delvg_sec_features_analysis(dfs: list, selector: str, folder: str, data:
         # ("free_5prime_len", "free 5′ length", "unpaired length at 5′ end (nts)", "length"),
         # ("free_3prime_len", "free 3′ length", "unpaired length at 3′ end (nts)", "length"),
 
-        # ("branch_point_count", "branch point count", "count of multiloop/branch points", "composition"),
-
         # ("max_symmetry", "max symmetry length", "max symmetry length (nucleotides)", "composition"),
     ]
 
+    # get display modifier for NGS read count axis labels
     modification = get_feature_modification_name()
 
     x_feature_name = 'norm_log_NGS_read_count'
     x_axis_name = f'{modification} NGS count (reads)'
 
+    # collect secondary feature names for the Spearman heatmap
     num_feature_names = [f[0] for f in num_features]
 
+    # create dataset-/strain-/segment-wise Spearman heatmap for secondary features
     make_spearman_heatmap_analysis(df, folder, selector, num_feature_names, 'Secondary', data, strain, segment, intersects)
 
     print(f'spearman made successfully')
 
+    # create scatter plots for all numerical secondary features
     subfolder = 'scatter'
 
     feature_index = 0
@@ -590,34 +759,24 @@ def run_delvg_sec_features_analysis(dfs: list, selector: str, folder: str, data:
 
     print(f'numerical features completed')
 
-    # subfolder = 'bar'
-
-    # delvg_count = df.shape[0]
-
-    # cat_features = [
-    #     ("full_symmetry", "full symmetry", "full symmetry", "composition"),
-    # ]
-
-    # for y_feature_name, y_feature_title, y_axis_name, category in cat_features:
-    #         create_freq_bar_plot(f'frequency comparison of {y_feature_title} for NGS ranks with Fisher’s exact test (BH-FDR) - bar plot', df, y_feature_name, y_axis_name, delvg_count, 0, y_feature_name, folder, subfolder, data, strain, segment, intersects)
-
-    # y_feature_name = 'norm_log_NGS_read_count'
-    # y_axis_name = f'{modification} NGS count (reads)'
-
-    # subfolder = 'violin'
-
-    # for x_feature_name, x_feature_title, x_axis_name, category in cat_features:
-    #     create_feature_violin_plot(f'NGS read count distributions of {x_feature_title} - violin plot', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, delvg_count, 0, x_feature_name, folder, subfolder, data, strain, segment, intersects)
-
-    # print(f'categorical features completed')
-
 def run_delvg_hybrid_features_analysis(dfs: list, selector: str, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run the hybrid feature analysis workflow combining sequence and structure-derived features.
+        :param dfs: list of input dataframes
+        :param selector: grouping feature used for coloring or grouping plots
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # define hybrid features and their plot labels
     num_features = [
         ("GC_overall", "GC overall", "overall GC content (1/nucleotide)", "composition"),
         ("GC_paired", "GC paired", "GC content among paired bases (1/nucleotide)", "composition"),
@@ -658,11 +817,13 @@ def run_delvg_hybrid_features_analysis(dfs: list, selector: str, folder: str, da
         # ("AUG_unpaired_content", "AUG unpaired content", "content of AUG start codons fully unpaired (1/codon)", "codon"),
     ]
 
+    # get display modifier for NGS read count axis labels
     modification = get_feature_modification_name()
 
     x_feature_name = 'norm_log_NGS_read_count'
     x_axis_name = f'{modification} NGS count (reads)'
 
+    # choose grouping feature for Spearman heatmap based on current selection level
     if data == 'all':
         y_feature_name = 'dataset'
         call_spearman = True
@@ -673,13 +834,16 @@ def run_delvg_hybrid_features_analysis(dfs: list, selector: str, folder: str, da
         y_feature_name = 'segment'
         call_spearman = True
 
+    # collect hybrid feature names for the Spearman heatmap
     num_feature_names = [f[0] for f in num_features]
 
+    # create Spearman heatmap if enabled
     if call_spearman:
         make_spearman_heatmap_analysis(df, folder, y_feature_name, num_feature_names, 'hybrid', data, strain, segment, intersects)
 
     print(f'spearman made successfully')
 
+    # create scatter plots for all hybrid features
     subfolder = 'scatter'
 
     feature_index = 0
@@ -691,103 +855,88 @@ def run_delvg_hybrid_features_analysis(dfs: list, selector: str, folder: str, da
 
 def run_length_mfe_analysis(dfs: list, selector: str, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Run a focused scatter-plot analysis comparing DelVG length and MFE.
+        :param dfs: list of input dataframes
+        :param selector: grouping feature used for coloring the scatter plot
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # define x-axis feature and label
     x_feature_name = 'DelVG_length'
     x_axis_name = 'DelVG length (nts)'
 
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
     print(f'features added successfully')
 
+    # define scatter-plot subfolder
     subfolder = 'scatter'
 
+    # define features to compare against DelVG length
     features = [
         ("MFE", "MFE", "MFE (kcal/mol)", "other"),
     ]
 
+    # create scatter plots for all selected features
     for y_feature_name, y_feature_title, y_axis_name, category in features:
             create_feature_scatter_plot('', df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, False, 50, False, "", 0.0, 0.0, False, 0.0, y_feature_name, 'visuals', folder, subfolder, data, strain, segment, intersects)    
-    print(f'numerical features completed')
-
-### prediction ###
-
-def run_pred_analysis(selector: str, data: str, strain: str, segment: str, intersects: str):
-    '''
-
-    '''
-    num_features = [
-        ("start", "deletion start position", "position where deletion begins (nucleotide)", "length"),
-        ("end", "deletion end position", "position where deletion ends (nucleotide)", "length"),
-
-        # ("full_seq_length", "full sequence length", "length of the full reference sequence (nucleotides)", "length"),
-        ("DelVG_length", "DelVG sequence length", "length of the DelVG sequence (nucleotides)", "length"),
-        ("deletion_length", "deletion length", "length of the deleted fragment (nucleotides)", "length"),
-
-        ("5_end_length", "5′ end length", "length of the retained 5′ end fragment (nucleotides)", "length"),
-        ("3_end_length", "3′ end length", "length of the retained 3′ end fragment (nucleotides)", "length"),
-    ]
-
-    dfnames = PSEUDO_DATASETS
-    pseudo_prefix = ['homopolymer', 'tandem repeat', 'synthetic']
-    subfolder = 'prediction'
-    modification = get_feature_modification_name()
-
-    bin_dfs = load_all_preprocessed(dfnames, "pseudo", "bin_prediction", data, strain, segment, intersects)
-    reg_dfs = load_all_preprocessed(dfnames, "pseudo", "reg_prediction", data, strain, segment, intersects)
-
-    dec_threshold = get_threshold("dec", "unpooled", data, strain, segment, intersects)
-
-    prefix_index = 0
-    for dfname, bin_df in zip(dfnames, bin_dfs):
-        y_feature_name = 'cnn_pred_proba'
-        y_axis_name = f'predicted probabilty for high NGS read count'
-        for x_feature_name, x_feature_title, x_axis_name, category in num_features:
-            create_feature_scatter_plot(f'bin. CNN: {x_feature_title} against predicted probabilty - scatter plot', bin_df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, False, 50, False, pseudo_prefix[prefix_index], dec_threshold, 0.0, False, 0.0, f'bin_{dfname}_{x_feature_name}', 'visuals', folder, subfolder, data, strain, segment, intersects)
-        prefix_index += 1
-
-    prefix_index = 0
-    for dfname, reg_df in zip(dfnames, reg_dfs):
-        y_feature_name = 'cnn_pred_value'
-        y_axis_name = f'predicted value ({modification} NGS read count)'
-        for x_feature_name, x_feature_title, x_axis_name, category in num_features:
-            create_feature_scatter_plot(f'reg. CNN: {x_feature_title} against predicted value - scatter plot', reg_df, x_feature_name, x_axis_name, y_feature_name, y_axis_name, selector, False, 50, True, pseudo_prefix[prefix_index], 0.0, 0.0, False, 0.0, f'reg_{dfname}_{x_feature_name}', 'visuals', folder, subfolder, data, strain, segment, intersects)
-        prefix_index += 1
-
     print(f'numerical features completed')
 
 ### other ###
 
 def run_sec_structure_plot(dfs: list, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Generate RNA secondary structure plots for the first DelVG sequences of a selected subset.
+        :param dfs: list of input dataframes
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # restrict dataframes to the requested subset and add intersect-based features
     dfs = manage_separate_specifiers(dfs, data, strain, segment)
     df = add_intersect_ngs_features(dfs, intersects)
 
+    # select only the first few DelVG sequences for plotting
     sequences = df['DelVG_sequence'].head(5)
 
+    # create save directory for generated structure plots
     save_path = os.path.join(RESULTSPATH, folder, 'structure', data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # iterate over selected sequences and generate one RNAplot per sequence
     for idx, seq in enumerate(sequences):
+        # skip invalid or empty sequence entries
         if not isinstance(seq, str) or not seq.strip():
             continue
 
+        # normalize sequence format and compute secondary structure with MFE
         seq = seq.strip().upper()
         structure, mfe = RNA.fold(seq)
 
+        # write sequence and dot-bracket structure to temporary input file for RNAplot
         with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.txt') as f:
             f.write(f"{seq}\n{structure}\n")
             temp_input = f.name
 
         try:
+            # call RNAplot to generate SVG structure visualization
             subprocess.run(['RNAplot', '-o', 'svg', '-t', '0', '-i', temp_input], check=True)
         except subprocess.CalledProcessError as e:
             print(f'[ERROR] RNAplot failed for sequence {idx+1}: {e}')
             continue
 
+        # move generated SVG to final output path with MFE in file name
         svg_source = 'rna.svg'
         svg_target = os.path.join(save_path, f'structure_{idx+1}_mfe_{mfe:.2f}.svg')
         if os.path.exists(svg_source):
@@ -795,6 +944,7 @@ def run_sec_structure_plot(dfs: list, folder: str, data: str, strain: str, segme
         else:
             print(f'[WARNING] RNAplot output not found for sequence {idx+1}')
 
+        # remove temporary RNAplot input file
         os.remove(temp_input)
 
 ###############
@@ -805,22 +955,41 @@ def run_sec_structure_plot(dfs: list, folder: str, data: str, strain: str, segme
 
 def make_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, delvg_count: int, motif_length: int, top_n: int, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Perform motif-site frequency difference analysis and create related bar and heatmap plots.
+        :param df: dataframe containing motif site columns and NGS quantile ranks
+        :param heatmap_names: list of readable names for the four motif sites
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param motif_length: motif length to analyze
+        :param top_n: number of top motifs to retain based on frequency difference
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: tuple of mean and top frequency differences for all four motif sites
     '''
+    # define the four junction-related motif site columns
     motif_sites = ['site1_motif', 'site2_motif', 'site3_motif', 'site4_motif']
 
+    # prepare full motif vocabulary, reference frequencies and quantile-rank counts
     motifs = generate_motifs(motif_length)
     full_seq_motif_freq_df = compute_full_seq_motif_freq_df(motif_length, data, strain, segment)
     quantile_rank_count_df = compute_quantile_rank_count_df(df)
 
+    # store summary statistics across the four motif sites
     mean_freq_diffs = []
     top_freq_diffs = []
     for i in range(0, 4):
+        # compute motif counts and frequencies at the current site
         motif_count_df = compute_feature_count_df(df, motif_sites[i], motifs)
         motif_freq_df = compute_feature_freq_df(motif_count_df, motif_sites[i])
         motif_freq_df = rename_feature(motif_freq_df, motif_sites[i], 'motif')
+
+        # compare site-specific frequencies with full-sequence background frequencies
         comb_freq_df = subtract_freq_dfs('site', motif_freq_df, 'full_sequence', full_seq_motif_freq_df, 'motif')
 
+        # keep motifs with the largest positive frequency differences
         comb_freq_df = comb_freq_df.sort_values(by='difference', ascending=False).head(top_n)
         mean_freq_diff = round(comb_freq_df['difference'].mean(), DECIMALS)
         mean_freq_diffs.append(mean_freq_diff)
@@ -828,16 +997,17 @@ def make_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, delv
         top_freq_diffs.append(top_freq_diff)
         filtered_motifs = comb_freq_df['motif'].tolist()
 
+        # create bar plot of motif frequency differences
         bar_name = 'frequency comparison of '
         bar_name += heatmap_names[i]
         bar_name += f' (length={motif_length}) - bar plot'
 
         bar_name_add = ''
-        # bar_name_add += f'\nmean frequency difference = {mean_freq_diff}'
-        # bar_name_add += f', top frequency difference = {top_freq_diff}'
+        # optional additional summary text could be added here
 
         create_freq_diff_plot(bar_name, bar_name_add, 'motif', f'{heatmap_names[i]} (top {min(4 ** motif_length, top_n)})', comb_freq_df, delvg_count, motif_sites[i], folder, 'diff', data, strain, segment, intersects, f'motif_length_{motif_length}')
 
+        # create quantile-wise motif frequency heatmap for selected motifs
         motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_sites[i], filtered_motifs)
         motif_count_df = compute_feature_count_heatmap_sum_df(motif_count_heatmap_df, 'motif')
         motif_freq_heatmap_df = compute_feature_freq_heatmap_df(motif_count_heatmap_df, quantile_rank_count_df)
@@ -847,8 +1017,7 @@ def make_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, delv
         heatmap_name += f' (length={motif_length}) ordered by frequency difference - heatmap'
 
         heatmap_name_add = ''
-        # heatmap_name_add += f'\nmean frequency difference = {mean_freq_diff}'
-        # heatmap_name_add += f', top frequency difference = {top_freq_diff}'
+        # optional additional summary text could be added here
 
         create_freq_heatmap_plot(heatmap_name, heatmap_name_add, 'motif', f'{heatmap_names[i]} (top {min(4 ** motif_length, top_n)})', 'NGS_quantile_rank', 'NGS rank (quantile)', 'relative frequency (%)', motif_freq_heatmap_df, motif_count_df, quantile_rank_count_df, delvg_count, motif_sites[i], folder, 'heatmap', data, strain, segment, intersects, f'motif_length_{motif_length}')
 
@@ -856,21 +1025,40 @@ def make_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, delv
 
 def make_reg_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, delvg_count: int, motif_length: int, top_n: int, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Perform motif-site regression-style heatmap analysis using absolute linear coefficients across quantile ranks.
+        :param df: dataframe containing motif site columns and NGS quantile ranks
+        :param heatmap_names: list of readable names for the four motif sites
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param motif_length: motif length to analyze
+        :param top_n: number of top motifs to retain based on coefficient magnitude
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: tuple of mean and top absolute coefficients for all four motif sites
     '''
+    # define the four junction-related motif site columns
     motif_sites = ['site1_motif', 'site2_motif', 'site3_motif', 'site4_motif']
 
+    # prepare full motif vocabulary and quantile-rank counts
     motifs = generate_motifs(motif_length)
     quantile_rank_count_df = compute_quantile_rank_count_df(df)
 
+    # store summary coefficient statistics across the four motif sites
     mean_coefficients = []
     top_coefficients = []
     for i in range(0, 4):
+        # compute quantile-wise motif frequencies for all motifs
         motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_sites[i], motifs)
         motif_count_df = compute_feature_count_heatmap_sum_df(motif_count_heatmap_df, 'motif')
         motif_freq_heatmap_df = compute_feature_freq_heatmap_df(motif_count_heatmap_df, quantile_rank_count_df)
+
+        # add linear regression intercepts and coefficients per motif
         reg_motif_freq_heatmap_df = add_lin_reg_rows(motif_freq_heatmap_df)
 
+        # rank motifs by absolute slope magnitude
         trans_reg_motif_freq_heatmap_df = reg_motif_freq_heatmap_df.T
         trans_reg_motif_freq_heatmap_df['coefficient'] = trans_reg_motif_freq_heatmap_df['coefficient'].abs()
         trans_reg_motif_freq_heatmap_df = trans_reg_motif_freq_heatmap_df.sort_values(by='coefficient', ascending=False).head(top_n)
@@ -880,6 +1068,7 @@ def make_reg_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, 
         top_coefficients.append(top_coefficient)
         filtered_motifs = trans_reg_motif_freq_heatmap_df.index.tolist()
 
+        # recompute frequency heatmap using only the selected motifs
         motif_count_heatmap_df = compute_feature_count_heatmap_df(df, motif_sites[i], filtered_motifs)
         motif_count_df = compute_feature_count_heatmap_sum_df(motif_count_heatmap_df, 'motif')
         motif_freq_heatmap_df = compute_feature_freq_heatmap_df(motif_count_heatmap_df, quantile_rank_count_df)
@@ -889,8 +1078,7 @@ def make_reg_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, 
         heatmap_name += f' (length={motif_length}) ordered by coefficient - heatmap'
 
         heatmap_name_add = ''
-        # heatmap_name_add += f'\nmean coefficient = {mean_coefficient}'
-        # heatmap_name_add += f', top coefficient = {top_coefficient}'
+        # optional additional summary text could be added here
 
         create_freq_heatmap_plot(heatmap_name, heatmap_name_add, 'motif', f'{heatmap_names[i]} (top {min(4 ** motif_length, top_n)})', 'NGS_quantile_rank', 'NGS rank (quantile)', 'relative frequency (%)', motif_freq_heatmap_df, motif_count_df, quantile_rank_count_df, delvg_count, 'reg_' + motif_sites[i], folder, 'heatmap', data, strain, segment, intersects, f'motif_length_{motif_length}')
 
@@ -898,37 +1086,66 @@ def make_reg_site_motif_heatmap_analysis(df: pd.DataFrame, heatmap_names: list, 
 
 def make_repeat_heatmap_analysis(df: pd.DataFrame, heatmap_name: str, delvg_count: int, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Create a quantile-wise heatmap analysis for direct repeat lengths.
+        :param df: dataframe containing direct repeat lengths and NGS quantile ranks
+        :param heatmap_name: readable feature name for the plot title
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # compute counts per NGS quantile rank
     quantile_rank_count_df = compute_quantile_rank_count_df(df)
 
+    # compute direct repeat length counts and frequencies across quantile ranks
     repeat_count_heatmap_df = compute_feature_count_heatmap_df(df, 'direct_repeat_length')
     repeat_count_df = compute_feature_count_heatmap_sum_df(repeat_count_heatmap_df, 'direct_repeat_length')
     repeat_freq_heatmap_df = compute_feature_freq_heatmap_df(repeat_count_heatmap_df, quantile_rank_count_df)
 
+    # build heatmap title
     heatmap_name = 'qunatile-wise frequency of '
     heatmap_name += heatmap_name
     heatmap_name += f' (cap={DIRECT_REPEAT_LENGTH_CAP}) - heatmap '
 
+    # create heatmap plot
     create_freq_heatmap_plot(heatmap_name, '', 'direct_repeat_length', 'length of direct repeat (nucleotides)', 'NGS_quantile_rank', 'NGS rank (quantile)', 'relative frequency (%)', repeat_freq_heatmap_df, repeat_count_df, quantile_rank_count_df, delvg_count, 'direct_repeat_length', folder, 'heatmap', data, strain, segment, intersects)
 
 def make_mfe_heatmap_analysis(df: pd.DataFrame, heatmap_name: str, delvg_count: int, folder: str, data: str, strain: str, segment: str, intersects: str):
     '''
+        Create a quantile-wise heatmap analysis for MFE quantile ranks.
+        :param df: dataframe containing MFE values and NGS quantile ranks
+        :param heatmap_name: readable feature name for the plot title
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param folder: main result folder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # create MFE-based quantile ranks and rename for plotting
     df = add_feature_quantile_rank(df, 'MFE', 'MFE_quantile_rank')
     df = rename_feature(df, 'MFE_quantile_rank', 'MFE_rank')
 
+    # compute counts per NGS quantile rank
     quantile_rank_count_df = compute_quantile_rank_count_df(df)
 
+    # compute MFE-rank counts and frequencies across quantile ranks
     mfe_count_heatmap_df = compute_feature_count_heatmap_df(df, 'MFE_rank')
     mfe_count_df = compute_feature_count_heatmap_sum_df(mfe_count_heatmap_df, 'MFE_rank')
     mfe_freq_heatmap_df = compute_feature_freq_heatmap_df(mfe_count_heatmap_df, quantile_rank_count_df)
 
+    # build heatmap title
     heatmap_name = 'qunatile-wise frequency of '
     heatmap_name += heatmap_name
     heatmap_name += f' rank (quantile) - heatmap '
 
+    # create heatmap plot
     create_freq_heatmap_plot(heatmap_name, '', 'MFE_rank', 'MFE rank (quantile)', 'NGS_quantile_rank', 'NGS rank (quantile)', 'relative frequency (%)', mfe_freq_heatmap_df, mfe_count_df, quantile_rank_count_df, delvg_count, 'mfe', folder, 'heatmap', data, strain, segment, intersects)
 
 def make_spearman_heatmap_analysis(
@@ -943,32 +1160,48 @@ def make_spearman_heatmap_analysis(
     intersects: str = 'all'
     ):
     '''
+        Compute group-wise Spearman correlations between NGS read count and selected features, apply BH-FDR correction, and create a heatmap.
+        :param df: input dataframe containing selected features and norm_log_NGS_read_count
+        :param folder: main result folder
+        :param y_feature_name: grouping feature defining heatmap rows
+        :param x_features: list of feature names to correlate with NGS read count
+        :param fname: feature-group name used for file naming and axis labels
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # total number of DelVGs used for title annotation
     delvg_count = df.shape[0]
 
-    # counts for axis labels
+    # compute row counts for y-axis labels
     rank_count_df = (
         df.groupby(y_feature_name, dropna=False)
           .size()
           .reset_index(name='count')
     )
 
+    # compute non-missing counts for all requested x features
     count_df = pd.DataFrame({
         'feature': x_features,
         'count': [int(df[f].notna().sum()) if f in df.columns else 0 for f in x_features]
     })
 
-    # spearman per y-group
+    # preserve original y-group order
     y_order = list(rank_count_df[y_feature_name].to_numpy())
 
+    # initialize matrices for correlation coefficients and p-values
     rho_mat = pd.DataFrame(index=y_order, columns=x_features, dtype=float)
     p_mat   = pd.DataFrame(index=y_order, columns=x_features, dtype=float)
 
     for y_val in y_order:
+        # subset dataframe to one y-group
         df_sub = df.loc[df[y_feature_name] == y_val].copy()
 
         for feat in x_features:
+            # handle missing feature columns
             if feat not in df_sub.columns:
                 rho_mat.loc[y_val, feat] = np.nan
                 p_mat.loc[y_val, feat] = np.nan
@@ -977,17 +1210,19 @@ def make_spearman_heatmap_analysis(
             x = df_sub[feat]
             y = df_sub['norm_log_NGS_read_count']
 
+            # require enough paired observations for Spearman correlation
             mask = x.notna() & y.notna()
             if int(mask.sum()) < 3:
                 rho_mat.loc[y_val, feat] = np.nan
                 p_mat.loc[y_val, feat] = np.nan
                 continue
 
+            # compute Spearman correlation and p-value
             rho, pval = spearmanr(x[mask].to_numpy(), y[mask].to_numpy())
             rho_mat.loc[y_val, feat] = float(rho) if rho is not None else np.nan
             p_mat.loc[y_val, feat] = float(pval) if pval is not None else np.nan
 
-    # BH-FDR across ALL tests
+    # apply BH-FDR correction across all valid tests
     pvals = p_mat.to_numpy().ravel()
     valid_mask = np.isfinite(pvals)
 
@@ -1002,7 +1237,7 @@ def make_spearman_heatmap_analysis(
         columns=p_mat.columns
     )
 
-    # "rho_rounded [stars]"
+    # combine rounded rho values with significance stars for heatmap annotations
     def format_cell(rho, pval):
         if (rho is None) or (pval is None):
             return ''
@@ -1021,19 +1256,21 @@ def make_spearman_heatmap_analysis(
             )
 
     def _stars_to_score(stars: str) -> int:
-        """
-        Convert star string to an integer score.
-        Examples: '****'->4, '***'->3, '**'->2, '*'->1, 'ns'/'NA'/''->0
-        """
+        '''
+            Convert a significance star string to an integer score.
+            :param stars: significance label such as '*', '**', '***', 'ns' or 'NA'
+
+            :return: integer score based on the number of stars
+        '''
         if stars is None:
             return 0
         s = str(stars).strip()
         if s == '' or s.lower() in ['na', 'nan']:
             return 0
-        # keep only '*' characters
+        # count only star characters
         return int(s.count('*'))
 
-    # sum star scores per feature column using adjusted p-values (adj_p_mat)
+    # compute total significance score per feature column
     star_sums = {}
     for feat in x_features:
         total = 0
@@ -1045,14 +1282,14 @@ def make_spearman_heatmap_analysis(
                 total += _stars_to_score(p_to_stars(float(pval)))
         star_sums[feat] = int(total)
 
-    # stable order: sort by (-star_sum, original_index)
+    # sort features by decreasing total significance and preserve original order on ties
     orig_idx = {feat: i for i, feat in enumerate(x_features)}
     x_features_sorted = sorted(
         list(x_features),
         key=lambda f: (-star_sums.get(f, 0), orig_idx.get(f, 10**9))
     )
 
-    # apply new order everywhere (keep everything consistent)
+    # apply sorted feature order consistently to all matrices
     rho_mat = rho_mat.reindex(columns=x_features_sorted)
     p_mat = p_mat.reindex(columns=x_features_sorted)
     adj_p_mat = adj_p_mat.reindex(columns=x_features_sorted)
@@ -1060,16 +1297,19 @@ def make_spearman_heatmap_analysis(
 
     count_df = count_df.set_index('feature').reindex(x_features_sorted).reset_index()
 
-    # update x_features variable for downstream label usage
+    # update x_features variable for downstream usage
     x_features = x_features_sorted
 
+    # optional plot subtitle for primary feature settings
     if fname == 'primary':
         plot_name_add = f'\nk-mer (k={K_MER_LENGTH}, k_palindromic={PALINDROMIC_K_MER_LENGTH}), tracts (min_length={MIN_TRACT_LENGTH})'
     else:
         plot_name_add = ''
 
+    # build heatmap title
     heatmap_name = f'{make_legend_descriptor(y_feature_name)}-wise Spearman correlations (NGS read count and {fname} feature) ordered by significance (BH-FDR) - heatmap'
 
+    # create final heatmap plot
     create_freq_heatmap_plot(
         heatmap_name,
         plot_name_add,
@@ -1118,23 +1358,36 @@ def create_freq_heatmap_plot(
     show_x_counts: bool = True
     ):  
     '''
-    freq_heatmap_df:
-        rows = y categories (NGS_quantile_rank, Strain, Segment, ...)
-        cols = x categories (x_feature_name)
-        values = relative frequency (%) or any numeric/statistic
+        Create a heatmap plot for feature frequencies or related statistics across grouped categories.
+        :param plot_name: plot title prefix
+        :param plot_name_add: additional title suffix
+        :param x_feature_name: feature represented on the x-axis
+        :param x_axis_name: x-axis label
+        :param y_feature_name: feature represented on the y-axis
+        :param y_axis_name: y-axis label
+        :param scale_axis_name: colorbar label
+        :param freq_heatmap_df: dataframe containing heatmap values with rows as y categories and columns as x categories
+        :param count_df: dataframe containing total counts per x category
+        :param rank_count_df: dataframe containing total counts per y category
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param feature_specifier: optional additional subfolder name for saving
+        :param show_x_counts: if True, append x-category counts to x tick labels
 
-    count_df:
-        columns: [x_feature_name, 'count']
-
-    rank_count_df:
-        columns: [y_feature_name, 'count']
+        :return: None
     '''
-
+    # initialize heatmap dataframe and preserve original x/y order
     pivot_df = freq_heatmap_df
     feature_order = list(pivot_df.columns)
     y_order = list(pivot_df.index)
 
-    # determine y (row) ordering
+    # determine row ordering for known grouping types
     if y_feature_name == "segment":
         present = list(pd.unique(y_order))
         ordered = [s for s in SEGMENTS if s in present]
@@ -1155,11 +1408,13 @@ def create_freq_heatmap_plot(
     else:
         y_order = sorted(pd.unique(y_order))
 
-    # apply row order to the heatmap data (this reorders the y-axis)
+    # apply row order to heatmap dataframe
     pivot_df = pivot_df.reindex(y_order)
 
+    # create quick lookup of x-category counts
     feature_count_series = count_df.set_index(x_feature_name)['count']
 
+    # optionally append counts to x tick labels
     if show_x_counts:
         feature_labels = [
             f'{capitalize_first(feature)}\n(n={feature_count_series.get(feature, 0)})'
@@ -1171,7 +1426,7 @@ def create_freq_heatmap_plot(
             for feature in feature_order
         ]
 
-    # y tick labels (generalized, backward compatible)
+    # create y tick labels with corresponding group counts
     y_labels = []
     for y_val in y_order:
         count = rank_count_df.loc[
@@ -1180,11 +1435,13 @@ def create_freq_heatmap_plot(
         count_str = str(int(count[0])) if len(count) > 0 else "0"
         y_labels.append(f"{y_val}\n(n={count_str})")
 
+    # distinguish between purely numeric heatmaps and mixed string/star annotation cases
     if np.issubdtype(pivot_df.to_numpy().dtype, np.number):
         heatmap_values = pivot_df
         annot_values = None
         is_star_case = False
     else:
+        # extract numeric leading part for coloring while preserving full string annotations
         num_part = pivot_df.astype(str).replace(
             to_replace=r'^\s*([+-]?\d+(?:\.\d+)?)\s*.*$',
             value=r'\1',
@@ -1193,6 +1450,7 @@ def create_freq_heatmap_plot(
         heatmap_values = num_part.apply(pd.to_numeric, errors='coerce')
 
         def format_annot(cell):
+            # format annotation text by splitting numeric value and remaining marker text
             if pd.isna(cell):
                 return ''
             s = str(cell).strip()
@@ -1208,15 +1466,15 @@ def create_freq_heatmap_plot(
         annot_values = pivot_df.applymap(format_annot)
         is_star_case = True
 
-    # keep normal behavior for numeric heatmaps, tune only for star case
+    # compute figure width from number of x categories
     min_width = 13
     width_scale = 1.3
     fig_width = max(min_width, (1 + len(feature_labels) * 0.6) * width_scale)
 
-    # global height scaling factor (increase/decrease overall plot height)
-    # try 1.5 (for features) and 2 (for motif)
+    # global height scaling factor
     height_scale = 1.5
 
+    # adjust figure height and font sizes depending on annotation mode
     if is_star_case:
         min_height = 6
         base_height = 1 + len(y_labels) * 0.6
@@ -1231,9 +1489,10 @@ def create_freq_heatmap_plot(
         x_tick_size = None
         y_tick_size = None
 
-
+    # initialize figure with computed dimensions
     plt.figure(figsize=(fig_width, fig_height))
 
+    # prepare common seaborn heatmap arguments
     heatmap_kwargs = dict(
         data=heatmap_values,
         cmap="viridis",
@@ -1246,32 +1505,40 @@ def create_freq_heatmap_plot(
         fmt=('' if annot_values is not None else '.1f')
     )
 
+    # increase annotation font size for mixed numeric-marker cases
     if is_star_case:
         heatmap_kwargs['annot_kws'] = {'fontsize': annot_fontsize}
 
+    # draw heatmap
     ax = sns.heatmap(**heatmap_kwargs)
 
+    # vertically center multiline y tick labels
     for label in ax.get_yticklabels():
         label.set_va('center')
         label.set_multialignment('center')
 
+    # optionally enlarge tick labels for star case
     if is_star_case:
         ax.tick_params(axis='x', labelsize=x_tick_size)
         ax.tick_params(axis='y', labelsize=y_tick_size)
 
+    # set axis labels
     ax.set_xlabel(f'{x_axis_name}', fontsize=22)
     ax.set_ylabel(f'{y_axis_name}', fontsize=22)
 
+    # build plot title
     title_name = f'{plot_name}'
     title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title_name += f' (n={delvg_count})'
     title_name += plot_name_add
 
+    # optionally show title
     if SHOW_TITLE:
         ax.set_title(title_name)
     else:
         ax.set_title("")
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
@@ -1279,6 +1546,7 @@ def create_freq_heatmap_plot(
         save_path = os.path.join(save_path, f'{feature_specifier}')
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += '.png'
 
     plt.tight_layout()
@@ -1302,11 +1570,29 @@ def create_freq_diff_plot(
     feature_specifier: str = '',
     ):
     '''
+        Create a grouped bar plot comparing two frequency columns for one categorical feature.
+        :param plot_name: plot title prefix
+        :param plot_name_add: additional title suffix
+        :param x_feature_name: categorical feature plotted on the x-axis
+        :param x_axis_name: x-axis label
+        :param freq_df: dataframe containing feature column and two frequency columns
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param feature_specifier: optional additional subfolder name for saving
 
+        :return: None
     '''
+    # extract the two frequency column names
     freq0 = freq_df.columns[1]
     freq1 = freq_df.columns[2]
 
+    # reshape dataframe into long format for seaborn barplot
     df_plot = pd.melt(
         freq_df,
         id_vars=x_feature_name,
@@ -1315,6 +1601,7 @@ def create_freq_diff_plot(
         value_name='frequency'
     )
 
+    # replace internal frequency labels with readable names
     label_map = {
         freq0: 'site of candidates',
         freq1: 'full sequence'
@@ -1322,11 +1609,13 @@ def create_freq_diff_plot(
 
     df_plot['type'] = df_plot['type'].replace(label_map)
 
+    # define custom colors for both compared frequency types
     custom_colors = {
         label_map[freq0]: COLORS[8],
         label_map[freq1]: COLORS[0]
         }
 
+    # initialize figure and draw grouped bar plot
     plt.figure(figsize=(18, 6))
     sns.barplot(
     data=df_plot,
@@ -1338,20 +1627,24 @@ def create_freq_diff_plot(
     linewidth=0.5
 )
 
+    # set axis labels
     plt.xticks(rotation=0)
     plt.xlabel(f'{x_axis_name}')
     plt.ylabel('relative frequency (%)')
 
+    # build plot title
     title_name = f'{plot_name}'
     title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title_name += f' (n={delvg_count})'
     title_name += plot_name_add
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title_name)
     else:
         plt.title("")
 
+    # optionally show legend outside plot area
     if SHOW_LEGEND:
         plt.legend(
             loc='upper left',
@@ -1361,6 +1654,7 @@ def create_freq_diff_plot(
             frameon=True
         )
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
@@ -1368,6 +1662,7 @@ def create_freq_diff_plot(
         save_path = os.path.join(save_path, f'{feature_specifier}')
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += ".png"
 
     plt.tight_layout()
@@ -1390,16 +1685,36 @@ def create_spline_plot(
     intersects: str
     ):  
     '''
+        Create a spline plot for multiple value series over equally spaced x positions.
+        :param plot_name: plot title prefix
+        :param x_axis_name: x-axis label
+        :param y_axis_name: y-axis label
+        :param spline_names: list of series names
+        :param spline_values: list of y-value lists, one per series
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # initialize figure
     plt.figure(figsize=(10, 6))
+
+    # define original and smoothed x coordinates
     num_points = len(spline_values[0])
     x = np.arange(1, num_points + 1)
     x_smooth = np.linspace(x.min(), x.max(), 300)
 
+    # pick distinct colors for all spline series
     n_needed = len(spline_values)
     picked_colors = pick_colors(COLORS, n_needed)
 
+    # plot smooth spline curves and original points for each series
     for i, y in enumerate(spline_values):
         spline = CubicSpline(x, y)
         y_smooth = spline(x_smooth)
@@ -1407,24 +1722,30 @@ def create_spline_plot(
         plt.plot(x_smooth, y_smooth, label=capitalize_first(spline_names[i]), color=color)
         plt.scatter(x, y, color=color, s=30)
 
+    # build plot title
     title_name = f'{plot_name}'
     title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title_name += f' (n={delvg_count})'
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title_name)
     else:
         plt.title("")
 
+    # set axis labels
     plt.xlabel(capitalize_first(x_axis_name))
     plt.ylabel(capitalize_first(y_axis_name))
 
-    plt.ylim(0, 3)
+    # set fixed y-range and x ticks
+    if LIM_AXES:
+        plt.ylim(0, 3)
 
     plt.grid(True, alpha=0.3)
 
     plt.xticks(np.arange(1, num_points + 1))
 
+    # optionally show legend outside plot area
     if SHOW_LEGEND:
         plt.legend(
             loc='upper left',
@@ -1434,11 +1755,13 @@ def create_spline_plot(
             frameon=True
         )
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += '.png'
 
     plt.tight_layout()
@@ -1463,41 +1786,55 @@ def create_single_density_plot(
     kde_grid: int = 512,
     clip=None
 ):
-    """
-    KDE-only density plot (no histogram), with:
-      - statistical moments computed from raw sample values
-      - optional elbow point via max curvature of KDE pdf (disabled if elbow_side == "")
-      - optional quantile indicator lines
-      - your existing styling + save path conventions
-    """
+    '''
+        Create a KDE-only density plot for one feature with optional quantiles and curvature-based elbow detection.
+        :param plot_name: plot title prefix
+        :param df: input dataframe
+        :param x_feature_name: numeric feature column to plot
+        :param x_axis_name: x-axis label
+        :param show_quantiles: if True, show selected quantile lines and values
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param elbow_side: side on which to search for maximum curvature ('right', 'left', 'both', or '')
+        :param kde_bw_adjust: bandwidth adjustment factor for gaussian KDE
+        :param kde_grid: number of grid points used for KDE evaluation
+        :param clip: optional lower and upper bounds for plotting
 
+        :return: None
+    '''
+    # apply plotting style and initialize figure
     plt.style.use("seaborn-darkgrid")
     plt.figure(figsize=(10, 6))
 
-    # extract + clean (numeric coercion + drop NaNs)
+    # extract numeric values and drop missing entries
     s = pd.to_numeric(df[x_feature_name], errors="coerce").dropna()
     values = s.to_numpy()
     n = len(values)
     if n == 0:
         raise ValueError(f"No numeric data in column '{x_feature_name}' after dropping NaNs/coercion.")
 
-    # moments from RAW values
+    # compute statistical moments from raw values
     mean_val = float(np.mean(values))
     var_val = float(np.var(values, ddof=0))
     skew_val = float(stats.skew(values, bias=True))
     kurt_val = float(stats.kurtosis(values, fisher=True, bias=True))
 
-    # KDE via scipy
+    # determine finite value bounds for KDE evaluation
     xmin = float(np.nanmin(values))
     xmax = float(np.nanmax(values))
     if not np.isfinite(xmin) or not np.isfinite(xmax):
         raise ValueError(f"No finite numeric data in column '{x_feature_name}' after cleaning.")
     if xmin == xmax:
-        # constant distribution: create a tiny window so KDE evaluation is well-defined
+        # widen constant distributions slightly so KDE evaluation remains defined
         xmin = xmin - 0.5
         xmax = xmax + 0.5
 
-    # optional clip
+    # optionally clip x-range to requested interval
     if clip is not None:
         c0, c1 = clip
         if c0 is not None:
@@ -1508,8 +1845,10 @@ def create_single_density_plot(
             xmin = xmin - 0.5
             xmax = xmax + 0.5
 
+    # create evenly spaced grid for KDE evaluation
     xs = np.linspace(xmin, xmax, int(kde_grid))
 
+    # fit gaussian KDE and optionally adjust bandwidth
     kde = stats.gaussian_kde(values)
     if kde_bw_adjust != 1.0:
         base_cf = kde.covariance_factor()
@@ -1518,7 +1857,7 @@ def create_single_density_plot(
 
     pdf = kde(xs)
 
-    # curvature / elbow detection (optional)
+    # prepare optional curvature-based elbow detection
     elbow_side_l = (elbow_side or "").strip().lower()
     plot_elbow = elbow_side_l != ""
 
@@ -1526,11 +1865,13 @@ def create_single_density_plot(
     elbow_idx = None
 
     if plot_elbow:
+        # estimate first and second derivatives of KDE curve
         dx = xs[1] - xs[0] if len(xs) > 1 else 1.0
         pdf_prime = np.gradient(pdf, dx)
         pdf_double = np.gradient(pdf_prime, dx)
         curvature = np.abs(pdf_double) / np.power(1.0 + pdf_prime**2, 1.5)
 
+        # restrict elbow search to requested side relative to the mean
         if elbow_side_l == "right":
             mask = xs >= mean_val
         elif elbow_side_l == "left":
@@ -1540,6 +1881,7 @@ def create_single_density_plot(
         else:
             raise ValueError("elbow_side must be 'right', 'left', 'both', or '' to disable.")
 
+        # fall back to the mean if curvature search is not meaningful
         if (not np.any(mask)) or np.allclose(pdf, pdf[0]):
             elbow_x = float(mean_val)
             elbow_idx = int(np.argmin(np.abs(xs - elbow_x)))
@@ -1549,36 +1891,37 @@ def create_single_density_plot(
             elbow_idx = int(local_argmax)
             elbow_x = float(xs[elbow_idx])
 
-    # plot KDE curve
+    # plot KDE curve and shaded area
     plt.plot(xs, pdf, color=COLORS[8], linewidth=2.0, label="Density")
-    # optional fill
     plt.fill_between(xs, 0, pdf, color=COLORS[8], alpha=0.15)
 
-    # indicator lines
+    # add mean and optional elbow indicator lines
     plt.axvline(mean_val, color=COLORS[2], linestyle="-", linewidth=1.5, label="Mean")
     if plot_elbow and elbow_x is not None:
         plt.axvline(elbow_x, color=COLORS[10], linestyle="--", linewidth=1.5, label="Max. curvature")
 
-    # quantiles (optional)
+    # optionally add quantile lines
     q80 = q85 = q90 = q95 = None
     if show_quantiles:
         q80 = float(np.quantile(values, 0.80))
         plt.axvline(q80, color=COLORS[0], linestyle="-", linewidth=1, label="80th percentile")
 
-    # title / labels
+    # build plot title
     title = f"{plot_name}"
     title += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title += f" (n={n})"
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title)
     else:
         plt.title("")
 
+    # set axis labels
     plt.xlabel(f"{x_axis_name}")
     plt.ylabel("Density (area under curve = 1)")
 
-    # stats text box (order: moments -> quantiles -> elbow if enabled)
+    # prepare statistics text box content
     stats_lines = [
         f"Mean={mean_val:.{DECIMALS}f}",
         f"Variance={var_val:.{DECIMALS}f}",
@@ -1586,12 +1929,14 @@ def create_single_density_plot(
         f"Kurtosis={kurt_val:.{DECIMALS}f}",
     ]
 
+    # optionally append quantile information
     if show_quantiles:
         stats_lines += [
             "",
             f"80th percentile={q80:.{DECIMALS}f}",
         ]
 
+    # optionally append elbow information
     if plot_elbow and elbow_x is not None:
         stats_lines += [
             "",
@@ -1600,6 +1945,7 @@ def create_single_density_plot(
 
     stats_text = "\n".join(stats_lines)
 
+    # draw text box with summary statistics
     props = dict(boxstyle="round", facecolor="white", alpha=0.7)
     plt.gca().text(
         0.50, 0.95, stats_text,
@@ -1609,7 +1955,7 @@ def create_single_density_plot(
         bbox=props
     )
 
-    # legend outside
+    # optionally place legend outside plot area
     if SHOW_LEGEND:
         plt.legend(
             loc="upper left",
@@ -1619,16 +1965,18 @@ def create_single_density_plot(
             frameon=True
         )
 
-    # set axis limits
-    plt.xlim(1, 6)
-    plt.ylim(0, 1.3)
+    # set fixed axis limits
+    if LIM_AXES:
+        plt.xlim(1, 6)
+        plt.ylim(0, 1.3)
 
-    # save path
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += ".png"
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, fname), dpi=300, bbox_inches="tight")
@@ -1651,19 +1999,35 @@ def create_freq_bar_plot(
     feature_specifier: str = '',
     ):
     '''
-    Fisher exact test (BH-FDR corrected across all categories in df).
-    annotates Odds Ratio (OR) above significance stars.
-    '''
+        Create a bar plot comparing relative category frequencies between high and lower NGS-rank groups, including Fisher exact test results.
+        :param plot_name: plot title prefix
+        :param df: input dataframe
+        :param x_feature_name: categorical feature column to compare
+        :param x_axis_name: x-axis label
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param top_n: number of top categories to plot based on frequency difference
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param feature_specifier: optional additional subfolder name for saving
 
+        :return: None
+    '''
+    # apply plotting style and initialize figure
     plt.style.use('seaborn-darkgrid')
     plt.figure(figsize=(12, 7))
 
-    # split once
+    # split dataframe into high-rank and lower-rank groups
     true_df, false_df, threshold = split_by_threshold(df, 'NGS_quantile_rank', RANK_THRESHOLD)
 
     true_df = true_df.copy()
     false_df = false_df.copy()
 
+    # stop early if one of the groups is empty
     n_true, n_false = len(true_df), len(false_df)
     if n_true == 0 or n_false == 0:
         print(f"[WARNING] Fisher test skipped: one split is empty (n_true={n_true}, n_false={n_false}).")
@@ -1671,6 +2035,7 @@ def create_freq_bar_plot(
         return
 
     def _normalize_cats(values: pd.DataFrame, x_feature_name: str) -> pd.Series:
+        # normalize categorical values and replace missing values with UNKNOWN
         cats = (
             values[x_feature_name]
             .astype(object)
@@ -1680,21 +2045,25 @@ def create_freq_bar_plot(
         values[x_feature_name] = cats
         return cats
 
-    # apply to both splits
+    # normalize category values in both groups
     cats_true = _normalize_cats(true_df, x_feature_name)
     cats_false = _normalize_cats(false_df, x_feature_name)
 
+    # compute raw category counts for both groups
     true_counts  = true_df[x_feature_name].value_counts(dropna=False)
     false_counts = false_df[x_feature_name].value_counts(dropna=False)
 
     def pct(count, denom):
+        # convert counts to relative frequencies in percent
         return (100.0 * count / denom) if denom > 0 else 0.0
 
+    # detect whether feature categories represent motifs
     x_feature_name_is_motif = ("motif" in str(x_feature_name).casefold())
     present = list(pd.unique(pd.concat([cats_true, cats_false], axis=0)))
 
+    # determine category order for plotting
     if x_feature_name_is_motif:
-        uniq = present  # preserve as-is for motifs (no special reordering)
+        uniq = present  # preserve original order for motifs
     else:
         if x_feature_name == "segment":
             ordered = [s for s in SEGMENTS if s in present]
@@ -1713,11 +2082,12 @@ def create_freq_bar_plot(
 
     all_cats = uniq
 
+    # compute relative frequencies and differences between both groups
     freq_true  = {cat: pct(true_counts.get(cat, 0),  n_true)  for cat in all_cats}
     freq_false = {cat: pct(false_counts.get(cat, 0), n_false) for cat in all_cats}
     diffs      = {cat: freq_true[cat] - freq_false[cat] for cat in all_cats}
 
-    # Fisher tests
+    # run Fisher exact tests for all categories
     fisher_map = {}
     pvals = []
     cats_for_p = []
@@ -1739,19 +2109,20 @@ def create_freq_bar_plot(
             pvals.append(res["pvalue"])
             cats_for_p.append(cat)
 
-    # BH-FDR correction
+    # apply BH-FDR correction to valid p-values
     p_adj_map = {}
     if len(pvals) > 0:
         p_adj = bh_fdr(pvals)
         for cat, padj in zip(cats_for_p, p_adj):
             p_adj_map[cat] = float(padj)
 
-    # select categories to plot
+    # optionally restrict plot to top categories by frequency difference
     if top_n and top_n > 0:
         top_cats = sorted(all_cats, key=lambda c: diffs[c], reverse=True)[:top_n]
     else:
         top_cats = all_cats
 
+    # prepare bar positions and heights
     x = np.arange(len(top_cats))
     width = 0.42
 
@@ -1761,6 +2132,7 @@ def create_freq_bar_plot(
     color_false = COLORS[0]
     color_true  = COLORS[8]
 
+    # plot bars for high-rank group
     plt.bar(
         x - width/2,
         bars_true,
@@ -1770,6 +2142,8 @@ def create_freq_bar_plot(
         edgecolor='white',
         linewidth=0.5
     )
+
+    # plot bars for lower-rank group
     plt.bar(
         x + width/2,
         bars_false,
@@ -1780,14 +2154,15 @@ def create_freq_bar_plot(
         linewidth=0.5
     )
 
-    # annotations (fixed y-axis top at 25, so use absolute spacings)
+    # initialize annotation layout settings
     y_max_overall = 0.0
 
-    BRACKET_PAD = 1.2      # distance above tallest bar in the pair
-    BRACKET_HEIGHT = 0.8   # height of the bracket
-    STAR_GAP = 0.6        # bracket -> stars gap
-    OR_GAP = 1.4           # stars -> OR gap
+    BRACKET_PAD = 1.2
+    BRACKET_HEIGHT = 0.8
+    STAR_GAP = 0.6
+    OR_GAP = 1.4
 
+    # annotate each category with significance stars and odds ratio
     for i, cat in enumerate(top_cats):
         res = fisher_map.get(cat, {})
         OR = res.get("oddsratio", np.nan)
@@ -1812,6 +2187,7 @@ def create_freq_bar_plot(
         x1 = i - width/2
         x2 = i + width/2
 
+        # draw bracket connecting both bars of a category
         plt.plot(
             [x1, x1, x2, x2],
             [y_bracket, y_bracket + h_bracket, y_bracket + h_bracket, y_bracket],
@@ -1821,14 +2197,14 @@ def create_freq_bar_plot(
 
         base = y_bracket + h_bracket
 
-        # stars and OR with increased spacing
+        # determine text positions above the bracket
         stars_y  = base + STAR_GAP
         metric_y = stars_y + OR_GAP
 
         STAR_FONTSIZE = 16
         OR_FONTSIZE = 16
 
-
+        # draw significance stars
         plt.text(
             (x1 + x2) / 2,
             stars_y,
@@ -1838,6 +2214,7 @@ def create_freq_bar_plot(
             fontsize=STAR_FONTSIZE,
         )
 
+        # draw odds ratio text
         plt.text(
             (x1 + x2) / 2,
             metric_y,
@@ -1849,24 +2226,27 @@ def create_freq_bar_plot(
 
         y_max_overall = max(y_max_overall, metric_y)
 
-    # plt.ylim(0,25)
-
+    # set x tick labels with category counts
     labels = [f"{str(c)}\n(n={true_counts.get(c, 0) + false_counts.get(c, 0)})"
               for c in top_cats]
     plt.xticks(x, labels, rotation=90, ha='center')
 
+    # set axis labels
     plt.xlabel(capitalize_first(x_axis_name))
     plt.ylabel('Relative frequency (%)')
 
+    # build plot title
     title_name = f'{plot_name}'
     title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title_name += f' (n={delvg_count})'
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title_name)
     else:
         plt.title("")
 
+    # optionally show legend outside plot area
     if SHOW_LEGEND:
         plt.legend(
             loc='upper left',
@@ -1876,12 +2256,14 @@ def create_freq_bar_plot(
             frameon=True
         )
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder, clean_data, strain, segment, intersects)
     if feature_specifier:
         save_path = os.path.join(save_path, feature_specifier)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, fname + '.png'), dpi=300)
     plt.close()
@@ -1904,23 +2286,44 @@ def create_feature_violin_plot(
     intersects: str,
     feature_specifier: str = '',
     ):
-    """
+    '''
+        Create a violin plot for a numeric feature across categorical groups.
+        :param plot_name: plot title prefix
+        :param df: input dataframe
+        :param x_feature_name: categorical feature used for grouping on the x-axis
+        :param x_axis_name: x-axis label
+        :param y_feature_name: numeric feature plotted on the y-axis
+        :param y_axis_name: y-axis label
+        :param delvg_count: total number of DelVGs used for title annotation
+        :param top_n: number of most frequent categories to include, or all if not positive
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param feature_specifier: optional additional subfolder name for saving
 
-    """
+        :return: None
+    '''
+    # apply plotting style
     plt.style.use('seaborn-darkgrid')
     sns.set_theme(style="whitegrid")
 
     df_plot = df.copy()
 
+    # normalize categorical x values and replace missing values
     df_plot[x_feature_name] = df_plot[x_feature_name].astype(object)
     df_plot[x_feature_name] = df_plot[x_feature_name].where(df_plot[x_feature_name].notna(), 'NA')
 
+    # coerce y feature to numeric if needed
     if not np.issubdtype(df_plot[y_feature_name].dtype, np.number):
         df_plot[y_feature_name] = pd.to_numeric(df_plot[y_feature_name], errors='coerce')
 
     counts = df_plot[x_feature_name].value_counts(dropna=False)
 
-    # determine x (category) ordering
+    # determine category order for x-axis
     if x_feature_name == "segment":
         present = list(pd.unique(counts.index.tolist()))
         ordered = [s for s in SEGMENTS if s in present]
@@ -1939,17 +2342,19 @@ def create_feature_violin_plot(
     else:
         cat_order_full = sorted(counts.index.tolist(), key=lambda c: str(c).casefold())
 
+    # optionally restrict to the most frequent categories
     if top_n and top_n > 0:
-        # keep top_n by frequency, but preserve the chosen ordering as best as possible
         top_set = set(counts.head(top_n).index.tolist())
         cat_order = [c for c in cat_order_full if c in top_set]
     else:
         cat_order = cat_order_full
 
+    # keep only selected categories
     df_plot = df_plot[df_plot[x_feature_name].isin(cat_order)].copy()
     cat_counts = df_plot[x_feature_name].value_counts()
     tick_labels = [f"{str(c)}\n(n={int(cat_counts.get(c, 0))})" for c in cat_order]
 
+    # initialize figure and draw violin plot
     plt.figure(figsize=(12, 7))
     ax = sns.violinplot(
         data=df_plot,
@@ -1965,6 +2370,7 @@ def create_feature_violin_plot(
         scale='width',
     )
 
+    # compute quartiles and median for each category
     q = df_plot.groupby(x_feature_name, sort=False)[y_feature_name].quantile([0.25, 0.5, 0.75]).unstack()
     x_pos = dict(zip(cat_order, ax.get_xticks()))
     for cat in cat_order:
@@ -1973,35 +2379,40 @@ def create_feature_violin_plot(
         q1, med, q3 = q.loc[cat, [0.25, 0.5, 0.75]]
         if pd.isna(q1) or pd.isna(med) or pd.isna(q3):
             continue
+
+        # add IQR line and median point on top of each violin
         x0 = x_pos[cat]
         ax.vlines(x0, q1, q3, color='black', linewidth=2.0, zorder=3)
         ax.scatter([x0], [med], s=28, color='white', edgecolor='black', linewidth=0.7, zorder=4)
 
+    # set axis labels
     ax.set_xlabel(x_axis_name)
     ax.set_ylabel(y_axis_name)
 
-    # ax.set_xlim(0, 2200)
-    # ax.set_ylim(0, 6)
-
+    # build plot title
     title_name  = f'{plot_name}'
     title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title_name += f' (n={delvg_count})'
 
+    # optionally show title
     if SHOW_TITLE:
         ax.set_title(title_name)
     else:
         ax.set_title("")
 
+    # set x tick labels including sample sizes
     ax.set_xticklabels(tick_labels, rotation=0, ha='center')
 
     plt.tight_layout()
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder, clean_data, strain, segment, intersects)
     if feature_specifier:
         save_path = os.path.join(save_path, f'{feature_specifier}')
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     out_name = fname + '.png' if not fname.lower().endswith('.png') else fname
     plt.savefig(os.path.join(save_path, out_name), dpi=300)
     plt.close()
@@ -2033,24 +2444,46 @@ def create_feature_scatter_plot(
     subset_n: int = 5000,
     ):
     '''
-    Deterministic subsetting:
-    - If subset_n is set, picks the same subset of rows (based on column 'ID' + global SEED)
-      before applying selector coloring. This lets you rerun with a different selector and
-      get the exact same points, just different colours.
-    '''
+        Create a scatter plot of two numeric features with optional deterministic subsetting, trend lines and regression metrics.
+        :param plot_name: plot title prefix
+        :param df: input dataframe
+        :param x_feature_name: feature plotted on the x-axis
+        :param x_axis_name: x-axis label
+        :param y_feature_name: feature plotted on the y-axis
+        :param y_axis_name: y-axis label
+        :param selector: categorical feature used for coloring points
+        :param show_rolling_median: if True, overlay a rolling median trend line
+        :param rolling_window: window size for rolling median computation
+        :param show_identity_line: if True, draw the line y = x
+        :param pseudo_prefix: optional prefix for pseudo-candidate descriptors
+        :param show_decision_threshold: optional y-value for a horizontal threshold line
+        :param show_split_threshold: optional x-value for a vertical threshold line
+        :param reg_metrics: if True, compute and report MAE, MSE and R²
+        :param huber_delta: unused parameter kept for interface compatibility
+        :param fname: output file name without extension
+        :param path: top-level result path
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param subset_n: maximum number of deterministically selected rows to plot
 
+        :return: None
+    '''
+    # apply plotting style and initialize figure
     plt.style.use('seaborn-darkgrid')
     plt.figure(figsize=(14, 6))
 
-    # --- deterministic subset (BEFORE selector handling) ---
-    # keep behaviour identical when subset_n is None
+    # apply deterministic subsetting before selector-based coloring
     if subset_n is not None and subset_n > 0 and len(df) > subset_n:
 
-        # Create stable ID if missing (junction-identity is preferred)
+        # create stable row identifiers if missing
         if "ID" not in df.columns:
             df = df.copy()
 
-            # try common junction identity columns (adapt list if your names differ)
+            # try to build ID from common junction identity columns
             junction_col_sets = [
                 ("segment", "start", "end"),
             ]
@@ -2066,7 +2499,7 @@ def create_feature_scatter_plot(
                     made_id = True
                     break
 
-            # fallback: build an ID from what you *do* have (still deterministic)
+            # fall back to a deterministic ID built from available columns
             if not made_id:
                 fallback_cols = [
                     c for c in
@@ -2076,13 +2509,13 @@ def create_feature_scatter_plot(
                 if len(fallback_cols) > 0:
                     df["ID"] = df[fallback_cols].astype(str).agg("_".join, axis=1)
                 else:
-                    # absolute last resort: deterministic based on index
+                    # last-resort deterministic ID based on row index
                     df["ID"] = df.index.astype(str)
 
-        # hash IDs deterministically, mix with SEED, take smallest subset_n
+        # hash IDs deterministically and keep the smallest subset_n hashes
         _ids = df["ID"].astype(str)
         _h = pd.util.hash_pandas_object(_ids, index=False).astype("uint64")
-        _h = (_h ^ np.uint64(SEED))  # mix in global SEED
+        _h = (_h ^ np.uint64(SEED))
 
         pick_idx = (
             pd.DataFrame({"_h": _h}, index=df.index)
@@ -2092,11 +2525,13 @@ def create_feature_scatter_plot(
         )
         df = df.loc[pick_idx].copy()
 
+    # extract required columns and drop rows missing x or y values
     values = df[[x_feature_name, y_feature_name, selector]] \
         .dropna(subset=[x_feature_name, y_feature_name]) \
         .copy()
     n = len(values)
 
+    # normalize selector values and replace missing values
     cats = (
         values[selector]
         .astype(object)
@@ -2105,7 +2540,7 @@ def create_feature_scatter_plot(
     )
     values[selector] = cats
 
-    # determine selector order
+    # determine selector order for known grouping types
     if selector == "segment":
         present = list(pd.unique(cats))
         ordered = [s for s in SEGMENTS if s in present]
@@ -2124,10 +2559,11 @@ def create_feature_scatter_plot(
     else:
         uniq = sorted(pd.unique(cats))
 
-    # add category sizes into legend labels: "name (n=...)"
+    # compute selector category sizes for legend labels
     cat_counts = cats.value_counts(dropna=False).to_dict()
 
     def format_cat(u: str) -> str:
+        # convert internal strain codes to official names where possible
         if selector == "strain":
             try:
                 return get_official_strain_name(u)
@@ -2135,19 +2571,22 @@ def create_feature_scatter_plot(
                 return str(u)
         return str(u)
 
+    # create legend labels including sample sizes
     label_map = {u: f"{format_cat(u)} (n={int(cat_counts.get(u, 0))})" for u in uniq}
 
     values[selector] = values[selector].map(label_map)
 
-    # keep final order consistent with chosen ordering
+    # preserve final legend order after label mapping
     uniq = [label_map[u] for u in uniq]
 
-
+    # shuffle rows deterministically to reduce plotting bias from overplotting order
     values = values.sample(frac=1.0, random_state=SEED).reset_index(drop=True)
 
+    # assign colors to selector categories
     picked_colors = pick_colors(COLORS, len(uniq))
     palette = dict(zip(uniq, picked_colors))
 
+    # draw scatter plot
     sns.scatterplot(
         data=values,
         x=x_feature_name,
@@ -2160,7 +2599,7 @@ def create_feature_scatter_plot(
         alpha=0.5,
     )
 
-    # rolling median (graph element, robust trend)
+    # optionally overlay a rolling median trend line
     if show_rolling_median and (not values.empty):
         x_vals = pd.to_numeric(values[x_feature_name], errors="coerce").to_numpy(dtype=float)
         y_vals = pd.to_numeric(values[y_feature_name], errors="coerce").to_numpy(dtype=float)
@@ -2195,7 +2634,7 @@ def create_feature_scatter_plot(
                 label=f"rolling median (window={rolling_window})"
             )
 
-    # decision threshold
+    # optionally add horizontal decision threshold line
     if show_decision_threshold != 0:
         plt.axhline(
             float(show_decision_threshold),
@@ -2204,7 +2643,7 @@ def create_feature_scatter_plot(
             color="grey",
         )
 
-    # split threshold
+    # optionally add vertical split threshold line
     if show_split_threshold != 0:
         plt.axvline(
             float(show_split_threshold),
@@ -2213,11 +2652,12 @@ def create_feature_scatter_plot(
             color="grey",
         )
 
-    # regression metrics (predictions vs truth)
+    # initialize regression metric outputs
     mae = None
     mse = None
     r2_pred = None
 
+    # optionally compute regression metrics comparing y to x
     if reg_metrics and (not values.empty):
         y_true = values[x_feature_name].to_numpy(dtype=float)
         y_pred = values[y_feature_name].to_numpy(dtype=float)
@@ -2228,24 +2668,26 @@ def create_feature_scatter_plot(
             mae = float(np.nanmean(np.abs(err)))
             mse = float(np.nanmean(err ** 2))
 
-        # R² of predictions vs truth
+        # compute R² only if the x values vary
         if len(y_true) > 1 and np.nanstd(y_true) > 0:
             ss_res = np.nansum((y_true - y_pred) ** 2)
             ss_tot = np.nansum((y_true - np.nanmean(y_true)) ** 2)
             if ss_tot > 0:
                 r2_pred = 1 - ss_res / ss_tot
 
+    # choose regular or pseudo-candidate descriptor
     if pseudo_prefix:
         title_descriptor = make_pseudo_candidate_descriptor(pseudo_prefix, folder, data, strain, segment, intersects)
     else:
         title_descriptor = make_candidate_descriptor(folder, data, strain, segment, intersects)
 
+    # build plot title
     title = f'{plot_name}'
     title += title_descriptor
     title += f' (n={n})'
 
+    # optionally append regression metrics to the title
     if reg_metrics:
-        # last line: metrics
         line = "\n"
 
         if mae is not None and np.isfinite(mae):
@@ -2265,25 +2707,30 @@ def create_feature_scatter_plot(
 
         title += line
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title)
     else:
         plt.title("")
 
+    # set axis labels
     plt.xlabel(f'{x_axis_name}')
     plt.ylabel(f'{y_axis_name}')
 
-    if folder == 'pooled':
-        plt.ylim(1, 6)
-        plt.xlim(1, 6)
-    else:
-        plt.ylim(0, 5)
-        plt.xlim(0, 5)
+    # set default axis limits by preprocessing folder
+    if LIM_AXES:
+        if folder == 'pooled':
+            plt.ylim(1, 6)
+            plt.xlim(1, 6)
+        else:
+            plt.ylim(0, 5)
+            plt.xlim(0, 5)
 
+    # adjust y-axis for binary outputs if applicable
     if "bin" in path:
         plt.ylim(0, 1)
 
-    # identity line: y = x (span full plot range)
+    # optionally add identity line y = x spanning the visible plot range
     if show_identity_line:
         ax = plt.gca()
 
@@ -2302,10 +2749,11 @@ def create_feature_scatter_plot(
             zorder=0,
         )
 
-        # keep original limits (prevents autoscaling)
+        # keep original limits after drawing identity line
         ax.set_xlim(x0, x1)
         ax.set_ylim(y0, y1)
 
+    # place legend outside plot area
     if 1:
         plt.legend(
             loc='upper left',
@@ -2315,12 +2763,14 @@ def create_feature_scatter_plot(
             frameon=True
         )
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     result_path, _ = os.path.split(RESULTSPATH)
     save_path = os.path.join(result_path, path, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += '.png'
 
     plt.tight_layout()
@@ -2349,30 +2799,50 @@ def create_multi_density_plot(
     js_bins: int = 50,
     js_perm_n: int = 2000,
 ):
-    """
-    Draw empirical densities (KDE) for train and test in one plot.
-    Raw values only (no scaling/transforms).
-    Legend is handled by seaborn (do NOT overwrite with plt.legend()).
+    '''
+        Create a multi-density KDE plot for one or more dataframes and optionally compare two distributions with Jensen-Shannon distance.
+        :param plot_name: plot title prefix
+        :param df_list: list of input dataframes
+        :param df_names: list of names corresponding to df_list
+        :param x_feature_name: feature column to plot on the x-axis
+        :param x_axis_name: x-axis label
+        :param fname: output file name without extension
+        :param path: top-level result path
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param show_js: if True, compute Jensen-Shannon distance between exactly two distributions
+        :param show_n_in_legend: if True, append sample sizes to legend labels
+        :param kde_bw_adjust: bandwidth adjustment passed to seaborn.kdeplot
+        :param common_norm: if True, use common normalization across all KDEs
+        :param clip: optional clipping range for KDE evaluation
+        :param js_bins: number of bins used for histogram-based Jensen-Shannon distance
+        :param js_perm_n: number of permutations used for Jensen-Shannon p-value estimation
 
-    Adds histogram-based Jensen-Shannon distance + permutation p-value (stars).
-    """
-
+        :return: None
+    '''
+    # apply plotting style and initialize figure
     plt.style.use("seaborn-darkgrid")
     plt.figure(figsize=(10, 6))
 
+    # validate input list of dataframes
     if df_list is None or len(df_list) == 0:
         raise ValueError("df_list must contain at least one dataframe.")
     if df_names is None or len(df_names) != len(df_list):
         raise ValueError("df_names must be the same length as df_list.")
 
+    # Jensen-Shannon comparison only supports exactly two distributions
     if show_js and len(df_list) != 2:
         raise ValueError("show_js=True requires exactly 2 dataframes in df_list.")
 
-    # reorder df_list + df_names together#
+    # convert dataframe names to strings and determine present labels
     names = [str(n) for n in df_names]
     present = list(pd.unique(names))
 
-    
+    # infer legend title from provided names
     if "PB2" in names:
         legend_title = 'Segment'
     elif any(x in names for x in ("PR8", "Yamagata")):
@@ -2384,7 +2854,7 @@ def create_multi_density_plot(
     else:
         legend_title = 'Dataset'
 
-    # decide which ordering to use based on names present
+    # determine plotting order for known group types
     if all(n in SEGMENTS for n in present):
         ordered = [s for s in SEGMENTS if s in present]
         remaining = sorted([s for s in present if s not in ordered])
@@ -2400,11 +2870,12 @@ def create_multi_density_plot(
     else:
         desired = sorted(present)
 
-    # stable mapping name -> list of indices (handles duplicates safely)
+    # map names to original indices to preserve duplicates safely during reordering
     name_to_idxs = {}
     for i, n in enumerate(names):
         name_to_idxs.setdefault(n, []).append(i)
 
+    # rebuild dataframe and name order according to desired ordering
     new_idx = []
     for n in desired:
         if n in name_to_idxs:
@@ -2413,7 +2884,7 @@ def create_multi_density_plot(
     df_list = [df_list[i] for i in new_idx]
     df_names = [df_names[i] for i in new_idx]
 
-    # extract + minimal cleaning (numeric coercion + drop NaNs)
+    # extract target feature, coerce to numeric, and remove missing values
     cleaned = []
     for df_i, name_i in zip(df_list, df_names):
         v = df_i[[x_feature_name]].copy()
@@ -2425,12 +2896,12 @@ def create_multi_density_plot(
 
         cleaned.append(v)
 
-    # legend names (optionally append sample sizes)
+    # optionally append sample sizes to legend labels
     plot_names = list(df_names)
     if show_n_in_legend:
         plot_names = [f"{name_i} (n={len(v)})" for v, name_i in zip(cleaned, df_names)]
 
-    # similarity between distributions (histogram-based Jensen-Shannon distance)
+    # compute histogram-based Jensen-Shannon distance between two numeric vectors
     def jensen_shannon_distance(x1, x2, bins=50, eps=1e-12):
         x1 = np.asarray(x1, dtype=float).ravel()
         x2 = np.asarray(x2, dtype=float).ravel()
@@ -2443,15 +2914,17 @@ def create_multi_density_plot(
         if xmin == xmax:
             return 0.0  # identical constant distributions
 
-        # counts -> probabilities (more stable than density=True)
+        # compute histogram counts on shared bin edges
         h1, edges = np.histogram(x1, bins=bins, range=(xmin, xmax), density=False)
         h2, _     = np.histogram(x2, bins=edges, density=False)
 
+        # convert counts to stabilized probability distributions
         p = h1.astype(float) + eps
         q = h2.astype(float) + eps
         p = p / np.sum(p)
         q = q / np.sum(q)
 
+        # compute midpoint distribution and Jensen-Shannon distance
         m = 0.5 * (p + q)
 
         kl_pm = np.sum(p * np.log(p / m))
@@ -2460,7 +2933,7 @@ def create_multi_density_plot(
 
         return float(np.sqrt(jsd))
 
-    # permutation p-value for JS distance
+    # estimate permutation-based p-value for the observed Jensen-Shannon distance
     def js_permutation_pvalue(x1, x2, bins=50, n_perm=2000, seed=0):
         x1 = np.asarray(x1, dtype=float).ravel()
         x2 = np.asarray(x2, dtype=float).ravel()
@@ -2476,7 +2949,7 @@ def create_multi_density_plot(
         rng = np.random.default_rng(seed)
         more_extreme = 0
 
-        # small-sample safe p-value (avoid 0)
+        # perform permutation test and count equally or more extreme distances
         for _ in range(int(n_perm)):
             idx = rng.permutation(pooled.shape[0])
             a = pooled[idx[:n1]]
@@ -2485,12 +2958,16 @@ def create_multi_density_plot(
             if np.isfinite(js) and js >= obs:
                 more_extreme += 1
 
+        # use small-sample safe p-value estimate
         p = (more_extreme + 1) / (int(n_perm) + 1)
         return obs, float(p)
 
+    # initialize Jensen-Shannon outputs
     sim_js = np.nan
     js_p = np.nan
     js_stars = "NA"
+
+    # compute Jensen-Shannon similarity and permutation p-value if requested
     if show_js:
         sim_js, js_p = js_permutation_pvalue(
             cleaned[0][x_feature_name].to_numpy(),
@@ -2501,18 +2978,18 @@ def create_multi_density_plot(
         )
         js_stars = p_to_stars(js_p) if np.isfinite(js_p) else "NA"
 
-    # combine into one df with "type"
+    # combine all cleaned values into one dataframe for seaborn KDE plotting
     values = pd.concat(
         [v.assign(type=name_i) for v, name_i in zip(cleaned, plot_names)],
         ignore_index=True
     )
 
-    # colors in your style
+    # select colors for unique legend labels
     uniq = list(plot_names)
     picked_colors = pick_colors(COLORS, len(uniq))
     palette = dict(zip(uniq, picked_colors))
 
-    # KDE density curves (seaborn creates the legend)
+    # draw KDE curves; seaborn creates the legend automatically
     ax = sns.kdeplot(
         data=values,
         x=x_feature_name,
@@ -2524,17 +3001,17 @@ def create_multi_density_plot(
         clip=clip
     )
 
-    # title
+    # build title with descriptor and sample size summary
     title = f"{plot_name}"
     title += make_candidate_descriptor(folder, data, strain, segment, intersects)
 
-    # show sizes in title
     if len(df_list) <= 2:
         title += " (" + ", ".join([f"n_{name_i}={len(v)}" for v, name_i in zip(cleaned, df_names)]) + ")"
     else:
         n_total = sum(len(v) for v in cleaned)
         title += f" (n={n_total})"
 
+    # optionally append Jensen-Shannon statistics to title
     if show_js:
         if np.isfinite(sim_js):
             title += f"\nJS-distance={sim_js:.{DECIMALS}f}"
@@ -2546,11 +3023,13 @@ def create_multi_density_plot(
         else:
             title += " [NA]"
 
+    # optionally show plot title
     if SHOW_TITLE:
         plt.title(title)
     else:
         plt.title("")
     
+    # set axis labels
     plt.xlabel(x_axis_name)
 
     if common_norm:
@@ -2558,9 +3037,10 @@ def create_multi_density_plot(
     else:
         plt.ylabel("Density (area under each curve = 1)")
 
+    # keep placeholder for possible downstream use
     leg_placeholder = legend_title
 
-    # move the seaborn legend
+    # move seaborn-created legend outside plot area and set its title
     leg = ax.legend_
     if leg is not None:
         leg.set_bbox_to_anchor((1.02, 1))
@@ -2568,11 +3048,13 @@ def create_multi_density_plot(
         leg.set_title("Segment")
         leg.set_frame_on(True)
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     result_path, _ = os.path.split(RESULTSPATH)
     save_path = os.path.join(result_path, path, folder, subfolder, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, fname + ".png"), dpi=300, bbox_inches="tight")
     plt.close()
@@ -2595,19 +3077,32 @@ def create_prediction_probability_density_plot(
     kde_grid: int = 512,
     clip=(0, 1),
 ):
-    """
-    KDE-only density plot (no histogram) for predicted class probabilities of a binary CNN,
-    with a decision threshold indicator line.
+    '''
+        Create a KDE-only density plot for predicted probabilities with a decision threshold line.
+        :param plot_name: plot title prefix
+        :param df: input dataframe
+        :param x_feature_name: probability column to plot
+        :param x_axis_name: x-axis label
+        :param decision_threshold: classification threshold shown as vertical line
+        :param path: top-level result path
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param kde_bw_adjust: bandwidth adjustment factor for gaussian KDE
+        :param kde_grid: number of grid points used for KDE evaluation
+        :param clip: optional lower and upper bounds for plotting
 
-    - Computes KDE from raw sample values
-    - Draws a grey dashed vertical line at `decision_threshold`
-    - Keeps your styling + save path conventions
-    """
-
+        :return: None
+    '''
+    # apply plotting style and initialize figure
     plt.style.use("seaborn-darkgrid")
     plt.figure(figsize=(10, 6))
 
-    # extract + clean (numeric coercion + drop NaNs)
+    # extract numeric values and drop missing entries
     s = pd.to_numeric(df[x_feature_name], errors="coerce").dropna()
     values = s.to_numpy()
     n = len(values)
@@ -2616,18 +3111,18 @@ def create_prediction_probability_density_plot(
             f"no numeric data in column '{x_feature_name}' after dropping NaNs/coercion."
         )
 
-    # basic bounds
+    # determine finite value bounds
     xmin = float(np.nanmin(values))
     xmax = float(np.nanmax(values))
     if not np.isfinite(xmin) or not np.isfinite(xmax):
         raise ValueError(f"no finite numeric data in column '{x_feature_name}' after cleaning.")
 
-    # constant distribution: create a tiny window so KDE evaluation is well-defined
+    # widen bounds slightly for constant distributions
     if xmin == xmax:
         xmin -= 0.5
         xmax += 0.5
 
-    # optional clip
+    # optionally clip x-range to requested interval
     if clip is not None:
         c0, c1 = clip
         if c0 is not None:
@@ -2638,9 +3133,10 @@ def create_prediction_probability_density_plot(
             xmin -= 0.5
             xmax += 0.5
 
+    # create evenly spaced grid for KDE evaluation
     xs = np.linspace(xmin, xmax, int(kde_grid))
 
-    # KDE via scipy
+    # fit gaussian KDE and optionally adjust bandwidth
     kde = stats.gaussian_kde(values)
     if kde_bw_adjust != 1.0:
         base_cf = kde.covariance_factor()
@@ -2649,11 +3145,11 @@ def create_prediction_probability_density_plot(
 
     pdf = kde(xs)
 
-    # plot KDE curve
+    # plot KDE curve and shaded area
     plt.plot(xs, pdf, color=COLORS[6], linewidth=2.0, label="test")
     plt.fill_between(xs, 0, pdf, color=COLORS[6], alpha=0.15)
 
-    # decision threshold line (grey dashed)
+    # add grey dashed decision threshold line
     plt.axvline(
         float(decision_threshold),
         color="grey",
@@ -2662,20 +3158,22 @@ def create_prediction_probability_density_plot(
         label=f"decision_threshold={decision_threshold}",
     )
 
-    # title / labels
+    # build plot title
     title = f"{plot_name}"
     title += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title += f" (n={n})"
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title)
     else:
         plt.title("")
 
+    # set axis labels
     plt.xlabel(f"{x_axis_name}")
     plt.ylabel("Density (area under curve = 1)")
 
-    # legend outside
+    # legend intentionally disabled here
     if 0:
         plt.legend(
             loc="upper left",
@@ -2685,12 +3183,13 @@ def create_prediction_probability_density_plot(
             frameon=True,
         )
 
-    # save path
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     result_path, _ = os.path.split(RESULTSPATH)
     save_path = os.path.join(result_path, path, folder, subfolder, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += ".png"
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, fname), dpi=300, bbox_inches="tight")
@@ -2713,17 +3212,34 @@ def create_feature_roc_auc_plot(
     intersects: str,
     ):
     '''
+        Create an ROC curve plot for binary predictions and report ROC-AUC and F1.
+        :param plot_name: plot title prefix
+        :param df: input dataframe
+        :param y_true_feature_name: true binary label column
+        :param y_pred_proba_feature_name: predicted probability column
+        :param f1_threshold: threshold used to convert probabilities into class labels for F1
+        :param selector: grouping column retained for consistency and cleaning
+        :param fname: output file name without extension
+        :param path: top-level result path
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # apply plotting style and initialize figure
     plt.style.use('seaborn-darkgrid')
     plt.figure(figsize=(10, 6))
 
-    # keep only needed columns, drop NaNs
+    # keep only required columns and drop rows missing truth or prediction values
     needed = [y_true_feature_name, y_pred_proba_feature_name, selector]
     values = df[needed].dropna(subset=[y_true_feature_name, y_pred_proba_feature_name]).copy()
     n = len(values)
 
-    # ensure selector is clean + consistent
+    # normalize selector values for consistency
     cats = (
         values[selector]
         .astype(object)
@@ -2732,22 +3248,23 @@ def create_feature_roc_auc_plot(
     )
     values[selector] = cats
 
-    # arrays
+    # extract arrays for metric computation
     y_true = values[y_true_feature_name].to_numpy()
     y_proba = values[y_pred_proba_feature_name].to_numpy()
 
-    # ROC + AUC
+    # compute ROC curve and ROC-AUC
     fpr, tpr, _ = roc_curve(y_true, y_proba)
     auc_score = roc_auc_score(y_true, y_proba)
     auc_score = round(auc_score, DECIMALS)
 
-    # F1 at fixed global threshold
+    # compute F1 score at the fixed decision threshold
     y_pred_label = (y_proba >= f1_threshold).astype(int)
     f1 = f1_score(y_true, y_pred_label)
     f1 = round(f1, DECIMALS)
 
     roc_color = COLORS[6]
 
+    # plot ROC curve and diagonal reference line
     plt.plot(
         fpr,
         tpr,
@@ -2756,30 +3273,37 @@ def create_feature_roc_auc_plot(
     )
     plt.plot([0, 1], [0, 1], linestyle="--", linewidth=1.5, color="grey")
 
+    # build plot title including summary metrics
     title = f'{plot_name}'
     title += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title += f' (n={n})'
     title += f'\nROC-AUC={auc_score}, F1={f1} (decision_threshold={f1_threshold})'
 
-    plt.ylim(0, 1)
-    plt.xlim(0, 1)
+    # fix axis ranges to [0, 1]
+    if LIM_AXES:
+        plt.ylim(0, 1)
+        plt.xlim(0, 1)
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title)
     else:
         plt.title("")
 
+    # set axis labels and grid
     plt.xlabel("False positive rate")
     plt.ylabel("True positive rate")
 
     plt.grid(True)
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     result_path, _ = os.path.split(RESULTSPATH)
     save_path = os.path.join(result_path, path, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += '.png'
 
     plt.tight_layout()
@@ -2803,17 +3327,34 @@ def create_feature_pr_auc_plot(
     intersects: str,
     ):
     '''
+        Create a precision-recall curve plot for binary predictions and report PR-AUC and F1.
+        :param plot_name: plot title prefix
+        :param df: input dataframe
+        :param y_true_feature_name: true binary label column
+        :param y_pred_proba_feature_name: predicted probability column
+        :param f1_threshold: threshold used to convert probabilities into class labels for F1
+        :param selector: grouping column retained for consistency and cleaning
+        :param fname: output file name without extension
+        :param path: top-level result path
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # apply plotting style and initialize figure
     plt.style.use('seaborn-darkgrid')
     plt.figure(figsize=(10, 6))
 
-    # keep only needed columns, drop NaNs
+    # keep only required columns and drop rows missing truth or prediction values
     needed = [y_true_feature_name, y_pred_proba_feature_name, selector]
     values = df[needed].dropna(subset=[y_true_feature_name, y_pred_proba_feature_name]).copy()
     n = len(values)
 
-    # ensure selector is clean + consistent
+    # normalize selector values for consistency
     cats = (
         values[selector]
         .astype(object)
@@ -2822,22 +3363,23 @@ def create_feature_pr_auc_plot(
     )
     values[selector] = cats
 
-    # arrays
+    # extract arrays for metric computation
     y_true = values[y_true_feature_name].to_numpy()
     y_proba = values[y_pred_proba_feature_name].to_numpy()
 
-    # PR + AUC
+    # compute precision-recall curve and PR-AUC
     precision, recall, _ = precision_recall_curve(y_true, y_proba)
     pr_auc_score = average_precision_score(y_true, y_proba)
     pr_auc_score = round(pr_auc_score, DECIMALS)
 
-    # F1 at fixed global threshold
+    # compute F1 score at the fixed decision threshold
     y_pred_label = (y_proba >= f1_threshold).astype(int)
     f1 = f1_score(y_true, y_pred_label)
     f1 = round(f1, DECIMALS)
 
     pr_color = COLORS[6]
 
+    # plot precision-recall curve
     plt.plot(
         recall,
         precision,
@@ -2845,30 +3387,37 @@ def create_feature_pr_auc_plot(
         color=pr_color
     )
 
+    # build plot title including summary metrics
     title = f'{plot_name}'
     title += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title += f' (n={n})'
     title += f'\nPR-AUC={pr_auc_score}, F1={f1} (decision_threshold={f1_threshold})'
 
-    plt.ylim(0, 1)
-    plt.xlim(0, 1)
+    # fix axis ranges to [0, 1]
+    if LIM_AXES:
+        plt.ylim(0, 1)
+        plt.xlim(0, 1)
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title)
     else:
         plt.title("")
 
+    # set axis labels and grid
     plt.xlabel("Recall (-)")
     plt.ylabel("Precision (-)")
 
     plt.grid(True)
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     result_path, _ = os.path.split(RESULTSPATH)
     save_path = os.path.join(result_path, path, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += '.png'
 
     plt.tight_layout()
@@ -2895,20 +3444,40 @@ def create_feature_residual_plot(
     intersects: str,
     ):
     '''
+        Create a residual scatter plot comparing predictions to true values and optionally report regression metrics.
+        :param plot_name: plot title prefix
+        :param df: input dataframe
+        :param x_feature_name: true target column
+        :param x_axis_name: x-axis label
+        :param y_pred_feature_name: predicted target column
+        :param y_axis_name: y-axis label
+        :param selector: grouping column used for coloring points
+        :param show_zero_line: if True, draw a horizontal zero residual line
+        :param reg_metrics: if True, compute and report MAE, MSE and R²
+        :param fname: output file name without extension
+        :param path: top-level result path
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
+        :return: None
     '''
+    # apply plotting style and initialize figure
     plt.style.use('seaborn-darkgrid')
     plt.figure(figsize=(10, 6))
 
-    # keep only needed columns, drop NaNs
+    # keep only required columns and drop rows missing true or predicted values
     needed = [x_feature_name, y_pred_feature_name, selector]
     values = df[needed].dropna(subset=[x_feature_name, y_pred_feature_name]).copy()
     n = len(values)
 
-    # compute residuals
+    # compute residuals as prediction minus true value
     values["residual"] = values[y_pred_feature_name] - values[x_feature_name]
 
-    # ensure selector is clean + consistent (same logic as your scatter)
+    # normalize selector values for consistent plotting
     cats = (
         values[selector]
         .astype(object)
@@ -2918,10 +3487,11 @@ def create_feature_residual_plot(
     values[selector] = cats
     uniq = sorted(cats.unique())
 
+    # assign colors to unique selector categories
     picked_colors = pick_colors(COLORS, len(uniq))
     palette = dict(zip(uniq, picked_colors))
 
-    # residual scatter
+    # draw scatter plot of residuals against true values
     sns.scatterplot(
         data=values,
         x=x_feature_name,
@@ -2934,16 +3504,17 @@ def create_feature_residual_plot(
         legend=SHOW_LEGEND
     )
 
-    # optional: zero residual reference line
+    # optionally add horizontal zero reference line
     if show_zero_line:
         plt.axhline(0, color="grey", linestyle="--", linewidth=1.5, label="zero residual")
 
-    # regression metrics (predictions vs truth)
+    # initialize regression metric outputs
     mae = None
     mse = None
     hub = None
     r2  = None
 
+    # optionally compute regression metrics from predictions and true values
     if reg_metrics and (not values.empty):
         y_true = values[x_feature_name].to_numpy(dtype=float)
         y_pred = values[y_pred_feature_name].to_numpy(dtype=float)
@@ -2954,19 +3525,20 @@ def create_feature_residual_plot(
             mae = float(np.nanmean(np.abs(err)))
             mse = float(np.nanmean(err ** 2))
 
-        # R² (only if meaningful)
+        # compute R² only if at least two variable true values exist
         if len(y_true) > 1 and np.nanstd(y_true) > 0:
             ss_res = np.nansum((y_true - y_pred) ** 2)
             ss_tot = np.nansum((y_true - np.nanmean(y_true)) ** 2)
             if ss_tot > 0:
                 r2 = 1 - ss_res / ss_tot
 
+    # build plot title
     title = f'{plot_name}'
     title += make_candidate_descriptor(folder, data, strain, segment, intersects)
     title += f' (n={n})'
 
+    # optionally append regression metrics to the title
     if reg_metrics:
-        # last line: metrics
         line = "\n"
 
         if mae is not None and np.isfinite(mae):
@@ -2986,21 +3558,26 @@ def create_feature_residual_plot(
 
         title += line
 
-    if folder == 'pooled':
-        plt.ylim(-6, 6)
-        plt.xlim(1, 6)
-    else:
-        plt.ylim(-5, 5)
-        plt.xlim(0, 5)
+    # set axis limits depending on preprocessing folder
+    if LIM_AXES:
+        if folder == 'pooled':
+            plt.ylim(-6, 6)
+            plt.xlim(1, 6)
+        else:
+            plt.ylim(-5, 5)
+            plt.xlim(0, 5)
 
+    # optionally show title
     if SHOW_TITLE:
         plt.title(title)
     else:
         plt.title("")
 
+    # set axis labels
     plt.xlabel(f'{x_axis_name}')
     plt.ylabel(f'{y_axis_name}')
 
+    # optionally place legend outside plot area
     if SHOW_LEGEND:
         plt.legend(
             loc='upper left',
@@ -3010,12 +3587,14 @@ def create_feature_residual_plot(
             frameon=True
         )
 
+    # construct save path and create directories if needed
     clean_data = clean_data_string(data)
     result_path, _ = os.path.split(RESULTSPATH)
     save_path = os.path.join(result_path, path, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     fname += '.png'
 
     plt.tight_layout()
@@ -3033,40 +3612,41 @@ def create_intersect_bar_plot(
     segment: str,
     intersects: str,
 ):
-    """
-    One input df (must contain: 'ikey', 'dataset', y_feature_name).
+    '''
+        Create a horizontal bar plot comparing global and dataset-wise intersection percentages per group.
+        :param df: input dataframe containing ikey, dataset and grouping feature
+        :param y_feature_name: feature used to define bar groups on the y-axis
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
-    - "global" view: use df as-is
-      -> within each y_feature group, compute % rows whose ikey is non-unique (duplicated keep=False)
-
-    - "dataset" view: computationally derive a second df by collapsing within (dataset, ikey)
-      -> df_dataset = one row per (dataset, ikey)
-      -> within each y_feature group, compute % rows whose ikey is non-unique across datasets
-
-    Plot side-by-side horizontal bars in the desired order (based on y_feature_name).
-    """
-
-    # checks
+        :return: None
+    '''
+    # check that all required columns are present
     required = {"ikey", "dataset", y_feature_name}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
 
-    # normalize feature column
+    # normalize grouping feature and replace missing values with display label
     df_global = df.copy()
     df_global[y_feature_name] = df_global[y_feature_name].astype(object)
     df_global[y_feature_name] = df_global[y_feature_name].where(
         df_global[y_feature_name].notna(), "NA"
     )
 
-    # derive dataset-collapsed df (one row per dataset + ikey)
+    # collapse repeated entries within each dataset and ikey combination
     df_dataset = (
         df_global.sort_values(["dataset", "ikey"])
         .groupby(["dataset", "ikey"], as_index=False)
         .first()
     )
 
-    # helpers
+    # compute percentage of rows with non-unique ikeys within one group
     def pct_nonunique_within_group(g: pd.DataFrame) -> float:
         n = len(g)
         if n == 0:
@@ -3074,6 +3654,7 @@ def create_intersect_bar_plot(
         dup_mask = g.duplicated(subset=["ikey"], keep=False)
         return 100.0 * float(dup_mask.sum()) / float(n)
 
+    # compute per-group intersection statistics for a dataframe
     def compute_group_stats(dfx: pd.DataFrame) -> dict:
         # group -> (pct_nonunique, n_rows)
         stats = {}
@@ -3083,17 +3664,19 @@ def create_intersect_bar_plot(
             stats[group_name] = (pct_nonunique_within_group(g), int(len(g)))
         return stats
 
-    # compute stats
+    # compute statistics for global and dataset-collapsed views
     stats_g = compute_group_stats(df_global)
     stats_d = compute_group_stats(df_dataset)
 
+    # collect all present group labels across both views
     present = list(set(stats_g.keys()) | set(stats_d.keys()))
 
+    # define reverse ordering templates for known grouping types
     rev_seg = SEGMENTS[::-1]
     rev_str = STRAINS[::-1]
     rev_dat = DATASETS[::-1]
 
-    # ---- ordering scheme (y_feature_name drives ordering) ----
+    # determine display order based on known category sets
     if all(n in rev_seg for n in present):
         ordered = [s for s in rev_seg if s in present]
         remaining = sorted([s for s in present if s not in ordered])
@@ -3109,7 +3692,7 @@ def create_intersect_bar_plot(
     else:
         desired = sorted(present)
 
-    # aligned vectors
+    # align percentages and group sizes to the chosen display order
     pct_g, pct_d, n_g, n_d = [], [], [], []
     for name in desired:
         pg, ng = stats_g.get(name, (0.0, 0))
@@ -3119,7 +3702,7 @@ def create_intersect_bar_plot(
         n_g.append(ng)
         n_d.append(nd_)
 
-    # ---- plot ----
+    # configure plot layout
     plt.style.use("seaborn-darkgrid")
     num_groups = len(desired)
     y_positions = np.arange(num_groups)
@@ -3129,9 +3712,11 @@ def create_intersect_bar_plot(
 
     fig, ax = plt.subplots(figsize=(12, max(6, num_groups * 0.4)))
 
+    # define bar colors for both compared views
     color_global = COLORS[0]
     color_dataset = COLORS[8]
 
+    # plot global intersection percentages
     ax.barh(
         y_positions - offset,
         pct_g,
@@ -3141,6 +3726,8 @@ def create_intersect_bar_plot(
         linewidth=0.5,
         color=color_global,
     )
+
+    # plot dataset-wise intersection percentages
     ax.barh(
         y_positions + offset,
         pct_d,
@@ -3151,6 +3738,7 @@ def create_intersect_bar_plot(
         color=color_dataset,
     )
 
+    # create y-axis labels including sample sizes of both views
     y_labels = [
         f"{name} (n_g={ng}, n_d={nd})"
         for name, ng, nd in zip(desired, n_g, n_d)
@@ -3158,21 +3746,26 @@ def create_intersect_bar_plot(
     ax.set_yticks(y_positions)
     ax.set_yticklabels(y_labels)
 
+    # set axis labels
     ax.set_xlabel("intersects within candidates (%)")
     ax.set_ylabel(f"{y_feature_name}s")
 
+    # total row counts for title annotation
     N_g = int(len(df_global))
     N_d = int(len(df_dataset))
 
+    # construct plot title
     title = f"comparison of intersects per {y_feature_name}"
     title += make_candidate_descriptor("all", data, strain, segment, intersects, True)
     title += f" (n_glo={N_g}, n_dat={N_d})"
 
+    # optionally show title
     if SHOW_TITLE:
         ax.set_title(title)
     else:
         ax.set_title("")
 
+    # optionally show legend outside plot area
     if SHOW_LEGEND:
         ax.legend(
             loc="upper left",
@@ -3182,13 +3775,16 @@ def create_intersect_bar_plot(
             title=make_legend_descriptor(y_feature_name),
         )
 
+    # adjust layout to avoid clipping
     plt.tight_layout()
 
+    # construct output path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     outname = fname + ".png"
     plt.savefig(os.path.join(save_path, outname), dpi=300, bbox_inches="tight")
     plt.close()
@@ -3205,24 +3801,22 @@ def create_advandced_intersect_plot(
     segment: str,
     intersects: str,
 ):
-    """
-    Compare two dataframes by the % of non-unique ikeys within each y_feature group.
+    '''
+        Create a horizontal bar plot comparing intersection percentages between processed and raw dataframes.
+        :param df_proc: processed dataframe containing ikey and grouping feature
+        :param df_raw: raw dataframe containing ikey and grouping feature
+        :param y_feature_name: feature used to define bar groups on the y-axis
+        :param fname: output file name without extension
+        :param folder: main result folder and processed data label
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
-    Requirements:
-      - df_proc must contain: 'ikey', y_feature_name
-      - df_raw  must contain: 'ikey', y_feature_name
-
-    For each df separately:
-      - within each y_feature group, compute:
-          pct_nonunique = 100 * (#rows where ikey is duplicated within that group) / (#rows in group)
-
-    Plot side-by-side horizontal bars in a consistent ordering (based on y_feature_name).
-    Legend labels:
-      - df_proc -> label = folder
-      - df_raw  -> label = "Raw"
-    """
-
-    # ---- checks ----
+        :return: None
+    '''
+    # check that both dataframes contain required columns
     required = {"ikey", y_feature_name}
     missing_proc = required - set(df_proc.columns)
     missing_raw = required - set(df_raw.columns)
@@ -3231,7 +3825,7 @@ def create_advandced_intersect_plot(
     if missing_raw:
         raise ValueError(f"df_raw missing required columns: {sorted(missing_raw)}")
 
-    # ---- normalize group column ----
+    # normalize grouping column and replace missing values with display label
     def normalize_group_col(dfx: pd.DataFrame) -> pd.DataFrame:
         out = dfx.copy()
         out[y_feature_name] = out[y_feature_name].astype(object)
@@ -3241,7 +3835,7 @@ def create_advandced_intersect_plot(
     df_proc_n = normalize_group_col(df_proc)
     df_raw_n  = normalize_group_col(df_raw)
 
-    # ---- helpers ----
+    # compute percentage of rows with non-unique ikeys within one group
     def pct_nonunique_within_group(g: pd.DataFrame) -> float:
         n = len(g)
         if n == 0:
@@ -3249,6 +3843,7 @@ def create_advandced_intersect_plot(
         dup_mask = g.duplicated(subset=["ikey"], keep=False)
         return 100.0 * float(dup_mask.sum()) / float(n)
 
+    # compute per-group intersection statistics for a dataframe
     def compute_group_stats(dfx: pd.DataFrame) -> dict:
         # group -> (pct_nonunique, n_rows)
         stats = {}
@@ -3258,16 +3853,19 @@ def create_advandced_intersect_plot(
             stats[group_name] = (pct_nonunique_within_group(g), int(len(g)))
         return stats
 
+    # compute statistics for processed and raw dataframes
     stats_p = compute_group_stats(df_proc_n)
     stats_r = compute_group_stats(df_raw_n)
 
+    # collect all present group labels across both dataframes
     present = list(set(stats_p.keys()) | set(stats_r.keys()))
 
-    # ---- ordering scheme (same idea as your inspo function) ----
+    # define reverse ordering templates for known grouping types
     rev_seg = SEGMENTS[::-1]
     rev_str = STRAINS[::-1]
     rev_dat = DATASETS[::-1]
 
+    # determine display order based on known category sets
     if all(n in rev_seg for n in present):
         ordered = [s for s in rev_seg if s in present]
         remaining = sorted([s for s in present if s not in ordered])
@@ -3283,6 +3881,7 @@ def create_advandced_intersect_plot(
     else:
         desired = sorted(present, key=lambda x: str(x).casefold())
 
+    # optionally convert internal group names to prettier display labels
     def format_group_label(name: str) -> str:
         if y_feature_name == "strain":
             # convert internal code -> official name
@@ -3292,7 +3891,7 @@ def create_advandced_intersect_plot(
                 return str(name)  # fallback if something unexpected appears
         return str(name)
 
-    # ---- aligned vectors ----
+    # align percentages and group sizes to the chosen display order
     pct_p, pct_r, n_p, n_r = [], [], [], []
     for name in desired:
         pp, np_ = stats_p.get(name, (0.0, 0))
@@ -3302,7 +3901,7 @@ def create_advandced_intersect_plot(
         n_p.append(np_)
         n_r.append(nr_)
 
-    # plot
+    # configure plot layout
     plt.style.use("seaborn-darkgrid")
     num_groups = len(desired)
     y_positions = np.arange(num_groups)
@@ -3312,10 +3911,11 @@ def create_advandced_intersect_plot(
 
     fig, ax = plt.subplots(figsize=(16, max(6, num_groups * 0.4)))
 
-    # keep consistent with your palette usage
+    # define bar colors for processed and raw data
     color_proc = COLORS[0]
     color_raw  = COLORS[8]
 
+    # plot processed dataframe intersection percentages
     ax.barh(
         y_positions - offset,
         pct_p,
@@ -3325,6 +3925,8 @@ def create_advandced_intersect_plot(
         linewidth=0.5,
         color=color_proc,
     )
+
+    # plot raw dataframe intersection percentages
     ax.barh(
         y_positions + offset,
         pct_r,
@@ -3335,6 +3937,7 @@ def create_advandced_intersect_plot(
         color=color_raw,
     )
 
+    # create y-axis labels including sample sizes of both dataframes
     y_labels = [
         f"{format_group_label(name)} (n_r={nr_}, n_{str(folder[0])}={np_})"
         for name, np_, nr_ in zip(desired, n_p, n_r)
@@ -3343,21 +3946,26 @@ def create_advandced_intersect_plot(
     ax.set_yticks(y_positions)
     ax.set_yticklabels(y_labels)
 
+    # set axis labels
     ax.set_xlabel(f"Intersections within {y_feature_name} (%)")
     ax.set_ylabel(capitalize_first(y_feature_name), labelpad=20)
 
+    # total row counts for title annotation
     N_p = int(len(df_proc_n))
     N_r = int(len(df_raw_n))
 
+    # construct plot title
     title = f"comparison of intersects per {y_feature_name}"
     title += make_candidate_descriptor("all", data, strain, segment, intersects, True)
     title += f" (n_{str(folder)}={N_p}, n_raw={N_r})"
 
+    # optionally show title
     if SHOW_TITLE:
         ax.set_title(title)
     else:
         ax.set_title("")
 
+    # optionally show legend outside plot area
     if SHOW_LEGEND:
         ax.legend(
             loc="upper left",
@@ -3367,13 +3975,16 @@ def create_advandced_intersect_plot(
             title="Data",
         )
 
+    # adjust layout to avoid clipping
     plt.tight_layout()
 
+    # construct output path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     outname = fname + ".png"
     plt.savefig(os.path.join(save_path, outname), dpi=300, bbox_inches="tight")
     plt.close()
@@ -3390,16 +4001,22 @@ def create_pooling_intersect_bar_plot(
     segment: str,
     intersects: str
 ):
-    """
-    Compare non-unique ikeys (%) between two dfs (pooled vs unpooled), grouped by y_feature_name.
+    '''
+        Create a horizontal bar plot comparing intersection percentages between pooled and unpooled dataframes.
+        :param df_pooled: pooled dataframe containing ikey and grouping feature
+        :param df_unpooled: unpooled dataframe containing ikey and grouping feature
+        :param y_feature_name: feature used to define bar groups on the y-axis
+        :param fname: output file name without extension
+        :param folder: main result folder
+        :param subfolder: result subfolder
+        :param data: selected virus type or data subset
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
 
-    Requirements:
-    - both dfs must contain: 'ikey', y_feature_name
-    - analysis: within each y_feature group, compute % rows whose ikey is non-unique (duplicated keep=False)
-    - plot: side-by-side horizontal bars for pooled and unpooled
-    """
-
-    # ---- checks ----
+        :return: None
+    '''
+    # check that both dataframes contain required columns
     required = {"ikey", y_feature_name}
     miss_p = required - set(df_pooled.columns)
     miss_u = required - set(df_unpooled.columns)
@@ -3408,11 +4025,11 @@ def create_pooling_intersect_bar_plot(
     if miss_u:
         raise ValueError(f"df_unpooled missing required columns: {sorted(miss_u)}")
 
-    # ---- normalize feature column ----
+    # create working copies of both dataframes
     df_p = df_pooled.copy()
     df_u = df_unpooled.copy()
 
-    # ---- helpers ----
+    # compute percentage of rows with non-unique ikeys within one group
     def pct_nonunique_ikey_within_group(g: pd.DataFrame) -> float:
         n = len(g)
         if n == 0:
@@ -3420,6 +4037,7 @@ def create_pooling_intersect_bar_plot(
         dup_mask = g.duplicated(subset=["ikey"], keep=False)
         return 100.0 * float(dup_mask.sum()) / float(n)
 
+    # compute per-group intersection statistics for a dataframe
     def compute_group_stats(dfx: pd.DataFrame) -> dict:
         # group -> (pct_nonunique, n_rows)
         stats = {}
@@ -3429,17 +4047,19 @@ def create_pooling_intersect_bar_plot(
             stats[group_name] = (pct_nonunique_ikey_within_group(g), int(len(g)))
         return stats
 
-    # ---- compute stats ----
+    # compute statistics for pooled and unpooled dataframes
     stats_p = compute_group_stats(df_p)  # pooled
     stats_u = compute_group_stats(df_u)  # unpooled
 
+    # collect all present group labels across both dataframes
     present = list(set(stats_p.keys()) | set(stats_u.keys()))
 
+    # define reverse ordering templates for known grouping types
     rev_seg = SEGMENTS[::-1]
     rev_str = STRAINS[::-1]
     rev_dat = DATASETS[::-1]
 
-    # ---- ordering scheme (y_feature_name drives ordering) ----
+    # determine display order based on known category sets
     if all(n in rev_seg for n in present):
         ordered = [s for s in rev_seg if s in present]
         remaining = sorted([s for s in present if s not in ordered])
@@ -3455,7 +4075,7 @@ def create_pooling_intersect_bar_plot(
     else:
         desired = sorted(present)
 
-    # ---- aligned vectors ----
+    # align percentages and group sizes to the chosen display order
     pct_p, pct_u, n_p, n_u = [], [], [], []
     for name in desired:
         pp, np_ = stats_p.get(name, (0.0, 0))
@@ -3465,7 +4085,7 @@ def create_pooling_intersect_bar_plot(
         n_p.append(np_)
         n_u.append(nu_)
 
-    # ---- plot ----
+    # configure plot layout
     plt.style.use("seaborn-darkgrid")
     num_groups = len(desired)
     y_positions = np.arange(num_groups)
@@ -3475,9 +4095,11 @@ def create_pooling_intersect_bar_plot(
 
     fig, ax = plt.subplots(figsize=(12, max(6, num_groups * 0.4)))
 
+    # define bar colors for pooled and unpooled data
     color_pooled = COLORS[0]
     color_unpooled = COLORS[8]
 
+    # plot pooled intersection percentages
     ax.barh(
         y_positions - offset,
         pct_p,
@@ -3487,6 +4109,8 @@ def create_pooling_intersect_bar_plot(
         linewidth=0.5,
         color=color_pooled,
     )
+
+    # plot unpooled intersection percentages
     ax.barh(
         y_positions + offset,
         pct_u,
@@ -3497,6 +4121,7 @@ def create_pooling_intersect_bar_plot(
         color=color_unpooled,
     )
 
+    # create y-axis labels including sample sizes of both dataframes
     y_labels = [
         f"{name} (n_p={np_}, n_u={nu_})"
         for name, np_, nu_ in zip(desired, n_p, n_u)
@@ -3504,21 +4129,26 @@ def create_pooling_intersect_bar_plot(
     ax.set_yticks(y_positions)
     ax.set_yticklabels(y_labels)
 
+    # set axis labels
     ax.set_xlabel("intersects within candidates (%)")
     ax.set_ylabel(f"{make_legend_descriptor(y_feature_name)}s")
 
+    # total row counts for title annotation
     N_p = int(len(df_p))
     N_u = int(len(df_u))
 
+    # construct plot title
     title = f"comparison of intersects per {make_legend_descriptor(y_feature_name)}"
     title += make_candidate_descriptor("all", data, strain, segment, intersects)
     title += f" (n_pool={N_p}, n_unpool={N_u})"
 
+    # optionally show title
     if SHOW_TITLE:
         ax.set_title(title)
     else:
         ax.set_title("")
 
+    # optionally show legend outside plot area
     if SHOW_LEGEND:
         ax.legend(
             loc="upper left",
@@ -3528,14 +4158,16 @@ def create_pooling_intersect_bar_plot(
             title=make_legend_descriptor(y_feature_name),
         )
 
+    # adjust layout to avoid clipping
     plt.tight_layout()
 
-    # save
+    # construct output path and create directories if needed
     clean_data = clean_data_string(data)
     save_path = os.path.join(RESULTSPATH, folder, subfolder)
     save_path = os.path.join(save_path, clean_data, strain, segment, intersects)
     os.makedirs(save_path, exist_ok=True)
 
+    # save figure and close it
     outname = fname + ".png"
     plt.savefig(os.path.join(save_path, outname), dpi=300, bbox_inches="tight")
     plt.close()
@@ -3561,24 +4193,35 @@ if __name__ == "__main__":
     ### SELECTION ###
     #################
 
-    selector = 'dataset'
-    curvature = 'right'
-    show_quantiles= 1
-    
-    ### DATASETS SINGLE/MULTI/PREDICTION ###
+    ### REQUIRES CORESPONDING PREPROCESSING! ###
 
+    ### order by ... ###
+    selector = 'dataset'
+
+    ### point of maximum curvature ###
+    curvature = 'right'
+
+    ### show quantiles for distribution ###
+    show_quantiles= 1
+
+    ### "pooled" or "unpooled" ###
     folder = 'pooled'
+
+    ### "primary" or "secondary" ###
     subfolder = 'secondary'
 
+    ### "all", "IAV", "IBV", dataset name, ... ###
     data = 'IAV'
 
+    ### "all", "PR8", "Yamagata", ... ###
     strain = 'PR8'
-    # strain = DATASET_STRAIN_DICT[data]
 
+    ### "all", "PB1", "PB2", ... ###
     segment = 'PB1'
+
+    ### modifier to manage intersects ###
     intersects = 'mean_dataset_0'
 
-    # dfnames = [data]
     dfnames = get_dataset_names(DATASET_CUTOFF, data)
     dfs = load_all_preprocessed(dfnames, folder, subfolder)
 
@@ -3600,26 +4243,17 @@ if __name__ == "__main__":
 
     ### distribution ###
 
-    # run_ngs_single_density_analysis(dfs, folder, data, strain, segment, intersects, show_quantiles, curvature)
+    run_ngs_single_density_analysis(dfs, folder, data, strain, segment, intersects, show_quantiles, curvature)
     # run_ngs_multi_density_analysis(dfs, selector, folder, data, strain, segment, intersects)
-
-    # run_advandced_intersect_plot(dfs, selector, data, strain, segment, intersects)
-
-    # outdated
-    # run_intersect_analysis(dfs, folder, data, strain, segment, intersects)
-    # run_pooling_intersect_analysis(selector, data, strain, segment, intersects)
+    run_advandced_intersect_plot(dfs, selector, data, strain, segment, intersects)
 
     ### features ###
 
-    # run_delvg_pri_features_analysis(dfs, selector, TOP_N, folder, data, strain, segment, intersects)
+    run_delvg_pri_features_analysis(dfs, selector, TOP_N, folder, data, strain, segment, intersects)
     # run_delvg_sec_features_analysis(dfs, selector, folder, data, strain, segment, intersects)
     # run_delvg_hybrid_features_analysis(dfs, selector, folder, data, strain, segment, intersects)
     # run_length_mfe_analysis(dfs, selector, folder, data, strain, segment, intersects)
 
-    ### prediction ###
-
-    # run_pred_analysis(selector, data, strain, segment, intersects)
-
     ### other ###
 
-    run_sec_structure_plot(dfs, folder, data, strain, segment, intersects)
+    # run_sec_structure_plot(dfs, folder, data, strain, segment, intersects)

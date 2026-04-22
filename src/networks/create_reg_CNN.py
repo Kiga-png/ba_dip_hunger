@@ -11,8 +11,8 @@ from analysis.visuals import create_feature_residual_plot, create_feature_scatte
 from utils import reduce_rows, get_feature_modification_name, make_candidate_descriptor, capitalize_first
 from utils import add_ikey, add_metadata_ikey, get_dataset_names, load_all_preprocessed, add_intersect_ngs_features, manage_separate_specifiers
 
-from utils import SHOW_LEGEND, SHOW_TITLE
-from utils import RESULTSPATH, DATASET_CUTOFF, SEED, TOP_N, K_MER_LENGTH, DATASET_STRAIN_DICT
+from utils import SHOW_LEGEND, SHOW_TITLE, LIM_AXES
+from utils import RESULTSPATH, DATASET_CUTOFF, SEED, TOP_N, K_MER_LENGTH
 from utils import COLORS, DECIMALS
 
 from sklearn.ensemble import RandomForestRegressor
@@ -39,30 +39,40 @@ RESULTSPATH, _ = os.path.split(RESULTSPATH)
 DATAPATH = os.path.join(RESULTSPATH, "preprocess")
 RESULTSPATH = os.path.join(RESULTSPATH, "reg_network")
 
+# match k-mer length of preprocessing
 KMER_SIZE = 3
-KMER_STEP = 3   # lightweight
+KMER_STEP = 3
 
-TRAIN_LOSS  = "mse"   # "huber" | "mse" | "mae"
+TRAIN_LOSS  = "mse"   # "mse" | "mae"
 
+# use sequences containing X, as a placeholder for deleted nucleotides (recommnded)
 MARKED = 1   # 0 | 1
 DROP_X = 0   # 0 | 1
+
+# use categorical features for SHAP (recommended)
 SHAP_CAT = 1   # 0 | 1
+
+# use secondary structure as feature (not recommended)
 STRUCTURE = 0   # 0 | 1
 
+# set maximum number of data points to use for training/validation/testing (for faster iteration; set high for full training)
 MAX_NUMBER = 25000
 
+# use best model from training (early stopping) or final model after all epochs
 BEST_MODEL = 0   # 0 | 1
 
-# occlussion and SHAP
+# set maximum number of data points to use for occlussion and SHAP
 MAX_NUMBER_TRAIN = 500
 MAX_NUMBER_TEST  = 500
 
-# version
+# version name modifier (for managing multiple models)
 VERSION = "0"
 
 ###########
 ### CNN ###
 ###########
+
+ ### REQUIRES CORESPONDING PREPROCESSING! ###
 
 ### load & save ###
 selector = 'dataset'
@@ -167,7 +177,7 @@ VAL_SIZE  = 0.2
 
 def _add_split_ikey(df: pd.DataFrame, intersects: str) -> pd.DataFrame:
     '''
-    create an ikey column for group-safe splitting, matching your intersect definition
+    create an ikey column for group-safe splitting, matching intersect definition
     '''
     if 'metadata' in intersects:
         df = add_metadata_ikey(df)
@@ -222,7 +232,7 @@ for df in dfs:
     dfs_test.append(df_test.drop(columns=['ikey']).reset_index(drop=True))
 
 ############################################
-### intersect + ngs features (fit/apply) ###
+### intersect + NGS features (fit/apply) ###
 ############################################
 
 df_fit, norm_params = add_intersect_ngs_features(
@@ -261,9 +271,9 @@ y_fit  = df_fit["norm_log_NGS_read_count"].values
 y_val  = df_val["norm_log_NGS_read_count"].values
 y_test = df_test["norm_log_NGS_read_count"].values
 
-#############################
-### k-mer token (no leak) ###
-#############################
+###################
+### k-mer token ###
+###################
 
 def kmer_tokenize(seq, k, step=KMER_STEP):
     if DROP_X:
@@ -339,9 +349,9 @@ else:
     X_str_val = None
     X_str_test = None
 
-###########################################
-### tabular preprocessing (no leak) #######
-###########################################
+#############################
+### tabular preprocessing ###
+#############################
 
 n_fit  = len(df_fit)
 n_val  = len(df_val)
@@ -383,32 +393,30 @@ HAS_TABULAR = (X_other_fit.shape[1] > 0)
 
 X_cat = X_cat_fit
 
-###################################
-### Huber delta (fit, no leak) ###
-###################################
+###################
+### Huber delta ###
+###################
 
 y_fit_arr = np.asarray(y_fit, dtype=float)
 
 med = float(np.nanmedian(y_fit_arr))
 mad = float(np.nanmedian(np.abs(y_fit_arr - med)))
 
-# robust std estimate from MAD
 HUBER_DELTA = 1.4826 * mad
 
-# fallback if MAD is 0 or nan
 if (not np.isfinite(HUBER_DELTA)) or (HUBER_DELTA <= 0):
     HUBER_DELTA = float(np.nanstd(y_fit_arr))
 
-# keep delta in a reasonable range (avoid too-MSE-like or too-MAE-like)
 HUBER_DELTA = float(np.clip(HUBER_DELTA, 0.5, 2.0))
 HUBER_DELTA = round(HUBER_DELTA, DECIMALS)
 
 print("\nHuber delta (fit, data-driven)")
 print(f"HUBER_DELTA: {HUBER_DELTA}")
 
-#############################
-# unified input packing/pred
-#############################
+##################################
+### unified input packing/pred ###
+##################################
+
 def pack_inputs(X_seq, X_other=None, STRUCTURE=False, X_str=None, HAS_TABULAR=True):
     if STRUCTURE:
         if HAS_TABULAR:
@@ -434,14 +442,14 @@ DENSE_UNITS = 32
 
 seq_input = layers.Input(shape=(maxlen,), dtype="int32")
 
-# (2) embedding: tell Keras that 0 is padding
+# embedding: 0 is padding
 emb = layers.Embedding(
     input_dim=len(token2idx) + 2,
     output_dim=EMB_DIM,
     mask_zero=True
 )(seq_input)
 
-# (3) conv: keep same length so we can mask padded positions correctly
+# conv: keep same length so we can mask padded positions correctly
 x = layers.Conv1D(
     CONV_FILTERS,
     5,
@@ -456,7 +464,7 @@ mask = tf.expand_dims(mask, axis=-1)                    # shape (B, L, 1)
 # zero-out conv activations at padded positions
 x = layers.Multiply()([x, mask])
 
-# you can keep MaxPooling if you want, but apply it AFTER masking
+# max pooling (keep dims for global pooling)
 x = layers.MaxPooling1D(2)(x)
 
 # global pooling
@@ -606,9 +614,9 @@ joblib.dump({
 
 print("✔ preprocessing artifacts saved")
 
-#####################################
+######################################
 ### keep compatibility for visuals ###
-#####################################
+######################################
 
 df_train = df_fit.copy().reset_index(drop=True)
 df_test  = df_test.copy().reset_index(drop=True)
@@ -679,6 +687,7 @@ Final Validation Metrics:
 """)
 
 ### MSE curve (train, val) ###
+
 title_name = 'reg. CNN: MSE lerarning curve (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
@@ -704,8 +713,9 @@ plt.plot(
 plt.xlabel("Epoch (-)")
 plt.ylabel("MSE  (-)")
 
-plt.ylim(0, 1)
-plt.xlim(0, 25)
+if LIM_AXES:
+    plt.ylim(0, 1)
+    plt.xlim(0, 25)
 
 if SHOW_TITLE:
     plt.title(title_name)
@@ -730,6 +740,7 @@ plt.close()
 print("✔ training MSE curve saved")
 
 ### MAE curve (train, val) ###
+
 title_name = 'reg. CNN: MAE across epochs (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
@@ -755,8 +766,9 @@ plt.plot(
 plt.xlabel("Epoch (-)")
 plt.ylabel("MAE (-)")
 
-plt.ylim(0, 1)
-plt.xlim(0, 25)
+if LIM_AXES:
+    plt.ylim(0, 1)
+    plt.xlim(0, 25)
 
 if SHOW_TITLE:
     plt.title(title_name)
@@ -781,6 +793,7 @@ plt.close()
 print("✔ training MAE curve saved")
 
 ### Huber curve (train, val) ###
+
 title_name = f'reg. CNN: Huber (delta={HUBER_DELTA:g}) across epochs (training, validation) - curve plot'
 title_name += make_candidate_descriptor(folder, data, strain, segment, intersects)
 title_name += f' (n_train={n_train}, n_val={n_val})'
@@ -806,8 +819,9 @@ plt.plot(
 plt.xlabel("Epoch (-)")
 plt.ylabel("Huber (-)")
 
-plt.ylim(0, 1)
-plt.xlim(0, 25)
+if LIM_AXES:
+    plt.ylim(0, 1)
+    plt.xlim(0, 25)
 
 if SHOW_TITLE:
     plt.title(title_name)
@@ -863,6 +877,7 @@ df_test_val["y_val"] = y_pred_val_test
 modification = get_feature_modification_name()
 
 ### R2 & residual (test)  ###
+
 create_feature_residual_plot(
     plot_name="reg. CNN: residual as a function of true NGS read count (testing) - scatter plot",
     df=df_test_val,
@@ -886,6 +901,7 @@ create_feature_residual_plot(
 print(f"\n✔ residual plot saved")
 
 ### scatter plot (test)  ###
+
 create_feature_scatter_plot(
     plot_name="reg. CNN: prediction as a function of true NGS read count (testing) - scatter plot",
     df=df_test_val,
@@ -915,6 +931,7 @@ create_feature_scatter_plot(
 print("✔ prediction scatter plot saved")
 
 ### density (train, test) ###
+
 create_multi_density_plot(
     plot_name="NGS read count distribution via KDE (testing) - density plot",
     df_list=[df_train, df_test],
@@ -936,6 +953,7 @@ create_multi_density_plot(
 print("✔ train/test density plot saved")
 
 ### occlusion importances (test) ###
+
 rng = np.random.default_rng(SEED)
 eval_n = min(MAX_NUMBER_TEST, X_seq_test.shape[0])
 idx_eval = rng.choice(X_seq_test.shape[0], size=eval_n, replace=False)
@@ -1004,9 +1022,6 @@ def cnn_test_metrics(model, X_seq_test, X_other_test, y_test, STRUCTURE=False, X
     r2  = safe_r2(y_test, y_pred)
     return mse, mae, hub, r2
 
-# ----------------------------
-# TEST metrics (prediction-based)
-# ----------------------------
 y_pred_test_report = predict_value(
     model,
     X_seq_test,
@@ -1028,9 +1043,6 @@ TEST metrics (selected weights):
   R²    : {r2_test:.6f}
 """)
 
-# -----------------------------------------------------------
-# X_other feature occlusion ONLY if tabular features exist
-# -----------------------------------------------------------
 if not HAS_TABULAR:
     print("Skipping X_other occlusion importance (no categorical/numerical features selected).")
 else:
@@ -1099,7 +1111,7 @@ else:
         )
         return (base_mse, base_mae, base_hub, base_r2), imp_df
 
-    # permutation importance (on eval subset)
+    # permutation importance (eval)
     (base_mse_perm, base_mae_perm, base_hub_perm, base_r2_perm), imp_perm = importance_x_other_mse_increase(
         model,
         X_seq_eval, X_other_eval, y_eval,
@@ -1111,7 +1123,7 @@ else:
         seed=SEED
     )
 
-    # zero occlusion importance (on eval subset)
+    # zero occlusion importance (eval)
     (base_mse_zero, base_mae_zero, base_hub_zero, base_r2_zero), imp_zero = importance_x_other_mse_increase(
         model,
         X_seq_eval, X_other_eval, y_eval,
@@ -1121,7 +1133,7 @@ else:
         mode="zero",
     )
 
-    # plot permutation (test subset)
+    # plot permutation (test)
     plot_df = imp_perm.head(TOP_N).iloc[::-1].copy()
     plot_df["feature"] = plot_df["feature"].apply(capitalize_first)
     title_name = f'reg. CNN: feature importance via permuation occlusion (testing) - bar plot'
@@ -1134,7 +1146,8 @@ else:
     plt.xlabel("MSE increase (when permuted)")
     plt.ylabel(f"Feature (top {TOP_N})")
 
-    plt.xlim(0, 0.1)
+    if LIM_AXES:
+        plt.xlim(0, 0.1)
 
     if SHOW_TITLE:
         plt.title(title_name)
@@ -1150,7 +1163,7 @@ else:
 
     print("✔ permutation importance saved")
 
-    # plot zero-occlusion (test subset)
+    # plot zero-occlusion (test)
     plot_df = imp_zero.head(TOP_N).iloc[::-1].copy()
     plot_df["feature"] = plot_df["feature"].apply(capitalize_first)
     title_name = f'reg. CNN: feature importance via zero occlusion (testing) - bar plot'
@@ -1163,7 +1176,8 @@ else:
     plt.xlabel("MSE increase (when set to 0)")
     plt.ylabel(f"Feature (top {TOP_N})")
 
-    plt.xlim(0, 0.1)
+    if LIM_AXES:
+        plt.xlim(0, 0.1)
 
     if SHOW_TITLE:
         plt.title(title_name)
@@ -1309,8 +1323,9 @@ if np.isfinite(end_mea_tok):
 plt.xlabel(f"K-mer position (window center)")
 plt.ylabel("MSE increase (when window masked)")
 
-plt.xlim(0, 800)
-plt.ylim(-0.05, 0.05)
+if LIM_AXES:
+    plt.xlim(0, 800)
+    plt.ylim(-0.05, 0.05)
 
 if SHOW_TITLE:
     plt.title(title_name)
@@ -1350,7 +1365,8 @@ plt.barh(top_windows["window"], top_windows["mse_increase"], color=COLORS[6], ed
 plt.xlabel("MSE increase (when window masked)")
 plt.ylabel(f"K-mer window (top {TOP_N})")
 
-plt.xlim(0, 0.1)
+if LIM_AXES:
+    plt.xlim(0, 0.1)
 
 if SHOW_TITLE:
     plt.title(title_name)
@@ -1366,6 +1382,7 @@ plt.close()
 print("✔ sequence window occlusion bar saved")
 
 ### SHAP (test) ###
+
 if (not HAS_TABULAR) or (X_other_train.shape[1] == 0):
     print("Skipping SHAP (no tabular features selected).")
 else:
@@ -1435,7 +1452,8 @@ else:
     plt.xlabel("Mean |SHAP value|")
     plt.ylabel(f"Feature (top {TOP_N})")
 
-    plt.xlim(0, 0.1)
+    if LIM_AXES:
+        plt.xlim(0, 0.1)
 
     if SHOW_TITLE:
         plt.title(title_name)

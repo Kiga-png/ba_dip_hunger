@@ -1,6 +1,7 @@
 '''
     general functions and global parameters, that are used in different scripts
 '''
+
 import os
 import re
 import math
@@ -10,13 +11,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import scipy.stats as stats
-from typing import List, Optional, Union, Dict, Tuple
-
-import traceback
-import inspect
-import builtins
-
-import random
+from typing import Optional, Union, Tuple
 
 import RNA
 
@@ -27,15 +22,14 @@ from Bio import SeqIO
 from sklearn.linear_model import LinearRegression
 
 ### STATIC VALUES ###
-# load config and assign values to global variables
-DATAPATH = "/home/erikl/ubudocuments/ba_dip_hunger/data"
-# DATAPATH = "/home/eriklinushunger/ba_dip_hunger/data"
-RESULTSPATH = "/home/erikl/ubudocuments/ba_dip_hunger/results"
-# RESULTSPATH = "/home/eriklinushunger/ba_dip_hunger/results"
+# assign values to global variables
+DATAPATH = "/path/to/datasets"
+RESULTSPATH = "/path/to/resultfolder"
 
 # visuals
 SHOW_LEGEND = 0
 SHOW_TITLE = 0
+LIM_AXES = 0
 
 # segments, nucleotides, and strains
 CMAP = "Accent"
@@ -43,19 +37,20 @@ CUTOFF = 15
 DATASET_CUTOFF = 0
 N_SAMPLES = 35000
 
+# seed
 SEED = 42
 
+# feature configuration
 DECIMALS = 2
 K_MER_LENGTH = 3
 PALINDROMIC_K_MER_LENGTH = 6
+MAX_MOTIF_LENGTH = 6
 MIN_TRACT_LENGTH = 6
 DIRECT_REPEAT_LENGTH_CAP = 5
 
-# do not split to high
+# number of quantiles and features visualized
 RANK_THRESHOLD = 10
 TOP_N = 10
-
-MAX_MOTIF_LENGTH = 6
 
 LOGARITHM = "$\log_{10}$"          # "none" | "$\log_{10}$" | "$\log_{2}$"
 NORMALIZATION = "none"             # "none" | "min-max" | "z-score" | "robust" | "euclidean"
@@ -114,11 +109,6 @@ THRESHOLD_SPLIT_DICT = {
     ("unpooled", "IBV", "Victoria", "PB2", "mean_dataset_0"): 0.30,                #  | 
     ("unpooled", "IBV", "Victoria", "PB1", "mean_dataset_0"): 0.30,                #  | 
     ("unpooled", "IBV", "Victoria", "PA", "mean_dataset_0"): 0.31,                 #  | 
-}
-
-THRESHOLD_DEC_DICT = {
-
-
 }
 
 DATASET_STRAIN_DICT = dict({
@@ -1028,7 +1018,9 @@ METADATA_DICTS = {
     },
 }
 
-### FUNCTIONS ###
+####################################
+### FUNCTIONS FROM META-ANALYSIS ###
+####################################
 
 def get_dataset_names(cutoff: int=0, selection: str="")-> list:
     '''
@@ -1595,9 +1587,9 @@ def get_dip_sequence(delvg_id: str, strain: str)-> Tuple[str, str, str]:
     del_length = int(end)-int(start)
     return seq_head + "*"*del_length + seq_foot, seq_head, seq_foot
 
-################
-### NEW WORK ###
-################
+#################
+### FUNCTIONS ###
+#################
 
 STRAIN_SUBTYPE_DICT = dict({
     # H1N1
@@ -1658,6 +1650,13 @@ COLOR_TEMPLATES = {
 ### load and save ###
 
 def get_strains(datasets: list):
+    '''
+        Get unique strain names for a list of dataset names while preserving
+        their first occurrence order.
+        :param datasets: list of dataset names
+
+        :return: list of unique strain names
+    '''
     seen = set()
     strains = []
     for dataset in datasets:
@@ -1669,7 +1668,12 @@ def get_strains(datasets: list):
 
 def clean_data_string(string: str):
     '''
-    
+        Clean a string such that it can be used safely in file names or paths.
+        Non-alphanumeric characters except spaces are removed and spaces are
+        replaced by underscores.
+        :param string: input string
+
+        :return: cleaned string
     '''
     clean_string = re.sub(r'[^A-Za-z0-9 ]+', '', string)
     clean_string = clean_string.replace(" ", "_")
@@ -1678,13 +1682,20 @@ def clean_data_string(string: str):
 
 def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
     '''
-    
+        Filter a DataFrame by virus type, strain and segment. The value 'all'
+        keeps the corresponding column unfiltered.
+        :param df: Pandas DataFrame to filter
+        :param data: virus type selection or 'all'
+        :param strain: strain selection or 'all'
+        :param segment: segment selection or 'all'
+
+        :return: filtered Pandas DataFrame
     '''
     if data == 'all':
         pass
     else:
         df = df[df['type'] == data]
-
+    
     if strain == 'all':
         pass
     else:
@@ -1699,13 +1710,29 @@ def manage_specifiers(df: pd.DataFrame, data: str, strain: str, segment: str):
 
 def manage_separate_specifiers(dfs: list, data: str, strain: str, segment: str):
     '''
-    
+        Apply manage_specifiers to a list of DataFrames separately.
+        :param dfs: list of Pandas DataFrames
+        :param data: virus type selection or 'all'
+        :param strain: strain selection or 'all'
+        :param segment: segment selection or 'all'
+
+        :return: list of filtered Pandas DataFrames
     '''
     return [manage_specifiers(df, data, strain, segment) for df in dfs]
 
 def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = '')-> pd.DataFrame:
     '''
+        Load a preprocessed dataset from the results/preprocess directory using
+        optional nested folder specifiers.
+        :param fname: file name without .csv ending
+        :param folder: optional first-level folder
+        :param subfolder: optional second-level folder
+        :param data: optional virus type folder
+        :param strain: optional strain folder
+        :param segment: optional segment folder
+        :param intersects: optional intersection folder
 
+        :return: loaded Pandas DataFrame
     '''
     read_path, _ = os.path.split(RESULTSPATH)
     read_path = os.path.join(read_path, 'preprocess')
@@ -1725,6 +1752,7 @@ def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '',
         low_memory=False
     )
 
+    # restore selected metadata columns explicitly as string values
     if "Time" in df.columns:
         df["Time"] = df["Time"].astype("string")
     if "MOI" in df.columns:
@@ -1734,7 +1762,16 @@ def load_preprocessed_dataset(fname: str, folder: str = '', subfolder: str = '',
 
 def load_all_preprocessed(fnames: list, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = '')-> list:
     '''
+        Load multiple preprocessed datasets with identical folder specifiers.
+        :param fnames: list of file names without .csv ending
+        :param folder: optional first-level folder
+        :param subfolder: optional second-level folder
+        :param data: optional virus type folder
+        :param strain: optional strain folder
+        :param segment: optional segment folder
+        :param intersects: optional intersection folder
 
+        :return: list of loaded Pandas DataFrames
     '''
     dfs = []
     for fname in fnames:
@@ -1745,7 +1782,12 @@ def load_all_preprocessed(fnames: list, folder: str = '', subfolder: str = '', d
 
 def merge_missing_features(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     '''
+        Merge columns from df2 into df1 for rows sharing the same key, but only
+        for features that are missing in df1.
+        :param df1: primary Pandas DataFrame
+        :param df2: secondary Pandas DataFrame containing additional features
 
+        :return: merged Pandas DataFrame
     '''
     df1_filtered = df1[df1['key'].isin(df2['key'])].copy()
     missing_cols = [col for col in df2.columns if col not in df1.columns and col != 'key']
@@ -1757,7 +1799,16 @@ def merge_missing_features(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame
 
 def save_df(df: pd.DataFrame, fname: str, save_path: str, folder: str = '', subfolder: str = '', data: str = '', strain: str = '', segment: str = '', intersects: str = ''):
     '''
-    
+        Save a DataFrame as csv using optional nested folder specifiers.
+        :param df: Pandas DataFrame to save
+        :param fname: file name without .csv ending
+        :param save_path: base save directory
+        :param folder: optional first-level folder
+        :param subfolder: optional second-level folder
+        :param data: optional virus type folder
+        :param strain: optional strain folder
+        :param segment: optional segment folder
+        :param intersects: optional intersection folder
     '''
     save_path = os.path.join(save_path, folder) if folder else save_path
     save_path = os.path.join(save_path, subfolder) if subfolder else save_path
@@ -1784,10 +1835,15 @@ _KEY_NORMALIZATION = {
 }
 
 def _extract_meta_features(meta: dict) -> dict:
-    """
-    return ONLY the whitelisted features from ACCNUMDICT(mod).
-    missing ones are filled with 'unknown'.
-    """
+    '''
+        Extract only the predefined metadata features from a metadata dictionary.
+        Keys are normalized using _KEY_NORMALIZATION and only whitelisted keys
+        defined in _FEATURE_KEYS are retained. Missing features are filled with
+        the default value 'unknown'.
+        :param meta: metadata dictionary from ACCNUMDICT(mod)
+
+        :return: dictionary containing only whitelisted metadata features
+    '''
     out = {k: "unknown" for k in _FEATURE_KEYS}
 
     for raw_k, v in meta.items():
@@ -1798,11 +1854,29 @@ def _extract_meta_features(meta: dict) -> dict:
     return out
 
 def load_single_dataset_unpooled(exp: str, acc: str, segment_dict: dict) -> pd.DataFrame:
+    '''
+        Load a single dataset without pooling and keep accession numbers as
+        separate entries.
+        :param exp: experiment name (folder name)
+        :param acc: SRA accession number
+        :param segment_dict: dictionary mapping reference ids to segment names
+
+        :return: Pandas DataFrame containing unpooled DelVG entries
+    '''
     df = load_single_dataset(exp, acc, segment_dict)  # reuse your existing loader
     df["AN"] = acc  # keep accessions separate
+
     return df
 
 def load_dataset_unpooled(dataset: str) -> pd.DataFrame:
+    '''
+        Load a full dataset in unpooled representation. Each accession is loaded
+        separately, selected metadata features are added, and all rows are
+        concatenated without pooling. A cutoff of 0 is used to preserve all data.
+        :param dataset: dataset name
+
+        :return: Pandas DataFrame in unpooled representation
+    '''
     acc_nums = ACCNUMDICT[dataset]
     strain = DATASET_STRAIN_DICT[dataset]
 
@@ -1822,19 +1896,36 @@ def load_dataset_unpooled(dataset: str) -> pd.DataFrame:
 
     # keep all entries: cutoff=0 (preserves all data; keeps your usual preprocess columns)
     out = preprocess(strain, concat_df, 0)
+
     return out
 
 def load_all_unpooled(dfnames: list, expected: bool = False):
+    '''
+        Load multiple datasets in unpooled representation.
+        :param dfnames: list of dataset names
+        :param expected: placeholder for compatibility with pooled loader
+                         (currently no expected datasets are generated)
+
+        :return: tuple
+            list of unpooled Pandas DataFrames
+            empty list for expected DataFrames
+    '''
     dfs = [load_dataset_unpooled(name) for name in dfnames]
     expected_dfs = [] if not expected else []
+
     return dfs, expected_dfs
 
 ### metadata ###
 
 def add_dataset_keys(dfs):
-    """
+    '''
+        Assign a unique numeric dataset key to each DataFrame in a list.
+        The key is assigned based on the position in the list (starting at 1)
+        and stored in the column 'dataset_key'.
+        :param dfs: list of Pandas DataFrames
 
-    """
+        :return: list of DataFrames with added 'dataset_key' column
+    '''
     updated_dfs = []
     for i, df in enumerate(dfs, start=1):
         df_copy = df.copy()
@@ -1843,10 +1934,15 @@ def add_dataset_keys(dfs):
     return updated_dfs
 
 def add_metadata_features(dfnames: list, dfs: list) -> list:
-    """
-    Add metadata columns to each df based on its dfname (dataset key) using METADATA_DICTS.
-    Fails loudly if metadata for any dataset is missing.
-    """
+    '''
+        Add dataset-level metadata columns to each DataFrame based on the
+        dataset name using METADATA_DICTS. Raises an error message if metadata
+        for a dataset is missing.
+        :param dfnames: list of dataset names corresponding to dfs
+        :param dfs: list of Pandas DataFrames
+
+        :return: list of DataFrames with added metadata columns
+    '''
     updated_dfs = []
 
     for dfname, df in zip(dfnames, dfs):
@@ -1875,10 +1971,14 @@ def add_metadata_features(dfnames: list, dfs: list) -> list:
     return updated_dfs
 
 def add_metadata_features_pseudo(dfs: list[pd.DataFrame]) -> list[pd.DataFrame]:
-    """
-    Add metadata columns to each df in `dfs` using per-row `dataset`.
-    `dataset` may vary within a single dataframe.
-    """
+    '''
+        Add metadata columns to each DataFrame using the per-row 'dataset'
+        column. This allows multiple datasets to be represented within a
+        single DataFrame.
+        :param dfs: list of Pandas DataFrames containing a 'dataset' column
+
+        :return: list of DataFrames with added or completed metadata columns
+    '''
     meta_fields = [
         "system_type",
         "host",
@@ -1927,6 +2027,17 @@ def add_metadata_features_pseudo(dfs: list[pd.DataFrame]) -> list[pd.DataFrame]:
 ### intersects ###
 
 def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.DataFrame:
+    '''
+        Manage intersecting entries by applying a specified aggregation or
+        removal strategy on rows sharing the same intersection key.
+        Depending on the modifier, intersections are defined either by strain
+        and key alone or by additionally including metadata features.
+        :param df: Pandas DataFrame containing possible intersecting entries
+        :param modifier: strategy describing how intersections are handled
+        :param feature_name: feature column on which aggregation is applied
+
+        :return: Pandas DataFrame with managed intersections
+    '''
     meta_features = [
         'system_type', 'cell_system', 'host',
         'localization', 'resolution', 'time_point', 'MOI',
@@ -1935,6 +2046,14 @@ def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.
     ]
 
     def collapse_meta_features_by_ikey(df: pd.DataFrame) -> pd.DataFrame:
+        '''
+            Collapse metadata features within each ikey group. If values differ
+            within a group or any value is 'unknown', the collapsed value is set
+            to 'unknown'. Otherwise, the shared value is retained.
+            :param df: Pandas DataFrame containing an 'ikey' column
+
+            :return: Pandas DataFrame with collapsed metadata features
+        '''
         # collapse categorical/meta features per-ikey
         for meta_feature in meta_features:
             if meta_feature in df.columns:
@@ -2005,7 +2124,11 @@ def manage_intersects(df: pd.DataFrame, modifier: str, feature_name: str) -> pd.
 
 def add_ikey(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    
+        Add an intersection key based on strain and DelVG key.
+        This key is used to identify potentially identical entries across rows.
+        :param df: Pandas DataFrame containing 'strain' and 'key' columns
+
+        :return: Pandas DataFrame with added 'ikey' column
     '''
     df = df.copy()
     df['ikey'] = df['strain'].astype(str) + '_' + df['key'].astype(str)
@@ -2014,7 +2137,12 @@ def add_ikey(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_metadata_ikey(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    
+        Add an intersection key based on strain, DelVG key, and selected
+        metadata fields. This allows intersections to be defined more strictly
+        by incorporating experimental context.
+        :param df: Pandas DataFrame containing sequence and metadata columns
+
+        :return: Pandas DataFrame with added 'ikey' column
     '''
     df = df.copy()
     df["ikey"] = (
@@ -2033,7 +2161,12 @@ def add_metadata_ikey(df: pd.DataFrame) -> pd.DataFrame:
 
 def remove_by_ikey(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
     '''
+        Randomly remove a fraction of rows belonging to non-unique ikey groups.
+        Only rows from intersecting groups are considered for removal.
+        :param df: Pandas DataFrame containing an 'ikey' column
+        :param threshold: fraction of intersecting rows to remove
 
+        :return: Pandas DataFrame with selected rows removed
     '''
     df = df.copy()
 
@@ -2048,7 +2181,12 @@ def remove_by_ikey(df: pd.DataFrame, threshold: float) -> pd.DataFrame:
 
 def mean_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
     '''
-    
+        Replace feature values within each ikey group by their mean if the group
+        contains more than one row. Unique groups remain unchanged.
+        :param df: Pandas DataFrame containing an 'ikey' column
+        :param feature_name: feature column to aggregate
+
+        :return: Pandas DataFrame with mean-aggregated feature values
     '''
     df = df.copy()
     mean_values = df.groupby('ikey')[feature_name].transform(
@@ -2061,7 +2199,12 @@ def mean_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
 
 def median_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
     '''
+        Replace feature values within each ikey group by their median if the
+        group contains more than one row. Unique groups remain unchanged.
+        :param df: Pandas DataFrame containing an 'ikey' column
+        :param feature_name: feature column to aggregate
 
+        :return: Pandas DataFrame with median-aggregated feature values
     '''
     df = df.copy()
     median_values = df.groupby('ikey')[feature_name].transform(
@@ -2074,7 +2217,12 @@ def median_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
 
 def sum_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
     '''
-    
+        Replace feature values within each ikey group by their sum if the group
+        contains more than one row. Unique groups remain unchanged.
+        :param df: Pandas DataFrame containing an 'ikey' column
+        :param feature_name: feature column to aggregate
+
+        :return: Pandas DataFrame with sum-aggregated feature values
     '''
     df = df.copy()
     sum_values = df.groupby('ikey')[feature_name].transform(
@@ -2089,7 +2237,12 @@ def sum_by_ikey(df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
 
 def rename_feature(df: pd.DataFrame, old_name: str, new_name: str) -> pd.DataFrame:
     '''
-    
+        Rename a column in a DataFrame.
+        :param df: Pandas DataFrame
+        :param old_name: current column name
+        :param new_name: new column name
+
+        :return: Pandas DataFrame with renamed column
     '''
     if old_name not in df.columns:
         raise ValueError(f"column '{old_name}' not found in DataFrame")
@@ -2098,18 +2251,34 @@ def rename_feature(df: pd.DataFrame, old_name: str, new_name: str) -> pd.DataFra
 
 def split_by_feature(df: pd.DataFrame, feature_name: str, feature_value):
     '''
+        Split a DataFrame into two parts depending on whether a feature matches
+        a specified value.
+        :param df: Pandas DataFrame
+        :param feature_name: column name used for splitting
+        :param feature_value: value used for comparison
 
+        :return: tuple
+            DataFrame with matching rows
+            DataFrame with non-matching rows
     '''
     df_true = df[df[feature_name] == feature_value]
     df_false = df[df[feature_name] != feature_value]
     return df_true, df_false
 
 def split_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float):
-    """
-    split dataframe by threshold.
-    if threshold is not present in the data, use the maximum value below threshold.
-    returns the used threshold as well.
-    """
+    '''
+        Split a DataFrame by a threshold on a numeric feature. If the threshold
+        is not present in the data, the closest lower value is used instead. If
+        no lower value exists, the minimum value is used.
+        :param df: Pandas DataFrame
+        :param feature_name: numeric column used for splitting
+        :param threshold: target threshold value
+
+        :return: tuple
+            DataFrame with rows greater than or equal to used threshold
+            DataFrame with rows below used threshold
+            threshold value that was actually used
+    '''
     if feature_name not in df.columns:
         raise KeyError(f"{feature_name} not in dataframe")
 
@@ -2140,9 +2309,16 @@ def split_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float):
     return df_true, df_false, threshold_used
 
 def split_by_number(df: pd.DataFrame, split_number: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
+    '''
+        Randomly split a DataFrame into a sampled part with a fixed number of
+        rows and the remaining rows.
+        :param df: Pandas DataFrame
+        :param split_number: number of rows to sample
 
-    """
+        :return: tuple
+            sampled DataFrame
+            remaining DataFrame
+    '''
     if split_number < 0:
         raise ValueError(f"`split_number` must be non-negative; got {split_number}.")
     if split_number > len(df):
@@ -2167,16 +2343,28 @@ def split_by_number(df: pd.DataFrame, split_number: int) -> Tuple[pd.DataFrame, 
     return sampled_df, remaining_df
 
 def remove_by_ngs_cutoff(df: pd.DataFrame, feature_name: str, cutoff: int):
-    """
+    '''
+        Remove rows whose feature value is below a specified cutoff.
+        :param df: Pandas DataFrame
+        :param feature_name: column used for filtering
+        :param cutoff: minimum allowed value
 
-    """
+        :return: filtered Pandas DataFrame
+    '''
     df = df[df[feature_name] >= cutoff]
     return df
 
 def add_feature_quantile_rank(df: pd.DataFrame, feature_name: str, rank_name: str, split_number: int=RANK_THRESHOLD):
-    """
+    '''
+        Add a quantile-based rank column for a specified feature. Ranks start at
+        1 and are based on qcut quantile bins.
+        :param df: Pandas DataFrame
+        :param feature_name: feature column used for ranking
+        :param rank_name: name of the new rank column
+        :param split_number: number of quantile bins
 
-    """
+        :return: Pandas DataFrame with added rank column
+    '''
     df = df.copy()
     df[rank_name] = pd.qcut(
         df[feature_name],
@@ -2187,9 +2375,16 @@ def add_feature_quantile_rank(df: pd.DataFrame, feature_name: str, rank_name: st
     return df
 
 def add_log_feature(df: pd.DataFrame, feature_name: str, new_name: str, log_type: str=LOGARITHM):
-    """
+    '''
+        Add a transformed feature column using a specified logarithmic
+        transformation or leave the values unchanged.
+        :param df: Pandas DataFrame
+        :param feature_name: source feature column
+        :param new_name: name of the transformed feature column
+        :param log_type: type of logarithmic transformation
 
-    """
+        :return: Pandas DataFrame with added transformed feature
+    '''
     if log_type == "none":
         df[new_name] = df[feature_name]
     elif log_type == "$\log_{10}$":
@@ -2201,9 +2396,16 @@ def add_log_feature(df: pd.DataFrame, feature_name: str, new_name: str, log_type
     return df
 
 def add_norm_feature(df: pd.DataFrame, feature_name: str, new_name: str, norm_type: str=NORMALIZATION):
-    """
+    '''
+        Add a normalized version of a feature column using a specified
+        normalization method.
+        :param df: Pandas DataFrame
+        :param feature_name: source feature column
+        :param new_name: name of the normalized feature column
+        :param norm_type: normalization method
 
-    """
+        :return: Pandas DataFrame with added normalized feature
+    '''
     series = df[feature_name]
 
     if norm_type == "min-max":
@@ -2239,9 +2441,14 @@ def add_norm_feature(df: pd.DataFrame, feature_name: str, new_name: str, norm_ty
     return df
 
 def get_feature_modification_name(log_type: str=LOGARITHM, norm_type: str=NORMALIZATION):
-    """
+    '''
+        Construct a human-readable descriptor for the applied feature
+        transformation and normalization settings.
+        :param log_type: logarithmic transformation type
+        :param norm_type: normalization type
 
-    """
+        :return: descriptor string for feature modification
+    '''
     if log_type != "none" and norm_type != "none":
         return f"{norm_type}-normalized {log_type}-transformed"
     if norm_type != "none":
@@ -2252,7 +2459,13 @@ def get_feature_modification_name(log_type: str=LOGARITHM, norm_type: str=NORMAL
 
 def balance_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float) -> pd.DataFrame:
     '''
-    
+        Balance a DataFrame into two equally sized groups defined by a threshold
+        on a feature by random downsampling of the larger group.
+        :param df: Pandas DataFrame
+        :param feature_name: feature column used for splitting
+        :param threshold: threshold separating low and high groups
+
+        :return: balanced and shuffled Pandas DataFrame
     '''
     df_low = df[df[feature_name] < threshold].copy()
     df_high = df[df[feature_name] >= threshold].copy()
@@ -2272,20 +2485,27 @@ def balance_by_threshold(df: pd.DataFrame, feature_name: str, threshold: float) 
     return df_balanced
 
 def reduce_rows(df: pd.DataFrame, target_number: int) -> pd.DataFrame:
-    """
+    '''
+        Randomly reduce the number of rows in a DataFrame to a target size. If
+        the DataFrame already contains fewer rows, it is returned unchanged.
+        :param df: Pandas DataFrame
+        :param target_number: maximum number of rows to retain
 
-    """
+        :return: reduced Pandas DataFrame
+    '''
     if len(df) <= target_number:
         return df
 
     return df.sample(n=target_number, random_state=SEED).reset_index(drop=True)
 
 def get_official_strain_name(strain_code: str) -> str:
-    """
-    Convert internal strain code to official influenza strain name
-    (without subtype information).
-    """
+    '''
+        Convert an internal strain code to its official influenza strain name
+        without subtype information.
+        :param strain_code: internal strain code
 
+        :return: official influenza strain name
+    '''
     mapping = {
         # Influenza A
         "PR8": "A/Puerto Rico/8/1934",
@@ -2315,9 +2535,15 @@ def get_official_strain_name(strain_code: str) -> str:
 ###########
 
 def fit_norm_params(series: pd.Series, norm_type: str=NORMALIZATION):
-    """
+    '''
+        Fit normalization parameters for a numeric series according to the
+        selected normalization method. The returned tuple can later be reused
+        to normalize other series on the same scale.
+        :param series: Pandas Series containing numeric values
+        :param norm_type: normalization method
 
-    """
+        :return: tuple containing normalization type and fitted parameters
+    '''
     if norm_type == "min-max":
         fmin, fmax = series.min(), series.max()
         return ("min-max", float(fmin), float(fmax))
@@ -2342,9 +2568,14 @@ def fit_norm_params(series: pd.Series, norm_type: str=NORMALIZATION):
                          "choose from 'min-max', 'z-score', 'robust', 'euclidean','none'.")
 
 def apply_norm_params(series: pd.Series, params: tuple):
-    """
+    '''
+        Apply previously fitted normalization parameters to a numeric series.
+        :param series: Pandas Series containing numeric values
+        :param params: tuple of normalization parameters as returned by
+                       fit_norm_params
 
-    """
+        :return: normalized Pandas Series
+    '''
     norm_type = params[0]
 
     if norm_type == "min-max":
@@ -2378,9 +2609,21 @@ def add_ngs_features(
     norm_params: Optional[tuple]=None,
     return_norm_params: bool=False,
     ):
-    """
+    '''
+        Add logarithmic and normalized versions of an NGS-related feature. If
+        normalization parameters are not provided, they are fitted on the given
+        DataFrame and optionally returned.
+        :param df: Pandas DataFrame
+        :param feature: source feature column
+        :param log_type: logarithmic transformation type
+        :param norm_type: normalization method
+        :param norm_params: optional pre-fitted normalization parameters
+        :param return_norm_params: whether to return fitted normalization
+                                   parameters
 
-    """
+        :return: Pandas DataFrame with added transformed features, optionally
+                 together with normalization parameters
+    '''
     log_feature = 'log_' + feature
     norm_log_feature = 'norm_' + log_feature
 
@@ -2403,27 +2646,19 @@ def add_intersect_ngs_features(
     return_norm_params: bool=False,
     ):
     '''
-    concat/loop dataset dfs and apply:
+        Apply intersection handling and NGS feature transformation to a list of
+        DataFrames. Depending on the intersects setting, processing is done per
+        dataset or globally across concatenated datasets. Optional normalization
+        parameters can be reused to ensure consistent scaling.
+        :param dfs: list of Pandas DataFrames
+        :param intersects: intersection handling mode, optionally with cutoff
+        :param norm_params: optional normalization parameters or dictionary of
+                            parameters for dataset-wise handling
+        :param return_norm_params: whether to return learned normalization
+                                   parameters
 
-    - manage_intersects()
-    - log + norm (NGS_read_count) via add_* helpers
-
-    dataset handling:
-        for each df: manage intersects
-        for each df: apply norm
-        concat dfs
-        return one df
-
-    global handling:
-        concat dfs
-        manage intersects
-        apply norm on concat df
-        return one df
-
-    reusable:
-        - if norm_params is None: fit normalization on the provided data (old behavior)
-        - if norm_params is given: apply it (no leakage; consistent scale)
-        - if return_norm_params: return (df, norm_params)
+        :return: processed Pandas DataFrame, optionally together with learned
+                 normalization parameters
     '''
     feature_name = 'NGS_read_count'
 
@@ -2485,15 +2720,29 @@ def add_intersect_ngs_features(
 
         return concat_df
 
-def get_threshold(dict: str, folder: str, data: str, strain: str, segment: str, intersects: str, default=0.00):
+def get_threshold(dict_name: str, folder: str, data: str, strain: str, segment: str, intersects: str, default=0.00):
     '''
+        Retrieve a predefined threshold value for a specific analysis configuration.
 
+        The threshold is looked up based on a tuple of
+        (folder, data, strain, segment, intersects). If no threshold is found,
+        the provided default value is returned.
+
+        :param dict_name: name of the threshold dictionary to use (e.g. 'split')
+        :param folder: preprocessing mode (e.g. pooled, unpooled)
+        :param data: virus type selection
+        :param strain: strain selection
+        :param segment: segment selection
+        :param intersects: intersect mode descriptor
+        :param default: fallback threshold if no entry is found
+
+        :return: threshold value (float)
     '''
-    if dict == 'split':
+    if dict_name == 'split':
         return THRESHOLD_SPLIT_DICT.get((folder, data, strain, segment, intersects), default)
-    if dict == 'dec':
-        return THRESHOLD_DEC_DICT.get((folder, data, strain, segment, intersects), default)
-    print("unvalid modifiers")
+
+    print("invalid threshold dictionary name")
+    return default
 
 ################
 ### features ###
@@ -2502,13 +2751,15 @@ def get_threshold(dict: str, folder: str, data: str, strain: str, segment: str, 
 ### sequence and length ###
 
 def add_marked_delvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add a 'marked_DelVG_sequence' column in which the deleted region of 'full_seq'
-    is replaced by 'X' characters, where 'start' is the 0-based index of the
-    first deleted nucleotide and 'end' is the 1-based position of the first
-    retained nucleotide after the deletion.
+    '''
+        Add a 'marked_DelVG_sequence' column where the deleted region of the
+        full-length sequence is replaced by 'X' characters. The deletion is
+        defined by 'start' (0-based index of first deleted nucleotide) and
+        'end' (1-based position of first retained nucleotide).
+        :param df: Pandas DataFrame containing 'full_seq', 'start', and 'end'
 
-    """
+        :return: Pandas DataFrame with added 'marked_DelVG_sequence' column
+    '''
     def compute_delvg_sequence(row):
         full_seq = row['full_seq']
         start = row['start']
@@ -2527,59 +2778,65 @@ def add_marked_delvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def add_full_seq_length(df: pd.DataFrame):
-    """
-    Add a 'full_seq_length' column containing the length of the original
-    full-length sequence stored in 'full_seq'.
+    '''
+        Add a 'full_seq_length' column containing the length of the full-length
+        sequence stored in 'full_seq'.
+        :param df: Pandas DataFrame containing 'full_seq'
 
-    """
+        :return: Pandas DataFrame with added 'full_seq_length' column
+    '''
     df['full_seq_length'] = df['full_seq'].apply(len)
 
     return df
 
 def add_delvg_length(df: pd.DataFrame):
-    """
-    Add a 'DelVG_length' column containing the length of the DVG sequence
-    ('DelVG_sequence'), i.e. the full sequence with the deletion removed.
+    '''
+        Add a 'DelVG_length' column containing the length of the deletion-type
+        genome sequence ('DelVG_sequence'), i.e. the full sequence with the
+        deletion removed.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
 
-    """
+        :return: Pandas DataFrame with added 'DelVG_length' column
+    '''
     df['DelVG_length'] = df['DelVG_sequence'].apply(len)
 
     return df
 
 def add_region_lengths(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add flank-length columns around the deletion site:
-    - '5_end_length' gives the number of nucleotides before the deletion start
-      (with 'start' being the 0-based index of the first deleted nucleotide).
-    - '3_end_length' gives the number of nucleotides retained after the deletion,
-      where 'end' is the 1-based position of the first retained nucleotide.
+    '''
+        Add flank length columns around the deletion site. The 5' end length
+        corresponds to the number of nucleotides before the deletion start and
+        the 3' end length corresponds to the number of nucleotides retained
+        after the deletion.
+        :param df: Pandas DataFrame containing 'full_seq', 'start', and 'end'
 
-    """
+        :return: Pandas DataFrame with added flank length columns
+    '''
     df["5_end_length"] = df["start"]
     df["3_end_length"] = df["full_seq"].str.len() - (df["end"] - 1)
 
     return df
 
 def add_deletion_length(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add a 'deletion_length' column giving the number of deleted nucleotides,
-    computed from coordinates where 'start' is the 0-based index of the first
-    deleted nucleotide and 'end' is the 1-based position of the first retained
-    nucleotide after the deletion.
+    '''
+        Add a 'deletion_length' column representing the number of deleted
+        nucleotides based on deletion start and end coordinates.
+        :param df: Pandas DataFrame containing 'start' and 'end'
 
-    """
+        :return: Pandas DataFrame with added 'deletion_length' column
+    '''
     df["deletion_length"] = df["end"] - df["start"] - 1
 
     return df
 
 def add_delvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add a 'DelVG_sequence' column by removing the deleted region from 'full_seq',
-    where 'start' denotes the 0-based index of the first deleted nucleotide and
-    'end' denotes the 1-based position of the first retained nucleotide after
-    the deletion.
+    '''
+        Add a 'DelVG_sequence' column by removing the deleted region from the
+        full-length sequence using deletion start and end coordinates.
+        :param df: Pandas DataFrame containing 'full_seq', 'start', and 'end'
 
-    """
+        :return: Pandas DataFrame with added 'DelVG_sequence' column
+    '''
     def compute_delvg_sequence(row):
         full_seq = row['full_seq']
         start = row['start']
@@ -2596,27 +2853,33 @@ def add_delvg_sequence(df: pd.DataFrame) -> pd.DataFrame:
 ### direct repeats ###
 
 def cap_direct_repeat_length(df: pd.DataFrame, cap: int=DIRECT_REPEAT_LENGTH_CAP):
-    """
-    Cap the 'direct_repeat_length' at a maximum value, so that any direct repeat
-    longer than 'cap' is truncated to 'cap' while shorter repeats are left
-    unchanged.
+    '''
+        Cap the 'direct_repeat_length' feature at a specified maximum value.
+        Any value larger than the cap is set to the cap, while smaller values
+        remain unchanged.
+        :param df: Pandas DataFrame containing 'direct_repeat_length'
+        :param cap: maximum allowed direct repeat length
 
-    """
+        :return: Pandas DataFrame with capped 'direct_repeat_length'
+    '''
     for index, row in df.iterrows():
         direct_repeat_length = row["direct_repeat_length"]
         if direct_repeat_length > cap:
             df.loc[index, "direct_repeat_length"] = cap
+
     return df
 
 def add_direct_repeat_length(df: pd.DataFrame):
-    """
-    Add a 'direct_repeat_length' column giving the length of the direct repeat
-    at the deletion junction, defined as the number of matching nucleotides
-    when comparing the sequence immediately upstream of the deletion (last
-    retained nucleotides before 'start') to the sequence at the end of the
-    deleted region (last deleted nucleotides before the first retained base).
+    '''
+        Add a 'direct_repeat_length' column representing the length of the
+        direct repeat at the deletion junction. The direct repeat is defined
+        as the number of matching nucleotides between the sequence upstream
+        of the deletion start and the sequence at the end of the deleted
+        region.
+        :param df: Pandas DataFrame containing 'full_seq', 'start', and 'end'
 
-    """
+        :return: Pandas DataFrame with added 'direct_repeat_length'
+    '''
     for index, row in df.iterrows():
         seq = row["full_seq"]
         start = row["start"]
@@ -2630,111 +2893,170 @@ def add_direct_repeat_length(df: pd.DataFrame):
         df.loc[index, "direct_repeat_length"] = direct_repeat_length
 
     df["direct_repeat_length"] = df["direct_repeat_length"].astype(int)
+
     return df
 
 ### pri ###
 
 def add_gc_content(df: pd.DataFrame):
-    """
-    adds 'GC_content' = (G+C)/length for each DelVG_sequence.
-    """
+    '''
+        Add GC content feature calculated as (G + C) / sequence length for each
+        DelVG sequence. This feature describes nucleotide composition and may
+        be associated with sequence stability and replication-related properties.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+
+        :return: Pandas DataFrame with added 'GC_content' column
+    '''
     def calc(seq):
+        # calculate GC proportion per sequence
         if not isinstance(seq, str) or len(seq) == 0:
             return 0.0
         return (seq.count('G') + seq.count('C')) / len(seq)
     df['GC_content'] = df['DelVG_sequence'].apply(calc)
+
     return df
 
 def add_au_content(df: pd.DataFrame):
-    """
-    adds 'AU_content' = (A+U)/length for each DelVG_sequence.
-    """
+    '''
+        Add AU content feature calculated as (A + U) / sequence length for each
+        DelVG sequence. This feature represents nucleotide composition and is
+        complementary to GC content.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+
+        :return: Pandas DataFrame with added 'AU_content' column
+    '''
     def calc(seq):
+        # calculate AU proportion per sequence
         if not isinstance(seq, str) or len(seq) == 0:
             return 0.0
         return (seq.count('A') + seq.count('U')) / len(seq)
     df['AU_content'] = df['DelVG_sequence'].apply(calc)
+
     return df
 
 def add_upa_content(df: pd.DataFrame):
-    """
-    adds 'UpA_content' = count of 'UA' dinucleotides / total dinucleotides.
-    UpA under-representation can reflect host pressure.
-    """
+    '''
+        Add UpA dinucleotide content calculated as the number of 'UA'
+        dinucleotides divided by the total number of dinucleotides in the
+        sequence. UpA under-representation is associated with host-specific
+        selection pressure and innate immune recognition.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+
+        :return: Pandas DataFrame with added 'UpA_content' column
+    '''
     def calc(seq):
+        # calculate UpA dinucleotide frequency
         if not isinstance(seq, str) or len(seq) < 2:
             return 0.0
         di = len(seq) - 1
         return seq.count('UA') / di
     df['UpA_content'] = df['DelVG_sequence'].apply(calc)
+
     return df
 
 def add_cpg_content(df: pd.DataFrame):
-    """
-    adds 'CpG_content' = count of 'CG' dinucleotides / total dinucleotides.
-    relevant for innate immune recognition.
-    """
+    '''
+        Add CpG dinucleotide content calculated as the number of 'CG'
+        dinucleotides divided by the total number of dinucleotides in the
+        sequence. CpG motifs are known to be relevant for innate immune
+        recognition.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+
+        :return: Pandas DataFrame with added 'CpG_content' column
+    '''
     def calc(seq):
+        # calculate CpG dinucleotide frequency
         if not isinstance(seq, str) or len(seq) < 2:
             return 0.0
         return seq.count('CG') / (len(seq) - 1)
     df['CpG_content'] = df['DelVG_sequence'].apply(calc)
+
     return df
 
 def add_gc_skew(df: pd.DataFrame):
-    """
-    adds 'GC_skew' = (G - C) / (G + C) per sequence.
-    """
+    '''
+        Add GC skew feature calculated as (G - C) / (G + C) per sequence.
+        GC skew describes strand asymmetry and may be associated with
+        replication-related sequence patterns.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+
+        :return: Pandas DataFrame with added 'GC_skew' column
+    '''
     def calc(seq):
+        # calculate GC skew per sequence
         if not isinstance(seq, str) or len(seq) == 0:
             return 0.0
         g, c = seq.count('G'), seq.count('C')
         return (g - c) / (g + c) if (g + c) else 0.0
     df['GC_skew'] = df['DelVG_sequence'].apply(calc)
+
     return df
 
 def add_sequence_entropy(df: pd.DataFrame):
-    """
-    adds 'sequence_entropy' = Shannon entropy over A,C,G,U.
-    """
+    '''
+        Add sequence entropy calculated as Shannon entropy over nucleotide
+        frequencies (A, C, G, U). This feature describes sequence complexity
+        and compositional variability.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+
+        :return: Pandas DataFrame with added 'sequence_entropy' column
+    '''
     def calc(seq):
+        # calculate Shannon entropy over nucleotide distribution
         if not isinstance(seq, str) or len(seq) == 0:
             return 0.0
         p = [seq.count(b)/len(seq) for b in 'ACGU']
         return -sum(pi*math.log2(pi) for pi in p if pi > 0)
     df['sequence_entropy'] = df['DelVG_sequence'].apply(calc)
+
     return df
 
 def add_poly_run_features(df: pd.DataFrame, base: str, min_len=MIN_TRACT_LENGTH):
-    """
-    Adds:
-      - f'poly__{base}_max_run': longest consecutive run length of `base`
-      - f'poly{base}_tracts': number of runs with length >= min_len
-    Useful for poly-U/A tracts (replication/termination signals).
-    """
+    '''
+        Add poly-nucleotide run features for a specified base. The longest run
+        length and the number of runs above a minimum length threshold are
+        computed. Poly-nucleotide tracts may be associated with replication
+        and termination signals.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+        :param base: nucleotide base for run detection
+        :param min_len: minimum run length threshold
+
+        :return: Pandas DataFrame with added poly-run feature columns
+    '''
     import re
     run_col = f'poly_{base}_max_run'
     n_col = f'poly_{base}_tracts'
     pat = re.compile(f'{base}+' if isinstance(base, str) else 'U+')
     def calc_max(seq):
+        # longest consecutive run of the given base
         if not isinstance(seq, str): return 0
         m = pat.findall(seq)
         return max((len(x) for x in m), default=0)
     def calc_n(seq):
+        # number of runs above minimum length threshold
         if not isinstance(seq, str): return 0
         return sum(1 for x in pat.findall(seq) if len(x) >= min_len)
     df[run_col] = df['DelVG_sequence'].apply(calc_max)
     df[n_col] = df['DelVG_sequence'].apply(calc_n)
+
     return df
 
 def add_palindrome_density(df: pd.DataFrame, k=PALINDROMIC_K_MER_LENGTH, step=1):
-    """
-    adds 'palindrome_density' = palindromic k-mer count / number of windows.
-    palindromes can seed hairpins.
-    """
+    '''
+        Add palindrome density defined as the number of palindromic k-mers
+        divided by the total number of k-mer windows. Palindromic sequences
+        can contribute to secondary structure formation such as hairpins.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+        :param k: k-mer length
+        :param step: sliding window step size
+
+        :return: Pandas DataFrame with added 'palindrome_density' column
+    '''
     def is_pal(s):
+        # check if sequence equals reverse complement
         return s == s[::-1].translate(str.maketrans('ACGU','UGCA'))
     def calc(seq):
+        # compute palindrome density per sequence
         if not isinstance(seq, str) or len(seq) < k:
             return 0.0
         windows = 0
@@ -2746,104 +3068,57 @@ def add_palindrome_density(df: pd.DataFrame, k=PALINDROMIC_K_MER_LENGTH, step=1)
                 pals += 1
         return pals / windows if windows else 0.0
     df['palindrome_density'] = df['DelVG_sequence'].apply(calc)
-    return df
 
-# only recommended as proxy
-def add_orf_features(df: pd.DataFrame):
-    """
-    adds:
-      - 'longest_ORF_len': longest ORF length in nt across 3 frames
-      - 'ORF_count': count of ORFs >= 20 aa
-    uses AUG start and UAA/UAG/UGA stops (on RNA).
-    """
-    stops = {'UAA','UAG','UGA'}
-    def scan(seq):
-        if not isinstance(seq, str) or len(seq) < 3:
-            return (0, 0)
-        best = 0
-        count20 = 0
-        for frame in range(3):
-            i = frame
-            while i+2 < len(seq):
-                codon = seq[i:i+3]
-                if codon == 'AUG':  # start
-                    j = i+3
-                    while j+2 < len(seq):
-                        c = seq[j:j+3]
-                        if c in stops:
-                            orf_len = j+3 - i
-                            best = max(best, orf_len)
-                            if orf_len // 3 >= 20:
-                                count20 += 1
-                            i = j  # continue after stop
-                            break
-                        j += 3
-                i += 3
-        return (best, count20)
-    res = df['DelVG_sequence'].apply(scan)
-    df['longest_ORF_len'] = res.apply(lambda x: x[0])
-    df['ORF_count'] = res.apply(lambda x: x[1])
     return df
 
 def add_kmer_richness(df: pd.DataFrame, k=K_MER_LENGTH):
-    """
-    adds 'kmer_richness' = unique k-mers / possible windows.
-    higher values suggest diverse sequence composition.
-    """
+    '''
+        Add k-mer richness defined as the number of unique k-mers divided by
+        the total number of possible k-mer windows. Higher values indicate
+        more diverse sequence composition.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+        :param k: k-mer length
+
+        :return: Pandas DataFrame with added 'kmer_richness' column
+    '''
     col = f'kmer_richness'
     def calc(seq):
+        # compute proportion of unique k-mers
         if not isinstance(seq, str) or len(seq) < k:
             return 0.0
         seen = set(seq[i:i+k] for i in range(len(seq)-k+1))
         return len(seen) / (len(seq)-k+1)
     df[col] = df['DelVG_sequence'].apply(calc)
-    return df
 
-# only recommended as proxy
-def add_codon_usage_bias(df: pd.DataFrame):
-    """
-    adds 'codon_usage_entropy' over 61 sense codons (RNA alphabet; T->U).
-    lower entropy can indicate codon bias.
-    """
-    import math
-    stops = {'UAA','UAG','UGA'}
-    def calc(seq):
-        if not isinstance(seq, str) or len(seq) < 3:
-            return 0.0
-        counts = {}
-        total = 0
-        for frame in (0,1,2):
-            for i in range(frame, len(seq)-2, 3):
-                cod = seq[i:i+3]
-                if len(cod) == 3 and cod not in stops and all(c in 'ACGU' for c in cod):
-                    counts[cod] = counts.get(cod, 0) + 1
-                    total += 1
-        if total == 0: return 0.0
-        p = [c/total for c in counts.values()]
-        return -sum(pi*math.log2(pi) for pi in p)
-    df['codon_usage_entropy'] = df['DelVG_sequence'].apply(calc)
     return df
 
 ### structure ###
 
 def add_marked_secondary(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    add a 'marked_structure' column by inserting 'X' characters for the deleted
-    region into an RNA secondary structure string that corresponds to the DVG
-    sequence, yielding a structure aligned to the original full-length sequence.
+        Add a 'marked_structure' column by inserting placeholder characters
+        ('X') into the RNA secondary structure string at the deleted region.
+        This produces a structure string aligned to the original full-length
+        sequence coordinates, analogous to the marked DelVG sequence.
+        :param df: Pandas DataFrame containing 'structure', 'full_seq',
+                   'start', and 'end'
 
+        :return: Pandas DataFrame with added 'marked_structure' column
     '''
     def compute_marked_structure(row):
+        # insert placeholder characters into structure string at deletion region
         struct = row["structure"]
         full_len = len(row["full_seq"])
         start = row["start"]
         end = row["end"]
 
+        # number of deleted nucleotides
         n_missing = end - start - 1
         prefix = struct[:start]
         suffix = struct[start:]
         marked = prefix + "X" * n_missing + suffix
 
+        # ensure resulting structure matches full-length coordinate system
         if len(marked) != full_len:
             raise ValueError(
                 f"length mismatch for row with start={start}, end={end}: "
@@ -2853,27 +3128,37 @@ def add_marked_secondary(df: pd.DataFrame) -> pd.DataFrame:
         return marked
 
     df["marked_structure"] = df.apply(compute_marked_structure, axis=1)
+
     return df
 
 def fold_sequence(seq: str):
     '''
-    fold an RNA sequence using ViennaRNA and return the dot-bracket structure
-    together with the minimum free energy (MFE).
+        Fold an RNA sequence using ViennaRNA and return the corresponding
+        dot-bracket secondary structure together with the minimum free energy.
+        :param seq: RNA sequence string
 
+        :return: tuple containing dot-bracket structure and MFE value
     '''
+    # compute RNA secondary structure and minimum free energy
     structure, mfe = RNA.fold(seq)
 
     return structure, mfe
 
 def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, mfe_name: str) -> pd.DataFrame:
     '''
-    compute RNA secondary structure (dot-bracket) and MFE for the sequences in
-    'sequence_name' using multiprocessing, and store results in the provided
-    structure and MFE column names.
+        Compute RNA secondary structure and minimum free energy for sequences
+        stored in the specified sequence column using multiprocessing. The
+        resulting structure and MFE values are stored in the specified columns.
+        :param df: Pandas DataFrame containing sequence column
+        :param sequence_name: column name containing RNA sequences
+        :param structure_name: column name to store dot-bracket structures
+        :param mfe_name: column name to store minimum free energy values
 
+        :return: Pandas DataFrame with added structure and MFE columns
     '''
     sequences = df[sequence_name].tolist()
     
+    # parallel RNA folding for performance
     with Pool(processes=cpu_count()) as pool:
         results = pool.map(fold_sequence, sequences)
     
@@ -2887,16 +3172,20 @@ def add_sec_features(df: pd.DataFrame, sequence_name: str, structure_name: str, 
 
 def _longest_symmetry_len(s: str) -> int:
     '''
-    Return the length of the longest contiguous substring of a dot-bracket RNA
-    structure string that is symmetric under mirror pairing rules:
-    '.' <-> '.', '(' <-> ')', and ')' <-> '('.
+        Compute the length of the longest contiguous substring of a dot-bracket
+        RNA secondary structure that is symmetric under mirror pairing rules.
+        Symmetry is defined by the allowed mirror relations '.', '.', '(' with
+        ')', and ')' with '('.
+        :param s: dot-bracket RNA structure string
 
+        :return: length of the longest symmetric contiguous substring
     '''
     n = len(s)
     if n == 0:
         return 0
 
     def match(a, b):
+        # check whether two characters satisfy mirror pairing rules
         return (a == '.' and b == '.') or (a == '(' and b == ')') or (a == ')' and b == '(')
 
     def expand(left, right):
@@ -2950,57 +3239,65 @@ def _longest_symmetry_len(s: str) -> int:
 
 def add_max_symmetry(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    Add symmetry features computed from a dot-bracket structure string:
-    - 'max_symmetry': length of the longest symmetric contiguous region
-    - 'full_symmetry': True if the entire structure is symmetric
+        Add symmetry-based features derived from dot-bracket RNA secondary
+        structure strings. The longest symmetric contiguous region is stored as
+        'max_symmetry', and 'full_symmetry' indicates whether the entire
+        structure string is symmetric.
+        :param df: Pandas DataFrame containing 'structure'
 
+        :return: Pandas DataFrame with added symmetry feature columns
     '''
     out = df.copy()
+    # compute longest symmetric contiguous region for each structure
     out["max_symmetry"] = out["structure"].astype(str).apply(_longest_symmetry_len)
+    # check whether the full structure is symmetric
     out["full_symmetry"] = out.apply(
         lambda row: row["max_symmetry"] == len(str(row["structure"])), axis=1
         )
+    
     return out
 
 ### sec ###
 
 def _pairs_from_dotbracket(s: str):
-    """
-    Parse a dot-bracket secondary-structure string and extract base-pair indices.
+    '''
+        Parse a dot-bracket RNA secondary structure string and extract all
+        base-pair index tuples. Base pairs are identified by matching opening
+        and closing parentheses using a stack-based left-to-right scan.
+        Unbalanced closing parentheses are ignored.
+        :param s: dot-bracket RNA structure string
 
-    Helper:
-    - Scans the string left-to-right using a stack for '(' positions.
-    - Each ')' closes the most recent unmatched '(' to form a pair (i, j).
-    - Ignores unbalanced ')' (extra right parentheses).
-    - Returns a sorted list of (i, j) index tuples (0-based).
-    """
+        :return: sorted list of base-pair index tuples (0-based)
+    '''
     if not isinstance(s, str):
         return []
     stack = []
     pairs = []
     for i, ch in enumerate(s):
         if ch == "(":
+            # store position of opening base pair symbol
             stack.append(i)
         elif ch == ")":
             if stack:
+                # match current closing symbol to most recent opening symbol
                 j = stack.pop()
                 pairs.append((j, i))
             else:
                 # unbalanced right paren; ignore
                 pass
     pairs.sort()
+
     return pairs
 
 def _stems_from_pairs(pairs):
-    """
-    Group base pairs into stacked stems and return the stem lengths.
+    '''
+        Group base pairs into stems defined as consecutive stacked base pairs of
+        the form (i, j), (i+1, j-1), (i+2, j-2), and return the corresponding
+        stem lengths.
+        :param pairs: list of base-pair index tuples
 
-    Helper:
-    - A "stem" is a run of stacked base pairs: (i, j), (i+1, j-1), (i+2, j-2), ...
-    - Input: list of (i, j) pairs (typically sorted).
-    - Output: list of integers, each integer is the number of stacked base pairs
-      in one stem (unit: base pairs per stem).
-    """
+        :return: list of stem lengths in base pairs
+    '''
     if not pairs:
         return []
     stems = []
@@ -3012,166 +3309,141 @@ def _stems_from_pairs(pairs):
             stems.append(cur_len)
             cur_len = 1
     stems.append(cur_len)
+
     return stems
 
 def _hairpin_loop_sizes(s: str, pairs):
-    """
-    Compute hairpin-loop sizes from a dot-bracket structure and its base pairs.
+    '''
+        Compute hairpin loop sizes from a dot-bracket structure and its base
+        pairs. A hairpin is defined as a base pair whose enclosed region
+        contains no nested base pairs.
+        :param s: dot-bracket RNA structure string
+        :param pairs: list of base-pair index tuples
 
-    Helper:
-    - Defines a hairpin loop as a base pair (i, j) whose enclosed region contains
-      no other '(' or ')' characters (i.e., no nested pairs).
-    - Size = number of positions between i and j (length of the inner substring),
-      which equals the number of unpaired nucleotides in that loop for a pure hairpin.
-    - Returns: list of integers (unit: nucleotides).
-    """
+        :return: list of hairpin loop sizes in nucleotides
+    '''
     sizes = []
     for i, j in pairs:
         inner = s[i+1:j]
+        # pure hairpin: enclosed region contains no additional base pairs
         if inner and ("(" not in inner and ")" not in inner):
             sizes.append(len(inner))
+
     return sizes
 
 def _external_unpaired_count(s: str):
-    """
-    Count unpaired positions that lie in the external loop (outside all base pairs).
+    '''
+        Count unpaired positions located in the external loop, כלומר positions
+        marked by '.' that are not enclosed by any base-pair interval.
+        :param s: dot-bracket RNA structure string
 
-    Helper:
-    - Marks all indices that are enclosed by any base pair interval [i, j].
-    - Counts '.' characters that are NOT covered by any such interval.
-    - Returns: integer count (unit: nucleotides).
-    """
+        :return: number of external-loop unpaired positions
+    '''
     pairs = _pairs_from_dotbracket(s)
     covered = set()
     for i, j in pairs:
+        # mark all positions enclosed by each base-pair interval
         covered.update(range(i, j+1))
+
     return sum(1 for k, ch in enumerate(s) if ch == "." and k not in covered)
 
 def _pair_spans(pairs):
-    """
-    Compute span (arc length) for each base pair.
+    '''
+        Compute span values for all base pairs, where span is defined as the
+        index distance j - i for a base pair (i, j).
+        :param pairs: list of base-pair index tuples
 
-    Helper:
-    - For each pair (i, j), span = j - i (0-based index distance).
-    - Returns: list of integers (unit: nucleotides / positions).
-    """
+        :return: list of base-pair spans
+    '''
     return [(j - i) for i, j in pairs]
 
 def add_bp_count(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add base-pair count feature from dot-bracket structure.
+    '''
+        Add the number of base pairs in each dot-bracket structure. The count
+        is obtained from the number of opening parentheses, each representing
+        one base pair.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - bp_count: number of base pairs in the structure.
-
-    How it is computed:
-    - Counts the number of '(' characters in the dot-bracket string.
-      Each '(' corresponds to exactly one base pair.
-
-    Unit:
-    - Count (base pairs).
-    """
+        :return: Pandas DataFrame with added 'bp_count' column
+    '''
     df["bp_count"] = df["structure"].apply(
         lambda s: s.count("(") if isinstance(s, str) else None
     )
+
     return df
 
 def add_bp_density(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add base-pair density feature from dot-bracket structure.
+    '''
+        Add base-pair density defined as the number of opening parentheses
+        divided by the total structure length. This feature describes the
+        relative abundance of paired positions.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - bp_density: fraction of positions participating as the left side of a base pair.
-
-    How it is computed:
-    - bp_density = (# of '(' characters) / (structure length)
-
-    Unit:
-    - Proportion (base pairs per nucleotide; dimensionless, range ~[0, 0.5]).
-    """
+        :return: Pandas DataFrame with added 'bp_density' column
+    '''
     def f(s):
+        # density of paired positions relative to sequence length
         if not isinstance(s, str) or len(s) == 0:
             return None
-        # each "(" corresponds to one base pair; density over length
         return s.count("(") / len(s)
     df["bp_density"] = df["structure"].apply(f)
+
     return df
 
 def add_unpaired_count(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add unpaired nucleotide count feature from dot-bracket structure.
+    '''
+        Add the number of unpaired nucleotides in each dot-bracket structure,
+        represented by '.' characters.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - unpaired_count: number of unpaired positions.
-
-    How it is computed:
-    - Counts '.' characters in the dot-bracket string.
-
-    Unit:
-    - Count (nucleotides).
-    """
+        :return: Pandas DataFrame with added 'unpaired_count' column
+    '''
     df["unpaired_count"] = df["structure"].apply(
         lambda s: s.count(".") if isinstance(s, str) else None
     )
+
     return df
 
 def add_unpaired_density(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add unpaired nucleotide density feature from dot-bracket structure.
+    '''
+        Add unpaired nucleotide density defined as the number of '.' characters
+        divided by the total structure length.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - unpaired_density: fraction of positions that are unpaired.
-
-    How it is computed:
-    - unpaired_density = (# of '.' characters) / (structure length)
-
-    Unit:
-    - Proportion (nucleotides per nucleotide; dimensionless, range [0, 1]).
-    """
+        :return: Pandas DataFrame with added 'unpaired_density' column
+    '''
     def f(s):
+        # density of unpaired positions relative to sequence length
         if not isinstance(s, str) or len(s) == 0:
             return None
         return s.count(".") / len(s)
     df["unpaired_density"] = df["structure"].apply(f)
+
     return df
 
 def add_stem_count(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add stem count feature from dot-bracket structure.
+    '''
+        Add the number of stems in each dot-bracket structure. A stem is
+        defined as a run of stacked base pairs.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - stem_count: number of stems, where a stem is a run of stacked base pairs.
-
-    How it is computed:
-    - Extracts all base pairs from the dot-bracket string.
-    - Groups consecutive stacked pairs into stems.
-    - stem_count = number of such stems.
-
-    Unit:
-    - Count (stems).
-    """
+        :return: Pandas DataFrame with added 'stem_count' column
+    '''
     df["stem_count"] = df["structure"].apply(
         lambda s: len(_stems_from_pairs(_pairs_from_dotbracket(s))) if isinstance(s, str) else None
     )
+
     return df
 
 def add_stem_length_stats(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add stem-length summary statistics from dot-bracket structure.
+    '''
+        Add summary statistics of stem lengths derived from stacked base-pair
+        runs. The maximum, mean, and minimum stem lengths are computed for each
+        structure.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - stem_len_max: maximum stem length across stems
-    - stem_len_mean: mean stem length across stems
-    - stem_len_min: minimum stem length across stems
-
-    How it is computed:
-    - Extracts base pairs, groups them into stems (stacked runs).
-    - Each stem length is the number of base pairs in that stem.
-    - If there are no stems/pairs: returns (0, 0.0, 0).
-
-    Unit:
-    - Base pairs (per stem) for each statistic.
-    """
+        :return: Pandas DataFrame with added stem length statistic columns
+    '''
     def f(s):
         if not isinstance(s, str):
             return (None, None, None)
@@ -3189,44 +3461,32 @@ def add_stem_length_stats(df: pd.DataFrame) -> pd.DataFrame:
     df["stem_len_max"]  = out.str[0]
     df["stem_len_mean"] = out.str[1]
     df["stem_len_min"]  = out.str[2]
+
     return df
 
 def add_hairpin_count(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add hairpin loop count feature from dot-bracket structure.
+    '''
+        Add the number of hairpin loops in each dot-bracket structure. Hairpins
+        are identified as base pairs whose enclosed region contains no nested
+        base pairs.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - hairpin_count: number of hairpin loops.
-
-    How it is computed:
-    - Finds base pairs (i, j) whose enclosed region contains no other pairs
-      (no '(' or ')' inside), i.e., a "pure" hairpin closure.
-    - hairpin_count = number of such closures.
-
-    Unit:
-    - Count (hairpin loops).
-    """
+        :return: Pandas DataFrame with added 'hairpin_count' column
+    '''
     df["hairpin_count"] = df["structure"].apply(
         lambda s: len(_hairpin_loop_sizes(s, _pairs_from_dotbracket(s))) if isinstance(s, str) else None
     )
+
     return df
 
 def add_hairpin_size_stats(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add hairpin-loop size summary statistics from dot-bracket structure.
+    '''
+        Add summary statistics of hairpin loop sizes, including mean, minimum,
+        and maximum loop size.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - hairpin_size_mean: mean hairpin loop size
-    - hairpin_size_min: minimum hairpin loop size
-    - hairpin_size_max: maximum hairpin loop size
-
-    How it is computed:
-    - Computes sizes for hairpin loops (inner length between closing bases).
-    - If there are no hairpins: sets mean/min/max to (0, None, None).
-
-    Unit:
-    - Nucleotides (unpaired positions inside hairpin loop) for each statistic.
-    """
+        :return: Pandas DataFrame with added hairpin size statistic columns
+    '''
     def f(s):
         if not isinstance(s, str):
             return (None, None, None)
@@ -3238,47 +3498,34 @@ def add_hairpin_size_stats(df: pd.DataFrame) -> pd.DataFrame:
     df["hairpin_size_mean"] = out.apply(lambda t: t[0])
     df["hairpin_size_min"]  = out.apply(lambda t: t[1])
     df["hairpin_size_max"]  = out.apply(lambda t: t[2])
+
     return df
 
 def add_external_unpaired_density(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add external-loop unpaired density feature from dot-bracket structure.
+    '''
+        Add the density of unpaired nucleotides located in the external loop,
+        i.e. unpaired positions not enclosed by any base pair.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - external_unpaired_density: fraction of positions that are unpaired AND lie in the
-      external loop (i.e., not enclosed by any base pair).
-
-    How it is computed:
-    - external_unpaired_density = (external unpaired '.' count) / (structure length)
-
-    Unit:
-    - Proportion (dimensionless, range [0, 1]).
-    """
+        :return: Pandas DataFrame with added 'external_unpaired_density' column
+    '''
     def f(s):
         if not isinstance(s, str) or len(s) == 0:
             return None
         ext = _external_unpaired_count(s)
         return ext / len(s)
     df["external_unpaired_density"] = df["structure"].apply(f)
+
     return df
 
 def add_pair_span_stats(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add base-pair span (arc length) summary statistics from dot-bracket structure.
+    '''
+        Add summary statistics of base-pair spans, where the span of a base pair
+        is defined as the index distance between its two paired positions.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - pair_span_mean: mean span (j - i) across all base pairs
-    - pair_span_min: minimum span (j - i)
-    - pair_span_max: maximum span (j - i)
-
-    How it is computed:
-    - Extracts all base pairs (i, j).
-    - For each pair, span = j - i (index distance).
-    - If there are no pairs: sets (mean/min/max) to (0, None, None).
-
-    Unit:
-    - Nucleotides / positions (index distance along the sequence).
-    """
+        :return: Pandas DataFrame with added pair span statistic columns
+    '''
     def f(s):
         if not isinstance(s, str):
             return (None, None, None)
@@ -3290,23 +3537,18 @@ def add_pair_span_stats(df: pd.DataFrame) -> pd.DataFrame:
     df["pair_span_mean"] = out.apply(lambda t: t[0])  # average distance between paired bases
     df["pair_span_min"]  = out.apply(lambda t: t[1])
     df["pair_span_max"]  = out.apply(lambda t: t[2])
+
     return df
 
 def add_free_end_lengths(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add free-end (unpaired tail) length features from dot-bracket structure.
+    '''
+        Add the lengths of unpaired free ends at the 5' and 3' termini of the
+        structure. These features correspond to leading and trailing runs of
+        '.' characters.
+        :param df: Pandas DataFrame containing 'structure'
 
-    Feature(s) computed:
-    - free_5prime_len: length of leading unpaired run at the 5' end
-    - free_3prime_len: length of trailing unpaired run at the 3' end
-
-    How it is computed:
-    - free_5prime_len: counts consecutive leading '.' until first non-dot.
-    - free_3prime_len: counts consecutive trailing '.' from the end until first non-dot.
-
-    Unit:
-    - Nucleotides (count of positions).
-    """
+        :return: Pandas DataFrame with added free-end length columns
+    '''
     def f(s):
         if not isinstance(s, str) or len(s) == 0:
             return (None, None)
@@ -3328,99 +3570,107 @@ def add_free_end_lengths(df: pd.DataFrame) -> pd.DataFrame:
     out = df["structure"].apply(f)
     df["free_5prime_len"] = out.apply(lambda t: t[0])
     df["free_3prime_len"] = out.apply(lambda t: t[1])
-    return df
 
-# only recommended as proxy
-def add_branch_point_count(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add a "branchiness" / multi-stem enclosure count feature from dot-bracket structure.
-
-    Feature(s) computed:
-    - branch_point_count: count of complex enclosures that contain at least two internal stems.
-
-    How it is computed:
-    - Uses a regex to find non-overlapping regions that look like an enclosure '( ... )'
-      containing nested parentheses patterns consistent with >=2 internal stems.
-    - This is a proxy for multiloops/branch points (not a perfect multiloop detector),
-      but useful as an index of structural branching complexity.
-
-    Unit:
-    - Count (branch-like enclosures / proxy branch points).
-    """
-    # proxy for multiloops: count positions where a run of '(' ends and immediately
-    # later another '(' appears after at least one dot inside the same enclosure.
-    # Not a perfect multiloop detector, but useful as a "branchiness" index.
-    import re
-    pattern = re.compile(r"\((?:[^()]*\([^()]*\))+[^()]*\)")
-    def f(s):
-        if not isinstance(s, str):
-            return None
-        # count non-overlapping complex enclosures with >=2 internal stems
-        return len(pattern.findall(s))
-    df["branch_point_count"] = df["structure"].apply(f)
     return df
 
 ### hybrid ###
 
 def _pairs_from_dotbracket(s: str):
-    """
-    Return list of base-pair tuples (i, j), 0-based, i<j.
-    """
+    '''
+        Extract base-pair index tuples from a dot-bracket RNA secondary
+        structure string. Each opening parenthesis is matched with the most
+        recent unmatched closing parenthesis to form a base pair.
+        :param s: dot-bracket RNA structure string
+
+        :return: sorted list of base-pair tuples (i, j) with 0-based indices
+    '''
     if not isinstance(s, str):
         return []
     stack, pairs = [], []
     for i, ch in enumerate(s):
         if ch == "(":
+            # store index of opening base-pair symbol
             stack.append(i)
         elif ch == ")":
             if stack:
+                # match current closing symbol to most recent opening symbol
                 j = stack.pop()
                 pairs.append((j, i))
     pairs.sort()
+
     return pairs
 
 def _stems_from_pairs(pairs):
-    """
-    Group consecutive stacked pairs into stems; return list of lists of pairs.
-    """
+    '''
+        Group consecutive stacked base pairs into stems. A stem is represented
+        as a list of base-pair tuples, where consecutive pairs satisfy the
+        stacked pattern (i+1, j-1).
+        :param pairs: list of sorted base-pair tuples
+
+        :return: list of stems, each represented as a list of base-pair tuples
+    '''
     if not pairs:
         return []
     stems = [[pairs[0]]]
     for (i1, j1), (i2, j2) in zip(pairs, pairs[1:]):
         if i2 == i1 + 1 and j2 == j1 - 1:
+            # extend current stem by stacked base pair
             stems[-1].append((i2, j2))
         else:
+            # start a new stem
             stems.append([(i2, j2)])
+
     return stems
 
 def _hairpin_loop_indices(structure: str, pairs):
-    """
-    Return list of index-lists for hairpin loops (unpaired indices between i and j when no inner pairs).
-    """
+    '''
+        Extract index lists corresponding to hairpin loops in a dot-bracket
+        structure. A hairpin loop is defined as the unpaired region enclosed by
+        a base pair with no nested base pairs inside.
+        :param structure: dot-bracket RNA structure string
+        :param pairs: list of base-pair tuples
+
+        :return: list of index lists for hairpin loops
+    '''
     loops = []
     for i, j in pairs:
         inner = structure[i+1:j]
         if inner and ("(" not in inner and ")" not in inner):
             loops.append(list(range(i+1, j)))
+
     return loops
 
 def _inside_any_pair_mask(n, pairs):
-    """Mask of indices that lie inside at least one (i,j) inclusive interval."""
+    '''
+        Create a boolean mask indicating which indices are located inside at
+        least one inclusive base-pair interval [i, j].
+        :param n: length of the structure
+        :param pairs: list of base-pair tuples
+
+        :return: list of booleans marking indices inside any pair interval
+    '''
     mask = [False]*n
     for i, j in pairs:
+        # mark all indices enclosed by each pair interval
         for k in range(i, j+1):
             mask[k] = True
+
     return mask
 
 def _category_masks(structure: str):
-    """
-    Return dict of boolean masks (lists) over indices:
-    paired, unpaired, external_unpaired, hairpin_unpaired, internal_unpaired
-    """
+    '''
+        Construct boolean masks for structural position categories derived from
+        a dot-bracket RNA secondary structure. Categories include paired,
+        unpaired, external unpaired, hairpin unpaired, and internal unpaired.
+        :param structure: dot-bracket RNA structure string
+
+        :return: dictionary containing category masks and extracted base pairs
+    '''
     n = len(structure)
     pairs = _pairs_from_dotbracket(structure)
     paired = [False]*n
     for i, j in pairs:
+        # mark paired positions at both ends of each base pair
         paired[i] = True
         paired[j] = True
     unpaired = [not p for p in paired]
@@ -3445,24 +3695,42 @@ def _category_masks(structure: str):
     )
 
 def _safe_upper(s):
+    '''
+        Convert a sequence string to uppercase if it is a valid string.
+        Non-string values are returned unchanged.
+        :param s: input sequence or other object
+
+        :return: uppercase string or original value
+    '''
     return s.upper() if isinstance(s, str) else s
 
 def add_gc_overall(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    Add overall GC fraction of DelVG_sequence (GC / length), NaN-safe.
+        Add the overall GC fraction of the DelVG sequence, calculated as the
+        proportion of G and C nucleotides across the full sequence.
+        :param df: Pandas DataFrame containing 'DelVG_sequence'
+
+        :return: Pandas DataFrame with added 'GC_overall' column
     '''
     def f(seq):
+        # compute overall GC content of the sequence
         if not isinstance(seq, str) or len(seq) == 0:
             return None
         seq = _safe_upper(seq)
         gc = seq.count("G") + seq.count("C")
         return gc / len(seq)
     df["GC_overall"] = df["DelVG_sequence"].apply(f)
+
     return df
 
 def add_gc_paired_unpaired(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    Add GC fraction among paired bases and among unpaired bases (from dot-bracket).
+        Add GC content separately for paired and unpaired positions according to
+        the dot-bracket RNA secondary structure.
+        :param df: Pandas DataFrame containing 'DelVG_sequence' and 'structure'
+
+        :return: Pandas DataFrame with added 'GC_paired' and 'GC_unpaired'
+                 columns
     '''
     def f(row):
         seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
@@ -3473,6 +3741,7 @@ def add_gc_paired_unpaired(df: pd.DataFrame) -> pd.DataFrame:
         unpaired_idx = [i for i, b in enumerate(masks["unpaired"]) if b]
 
         def content_gc(idxs):
+            # compute GC fraction for the selected indices
             if not idxs:
                 return None
             s = sum(1 for i in idxs if seq[i] in ("G","C"))
@@ -3482,11 +3751,17 @@ def add_gc_paired_unpaired(df: pd.DataFrame) -> pd.DataFrame:
     out = df.apply(f, axis=1)
     df["GC_paired"]   = out.apply(lambda t: t[0])
     df["GC_unpaired"] = out.apply(lambda t: t[1])
+
     return df
 
 def add_canonical_pair_stats(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    Count and fraction of canonical pairs: GC, AU, GU, and noncanonical among all pairs.
+        Add counts and fractions of canonical and non-canonical base-pair types
+        in the RNA secondary structure. Pair classes include GC, AU, GU, and
+        non-canonical pairs.
+        :param df: Pandas DataFrame containing 'DelVG_sequence' and 'structure'
+
+        :return: Pandas DataFrame with added base-pair composition statistics
     '''
     def f(row):
         seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
@@ -3497,6 +3772,7 @@ def add_canonical_pair_stats(df: pd.DataFrame) -> pd.DataFrame:
         for i, j in pairs:
             a, b = seq[i], seq[j]
             pair = a + b
+            # classify each pair by nucleotide combination
             if pair in ("GC","CG"):
                 c_gc += 1
             elif pair in ("AU","UA"):
@@ -3518,11 +3794,17 @@ def add_canonical_pair_stats(df: pd.DataFrame) -> pd.DataFrame:
     df["pair_AU_content"] = out.apply(lambda t: t[5])
     df["pair_GU_content"] = out.apply(lambda t: t[6])
     df["pair_noncanon_content"] = out.apply(lambda t: t[7])
+
     return df
 
 def add_stem_end_pair_enrichment(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    For each stem, look at both terminal base pairs and report the fraction that are GC/AU/GU.
+        Add the fraction of GC, AU, and GU base pairs among terminal base pairs
+        of stems. For each stem, both end pairs are considered, with single-pair
+        stems contributing only one terminal pair.
+        :param df: Pandas DataFrame containing 'DelVG_sequence' and 'structure'
+
+        :return: Pandas DataFrame with added stem-end pair composition columns
     '''
     def f(row):
         seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
@@ -3533,8 +3815,10 @@ def add_stem_end_pair_enrichment(df: pd.DataFrame) -> pd.DataFrame:
         for stem in stems:
             if not stem:
                 continue
+            # include first terminal pair of the stem
             end_pairs.append(stem[0])
             if len(stem) > 1:
+                # include second terminal pair for stems longer than one pair
                 end_pairs.append(stem[-1])
         if not end_pairs:
             return (None, None, None)
@@ -3550,11 +3834,17 @@ def add_stem_end_pair_enrichment(df: pd.DataFrame) -> pd.DataFrame:
     df["stem_end_GC_content"] = out.apply(lambda t: t[0])
     df["stem_end_AU_content"] = out.apply(lambda t: t[1])
     df["stem_end_GU_content"] = out.apply(lambda t: t[2])
+
     return df
 
 def add_hairpin_closing_pair_content(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    Among hairpin loops, what fraction are closed by GC/AU/GU/noncanonical?
+        Add the fraction of GC, AU, GU, and non-canonical closing base pairs
+        among hairpin loops in the RNA secondary structure.
+        :param df: Pandas DataFrame containing 'DelVG_sequence' and 'structure'
+
+        :return: Pandas DataFrame with added hairpin closing-pair composition
+                 columns
     '''
     def f(row):
         seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
@@ -3582,11 +3872,16 @@ def add_hairpin_closing_pair_content(df: pd.DataFrame) -> pd.DataFrame:
     df["hairpin_close_AU_content"]  = out.apply(lambda t: t[1])
     df["hairpin_close_GU_content"]  = out.apply(lambda t: t[2])
     df["hairpin_close_noncanon_content"] = out.apply(lambda t: t[3])
+
     return df
 
 def add_tetraloop_motif_counts(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    Count classic stable tetraloops in hairpins: GNRA, UNCG, CUUG (case-insensitive).
+        Count occurrences of selected stable tetraloop motifs in hairpin loops.
+        The motifs considered are GNRA, UNCG, and CUUG.
+        :param df: Pandas DataFrame containing 'DelVG_sequence' and 'structure'
+
+        :return: Pandas DataFrame with added tetraloop motif count columns
     '''
     # GNRA = G N R A (R = A/G)
     gnra = re.compile(r"^G[ACGU][AG]A$", re.IGNORECASE)
@@ -3602,6 +3897,7 @@ def add_tetraloop_motif_counts(df: pd.DataFrame) -> pd.DataFrame:
         for idxs in loops:
             loop_seq = "".join(seq[i] for i in idxs)
             if len(loop_seq) == 4:
+                # test each tetraloop against motif classes
                 if gnra.match(loop_seq): c_gnra += 1
                 if uncg.match(loop_seq): c_uncg += 1
                 if cuug.match(loop_seq): c_cuug += 1
@@ -3610,13 +3906,21 @@ def add_tetraloop_motif_counts(df: pd.DataFrame) -> pd.DataFrame:
     df["motif_GNRA_count"] = out.apply(lambda t: t[0])
     df["motif_UNCG_count"] = out.apply(lambda t: t[1])
     df["motif_CUUG_count"] = out.apply(lambda t: t[2])
+
     return df
 
 def add_loop_au_content(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    AU fraction in (a) all unpaired, (b) hairpin loops, (c) internal/multi/bulge, (d) external.
+        Add AU content for different unpaired structural categories, including
+        all unpaired positions, hairpin loops, internal unpaired regions, and
+        external unpaired regions.
+        :param df: Pandas DataFrame containing 'DelVG_sequence' and 'structure'
+
+        :return: Pandas DataFrame with added AU content columns for structural
+                 categories
     '''
     def content_au(seq, idxs):
+        # compute AU fraction for the selected indices
         if not idxs:
             return None
         n = len(idxs)
@@ -3643,11 +3947,17 @@ def add_loop_au_content(df: pd.DataFrame) -> pd.DataFrame:
     df["AU_hairpin_content"]  = out.apply(lambda t: t[1])
     df["AU_internal_content"] = out.apply(lambda t: t[2])
     df["AU_external_content"] = out.apply(lambda t: t[3])
+
     return df
 
 def add_tail_gc_content(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    GC fraction in 5' and 3' single-stranded tails (leading/trailing dots).
+        Add GC content of the 5' and 3' single-stranded tails, defined as
+        leading and trailing unpaired regions represented by '.' in the
+        structure.
+        :param df: Pandas DataFrame containing 'DelVG_sequence' and 'structure'
+
+        :return: Pandas DataFrame with added tail GC content columns
     '''
     def f(row):
         seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
@@ -3664,17 +3974,24 @@ def add_tail_gc_content(df: pd.DataFrame) -> pd.DataFrame:
             if ch == ".": right += 1
             else: break
         def gc_content(subseq):
+            # compute GC fraction for tail subsequence
             if len(subseq) == 0: return None
             return (subseq.count("G")+subseq.count("C"))/len(subseq)
         return (gc_content(seq[:left]), gc_content(seq[len(seq)-right:]))
     out = df.apply(f, axis=1)
     df["GC_5prime_tail"] = out.apply(lambda t: t[0])
     df["GC_3prime_tail"] = out.apply(lambda t: t[1])
+
     return df
 
 def add_start_codon_accessibility(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    If DelVG_sequence contains AUG, report (aug_total, aug_unpaired, aug_unpaired_content) based on structure.
+        Add statistics describing accessibility of AUG start codons based on the
+        RNA secondary structure. A start codon is considered accessible if all
+        three nucleotides are unpaired.
+        :param df: Pandas DataFrame containing 'DelVG_sequence' and 'structure'
+
+        :return: Pandas DataFrame with added AUG accessibility columns
     '''
     def f(row):
         seq, struct = _safe_upper(row["DelVG_sequence"]), row["structure"]
@@ -3685,20 +4002,26 @@ def add_start_codon_accessibility(df: pd.DataFrame) -> pd.DataFrame:
         idxs = [m.start() for m in re.finditer(r"(?=AUG)", seq)]
         if not idxs:
             return (0, 0, None)
+        # count AUG triplets that are fully unpaired
         unp_count = sum(1 for i in idxs if all(unp[i:i+3]))
         return (len(idxs), unp_count, unp_count/len(idxs))
     out = df.apply(f, axis=1)
     df["AUG_total"] = out.apply(lambda t: t[0])
     df["AUG_unpaired"] = out.apply(lambda t: t[1])
     df["AUG_unpaired_content"] = out.apply(lambda t: t[2])
+
     return df
 
 ### statistics ###
 
 def p_to_stars(p: float) -> str:
-    """
+    '''
+        Convert a p-value to significance stars.
+        :param p: p-value to annotate
 
-    """
+        :return: significance label as string
+    '''
+    # assign common significance labels based on p-value thresholds
     if p < 0.00001:
         return "***"
     elif p < 0.001:
@@ -3715,33 +4038,33 @@ def fisher_exact_for_category(
     n_low_total: int,
     alternative: str = "two-sided",
 ):
-    """
-    Fisher's exact test on a 2x2 table for one category (one-vs-rest).
+    '''
+        Perform Fisher's exact test for one category against all remaining categories.
+        :param n_high_cat: number of observations of the category in the high group
+        :param n_high_total: total number of observations in the high group
+        :param n_low_cat: number of observations of the category in the low group
+        :param n_low_total: total number of observations in the low group
+        :param alternative: alternative hypothesis passed to scipy.stats.fisher_exact
 
-    Table:
-        [ [a, b],
-          [c, d] ]
-    where
-        a = n_high_cat
-        b = n_high_total - n_high_cat
-        c = n_low_cat
-        d = n_low_total  - n_low_cat
-
-    Returns odds ratio + p-value + counts.
-    """
+        :return: dictionary with odds ratio, p-value, and contingency table counts
+    '''
+    # convert observed category counts to integers
     a = int(n_high_cat)
     c = int(n_low_cat)
+
+    # compute one-vs-rest counts for both groups
     b = int(n_high_total - a)
     d = int(n_low_total - c)
 
-    # guards
+    # guard against invalid group sizes
     if n_high_total <= 0 or n_low_total <= 0:
         return {"oddsratio": np.nan, "pvalue": np.nan, "a": a, "b": b, "c": c, "d": d}
 
-    # if category never occurs anywhere, skip
+    # skip test if the category is absent in both groups
     if (a + c) == 0:
         return {"oddsratio": np.nan, "pvalue": np.nan, "a": a, "b": b, "c": c, "d": d}
 
+    # run Fisher's exact test on the 2x2 contingency table
     OR, p = stats.fisher_exact([[a, b], [c, d]], alternative=alternative)
 
     return {
@@ -3751,27 +4074,41 @@ def fisher_exact_for_category(
     }
 
 def bh_fdr(pvals):
-    """
-    Benjamini–Hochberg FDR correction.
-    returns adjusted p-values in the same order as input.
-    NaNs stay NaN.
-    """
+    '''
+        Apply Benjamini-Hochberg FDR correction to a list or array of p-values.
+        :param pvals: iterable of p-values, may contain NaN values
+
+        :return: numpy array of adjusted p-values in original order
+    '''
+    # convert input to float numpy array
     pvals = np.asarray(pvals, dtype=float)
+
+    # initialize output with NaNs
     out = np.full_like(pvals, np.nan, dtype=float)
 
+    # keep only finite p-values for correction
     ok = np.isfinite(pvals)
     if not np.any(ok):
         return out
 
+    # extract valid p-values and number of tests
     p = pvals[ok]
     m = p.size
+
+    # sort p-values for rank-based adjustment
     order = np.argsort(p)
     ranked = p[order]
 
+    # compute BH-adjusted p-values
     adj = ranked * m / (np.arange(1, m + 1))
-    adj = np.minimum.accumulate(adj[::-1])[::-1]  # monotone
+
+    # enforce monotonicity from largest to smallest rank
+    adj = np.minimum.accumulate(adj[::-1])[::-1]
+
+    # restrict values to valid p-value range
     adj = np.clip(adj, 0.0, 1.0)
 
+    # restore original ordering of valid entries
     out_ok = np.empty_like(p)
     out_ok[order] = adj
     out[ok] = out_ok
@@ -3785,20 +4122,29 @@ def mannwhitneyu_for_feature(
     alternative: str = "two-sided",
     ):
     '''
+        Perform a Mann-Whitney U test for one numerical feature between two groups.
+        :param true_df: dataframe representing the high or positive group
+        :param false_df: dataframe representing the low or negative group
+        :param feature_name: name of the feature column to compare
+        :param alternative: alternative hypothesis passed to scipy.stats.mannwhitneyu
 
+        :return: dictionary with test statistic, p-value, group sizes, medians, and Cliff's delta
     '''
-
+    # extract feature values for both groups
     x_high = true_df[feature_name].to_numpy()
     y_low  = false_df[feature_name].to_numpy()
 
+    # get sample sizes and ensure both groups contain observations
     n_high, n_low = len(x_high), len(y_low)
     if n_high == 0 or n_low == 0:
         raise ValueError("one of the groups has no observations with this threshold.")
 
+    # run Mann-Whitney U test
     res = stats.mannwhitneyu(x_high, y_low, alternative=alternative, method="auto")
     U = float(res.statistic)
     p = float(res.pvalue)
 
+    # derive symmetric U and convert it to Cliff's delta effect size
     U_min = min(U, n_high * n_low - U)
     cliffs_delta = 1 - 2 * (U_min / (n_high * n_low))
 
@@ -3821,30 +4167,45 @@ def mannwhitneyu_for_feature(
 
 def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str, intersects: str, cut_intersects: bool=False):
     '''
+        Create a textual descriptor for a selected set of candidates.
+        :param folder: preprocessing folder or grouping label
+        :param data: virus type or higher-level dataset selection
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param cut_intersects: if True, shorten the intersect wording
 
+        :return: formatted descriptor string
     '''
+    # collect selected subgroup parts for the descriptor
     parts = []
 
+    # convert underscores in intersect label to spaces for display
     intersects_mod = intersects.replace('_', ' ')
 
-    # extract trailing number (if present)
+    # extract trailing numeric cutoff from intersect label if present
     m = re.search(r'\s(\d+)$', intersects_mod)
     cutoff = None
     if m:
         cutoff = int(m.group(1))
         intersects_mod = intersects_mod[:m.start()].rstrip()
 
+    # append selected data subset if specified
     if data != 'all':
         parts.append(data)
 
+    # append selected strain if specified
     if strain != 'all':
         parts.append(strain)
 
+    # append selected segment if specified
     if segment != 'all':
         parts.append(segment)
 
+    # add cutoff annotation only for values of at least 2
     cutoff_str = f' (cutoff≥{cutoff})' if cutoff >= 2 else ''
 
+    # construct base descriptor depending on whether a folder label is used
     if folder != 'all':
         if len(parts) == 0:
             base = f'all {folder} candidates{cutoff_str}'
@@ -3856,12 +4217,14 @@ def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str,
         else:
             base = f'candidates{cutoff_str} from ' + '-'.join(parts)
 
+    # create readable suffix for intersect mode
     suffix = (
         f"{intersects_mod}-wise"
         if "dataset" in intersects_mod
         else intersects_mod.replace(" metadata", "")
     )
 
+    # build final descriptor depending on whether metadata intersects are used
     if intersects_mod.endswith('metadata'):
         intersects_mod = intersects_mod[:-(len('metadata'))].rstrip()
         if cut_intersects:
@@ -3878,30 +4241,46 @@ def make_candidate_descriptor(folder: str, data: str, strain: str, segment: str,
 
 def make_pseudo_candidate_descriptor(pseudo_prefix: str, folder: str, data: str, strain: str, segment: str, intersects: str, cut_intersects: bool=False):
     '''
+        Create a textual descriptor for a selected set of pseudo-candidates.
+        :param pseudo_prefix: prefix describing the pseudo-candidate type
+        :param folder: preprocessing folder or grouping label
+        :param data: virus type or higher-level dataset selection
+        :param strain: selected strain
+        :param segment: selected segment
+        :param intersects: intersect mode descriptor
+        :param cut_intersects: if True, shorten the intersect wording
 
+        :return: formatted descriptor string
     '''
+    # collect selected subgroup parts for the descriptor
     parts = []
 
+    # convert underscores in intersect label to spaces for display
     intersects_mod = intersects.replace('_', ' ')
 
-    # extract trailing number (if present)
+    # extract trailing numeric cutoff from intersect label if present
     m = re.search(r'\s(\d+)$', intersects_mod)
     cutoff = None
     if m:
         cutoff = int(m.group(1))
         intersects_mod = intersects_mod[:m.start()].rstrip()
 
+    # append selected data subset if specified
     if data != 'all':
         parts.append(data)
 
+    # append selected strain if specified
     if strain != 'all':
         parts.append(strain)
 
+    # append selected segment if specified
     if segment != 'all':
         parts.append(segment)
 
+    # add cutoff annotation only for values of at least 2
     cutoff_str = f' (cutoff≥{cutoff})' if cutoff >= 2 else ''
 
+    # construct base descriptor independent of pseudo prefix
     if folder != 'all':
         if len(parts) == 0:
             base = f'all candidates{cutoff_str}'
@@ -3913,12 +4292,14 @@ def make_pseudo_candidate_descriptor(pseudo_prefix: str, folder: str, data: str,
         else:
             base = f'candidates{cutoff_str} from ' + '-'.join(parts)
 
+    # create readable suffix for intersect mode
     suffix = (
         f"{intersects_mod}-wise"
         if "dataset" in intersects_mod
         else intersects_mod.replace(" metadata", "")
     )
 
+    # build final descriptor depending on whether metadata intersects are used
     if intersects_mod.endswith('metadata'):
         intersects_mod = intersects_mod[:-(len('metadata'))].rstrip()
         if cut_intersects:
@@ -3934,33 +4315,47 @@ def make_pseudo_candidate_descriptor(pseudo_prefix: str, folder: str, data: str,
     return descriptor
 
 def make_legend_descriptor(title: str) -> str:
-    """
-    Replace '_' with ' ' and convert 'dataset' -> 'dataset'.
-    """
+    '''
+        Format a legend title by replacing underscores with spaces.
+        :param title: input legend title
+
+        :return: formatted legend title
+    '''
+    # return unchanged value if title is not a string
     if not isinstance(title, str):
         return title
 
+    # replace underscores with spaces for display
     return title.replace("dataset", "dataset").replace("_", " ")
 
 def capitalize_first(s) -> str:
+    '''
+        Format feature or label names into a more readable display form.
+        :param s: input string or value
+
+        :return: formatted string with normalized wording and capitalization
+    '''
+    # keep None values unchanged
     if s is None:
         return s
 
+    # convert input to string for uniform processing
     s = str(s)
     if not s:
         return s
 
-    # ---- exact feature name mappings (case-insensitive) ----
+    # exact feature name mappings matched case-insensitively
     mapping = {
         "start": "Deletion start",
         "end": "Deletion end",
     }
 
+    # apply exact mapping if available
     s_lower = s.lower()
     if s_lower in mapping:
         return mapping[s_lower]
 
-    # ---- substring replacements for motif feature names ----
+    # replace internal motif feature names with readable labels
     motif_mapping = {
         "site1_motif": "Motif before deletion",
         "site2_motif": "Deletion start motif",
@@ -3971,7 +4366,7 @@ def capitalize_first(s) -> str:
     for key, value in motif_mapping.items():
         s = re.sub(key, value, s, flags=re.IGNORECASE)
 
-    # --- protect underscores for specific dataset IDs (ONLY in those exact substrings) ---
+    # protect underscores inside selected dataset identifiers before global replacement
     protected_ids = [
         "Alnaji2019_Cal07",
         "Alnaji2019_NC",
@@ -3990,56 +4385,71 @@ def capitalize_first(s) -> str:
         placeholders[token] = pid
         s = s.replace(pid, token)
 
-    # replace underscores with spaces
+    # replace remaining underscores with spaces
     s = s.replace("_", " ")
 
-    # restore protected dataset ids
+    # restore protected dataset identifiers with original underscores
     for token, pid in placeholders.items():
         s = s.replace(token, pid)
 
-    # normalize kmer -> K-mer
+    # normalize kmer wording
     s = re.sub(r"\bkmer\b", "K-mer", s, flags=re.IGNORECASE)
 
-    # replace bp -> BP
+    # normalize bp wording
     s = re.sub(r"\bbp\b", "BP", s, flags=re.IGNORECASE)
 
-    # replace len -> length
+    # normalize abbreviated len wording
     s = re.sub(r"\blen\b", "length", s, flags=re.IGNORECASE)
 
-    # replace standalone 3 or 5 with RNA prime + hyphen
+    # convert standalone 3 and 5 to RNA prime notation with hyphen
     s = re.sub(r"\b3\b", "3′-", s)
     s = re.sub(r"\b5\b", "5′-", s)
 
-    # remove accidental space after 3′- or 5′-
+    # remove accidental spaces after prime-hyphen replacements
     s = s.replace("3′- ", "3′-")
     s = s.replace("5′- ", "5′-")
 
-    # capitalize first character
+    # capitalize the first character of the final string
+
     return s[0].upper() + s[1:]
 
 ### color ###
 
 def pick_colors(colors: list, n_needed: int, templates: dict=COLOR_TEMPLATES):
-    """
+    '''
+        Select a set of colors from a base color list.
+        :param colors: list of available colors
+        :param n_needed: number of colors required
+        :param templates: optional predefined index templates for specific sizes
 
-    """
+        :return: list of selected colors
+    '''
+    # total number of available base colors
     n_colors = len(colors)
     
+    # if more colors are needed than available, cycle through the list
     if n_needed >= n_colors:
         return [colors[i % n_colors] for i in range(n_needed)]
     
+    # if a predefined template exists for this number, use template indices
     if templates and n_needed in templates:
         return [colors[i] for i in templates[n_needed]]
     
+    # otherwise select colors evenly spaced across the list
     step = n_colors / n_needed
+
     return [colors[int(i * step)] for i in range(n_needed)]
 
 ### general ###
 
 def compute_quantile_rank_count_df(df: pd.DataFrame) -> pd.DataFrame:
     '''
-    
+        Count the number of entries per NGS quantile rank.
+        :param df: dataframe containing a column 'NGS_quantile_rank'
+
+        :return: dataframe with quantile rank and corresponding counts
     '''
+    # group by quantile rank and count number of entries per rank
     return (
         df.groupby('NGS_quantile_rank')
         .size()
@@ -4048,32 +4458,48 @@ def compute_quantile_rank_count_df(df: pd.DataFrame) -> pd.DataFrame:
 
 def compute_seq_feature_count_df(sequence: str, feature_name: str, filter: list):
     '''
+        Count occurrences of sequence-based features (e.g., motifs) in a sequence.
+        :param sequence: nucleotide or character sequence
+        :param feature_name: name of the feature column
+        :param filter: list of feature values to count
 
+        :return: dataframe with feature values and their counts
     '''
+    # initialize storage for feature counts
     data = {
         feature_name: [],
         'count': []
     }
 
+    # count occurrences of each feature value in the sequence
     for value in filter:
         count = sequence.count(value)
         data[feature_name].append(value)
         data['count'].append(count)
 
+    # convert to dataframe
     count_df = pd.DataFrame(data)
 
     return count_df
 
 def compute_feature_count_df(df: pd.DataFrame, feature_name: str, filter: list = []):
     '''
+        Count occurrences of categorical feature values in a dataframe column.
+        :param df: input dataframe
+        :param feature_name: column name of the feature
+        :param filter: optional list defining which feature values to include and their order
 
+        :return: dataframe with feature values and their counts
     '''
+    # remove missing values and compute value counts
     feature_series = df[feature_name].dropna()
     feature_counts = feature_series.value_counts().to_dict()
 
+    # if no filter is provided, use sorted unique feature values
     if not filter:
         filter = sorted(feature_series.unique().tolist())
 
+    # build dataframe with counts for each feature value
     feature_count_df = pd.DataFrame({
         feature_name: filter,
         'count': [feature_counts.get(value, 0) for value in filter]
@@ -4083,52 +4509,90 @@ def compute_feature_count_df(df: pd.DataFrame, feature_name: str, filter: list =
 
 def compute_feature_freq_df(count_df: pd.DataFrame, feature_name: str) -> pd.DataFrame:
     '''
+        Convert feature counts into relative frequencies in percent.
+        :param count_df: dataframe containing feature counts
+        :param feature_name: name of the feature column
 
+        :return: dataframe with feature values and relative frequencies
     '''
+    # compute total number of observations
     total = count_df['count'].sum()
+
+    # compute relative frequencies in percent
     freq_df = count_df.copy()
     freq_df['freq'] = (freq_df['count'] / total) * 100
 
+    # return only feature and frequency columns
     return freq_df[[feature_name, 'freq']]
 
 def subtract_freq_dfs(freq_name0: str, freq_df0: pd.DataFrame, freq_name1: str, freq_df1: pd.DataFrame, feature_name: str) -> pd.DataFrame:
     '''
+        Compute frequency differences between two frequency dataframes.
+        :param freq_name0: label for first frequency column
+        :param freq_df0: first frequency dataframe
+        :param freq_name1: label for second frequency column
+        :param freq_df1: second frequency dataframe
+        :param feature_name: name of the feature column
 
+        :return: dataframe containing both frequencies and their difference
     '''
+    # combine both frequency tables and compute difference
     diff_freq_df = pd.DataFrame({
         feature_name: freq_df0[feature_name],
         freq_name0: freq_df0['freq'],
         freq_name1: freq_df1['freq'],
         'difference': freq_df0['freq'] - freq_df1['freq']
     })
+
     return diff_freq_df
 
 ### heatmap ###
 
 def compute_feature_count_heatmap_df(df: pd.DataFrame, feature_name: str, filter: list = []) -> pd.DataFrame:
     '''
+        Count feature occurrences per NGS quantile rank for heatmap visualization.
+        :param df: input dataframe containing NGS quantile ranks and feature values
+        :param feature_name: name of the feature column to evaluate
+        :param filter: optional list defining which feature values to include and their order
 
+        :return: dataframe with quantile ranks as rows and feature counts as columns
     '''
+    # keep only quantile rank and selected feature columns
     relevant_df = df[['NGS_quantile_rank', feature_name]].copy()
 
+    # restrict to selected feature values or infer sorted values from the data
     if filter:
         relevant_df = relevant_df[relevant_df[feature_name].isin(filter)]
     else:
         filter = sorted(relevant_df[feature_name].dropna().unique().tolist())
 
+    # one-hot encode feature values for counting within each quantile rank
     one_hot = pd.get_dummies(relevant_df[feature_name])
+
+    # ensure all requested feature columns are present and in desired order
     one_hot = one_hot.reindex(columns=filter, fill_value=0)
+
+    # combine quantile rank labels with one-hot encoded feature counts
     combined = pd.concat([relevant_df[['NGS_quantile_rank']], one_hot], axis=1)
 
+    # sum feature counts within each quantile rank
     return combined.groupby('NGS_quantile_rank', as_index=False).sum()
 
 def compute_feature_count_heatmap_sum_df(df: pd.DataFrame, feature_name: str):
     '''
+        Sum feature counts across all quantile-rank rows of a heatmap count dataframe.
+        :param df: dataframe with quantile ranks in first column and feature counts in remaining columns
+        :param feature_name: name of the feature column for the output dataframe
 
+        :return: dataframe with total counts per feature
     '''
+    # select all feature count columns except the quantile-rank column
     feature_columns = df.columns[1:]
+
+    # sum counts for each feature over all quantile ranks
     count_sums = df[feature_columns].sum()
 
+    # build dataframe with feature names and total counts
     feature_count_df = pd.DataFrame({
         feature_name: feature_columns.astype(str),
         'count': count_sums.values.astype(int)
@@ -4138,37 +4602,57 @@ def compute_feature_count_heatmap_sum_df(df: pd.DataFrame, feature_name: str):
 
 def compute_feature_freq_heatmap_df(feature_count_heatmap_df: pd.DataFrame, quantile_rank_count_df: pd.DataFrame) -> pd.DataFrame:
     '''
+        Convert heatmap feature counts into relative frequencies per quantile rank.
+        :param feature_count_heatmap_df: dataframe with feature counts per quantile rank
+        :param quantile_rank_count_df: dataframe with total number of entries per quantile rank
 
+        :return: dataframe with relative feature frequencies in percent per quantile rank
     '''
+    # map each quantile rank to its total number of observations
     rank_counts = quantile_rank_count_df.set_index('NGS_quantile_rank')['count']
+
+    # set quantile rank as index for row-wise normalization
     pivot_df = feature_count_heatmap_df.set_index('NGS_quantile_rank')
+
+    # keep only quantile ranks present in both input dataframes
     pivot_df = pivot_df.loc[pivot_df.index.intersection(rank_counts.index)]
+
+    # divide counts by total observations per rank and convert to percent
     feature_freq_heatmap_df = pivot_df.div(rank_counts, axis=0) * 100
 
     return feature_freq_heatmap_df
 
 def add_lin_reg_rows(freq_heatmap_df: pd.DataFrame) -> pd.DataFrame:
     '''
-    
+        Add linear regression intercepts and coefficients for each heatmap column.
+        :param freq_heatmap_df: dataframe with quantile-rank rows and feature frequencies as columns
+
+        :return: dataframe extended by rows for intercept and coefficient
     '''
+    # create sequential x-values representing quantile-rank positions
     X = np.arange(1, len(freq_heatmap_df) + 1).reshape(-1, 1)
 
+    # initialize dictionaries for regression parameters
     intercepts = {}
     coefficients = {}
 
+    # fit one linear regression model per feature column
     for column in freq_heatmap_df.columns:
         y = freq_heatmap_df[column].values
 
+        # exclude missing values from model fitting
         valid_idx = ~np.isnan(y)
         if valid_idx.sum() < 2:
             intercepts[column] = 0.0
             coefficients[column] = 0.0
             continue
 
+        # fit linear regression and store intercept and slope
         model = LinearRegression().fit(X[valid_idx], y[valid_idx])
         intercepts[column] = model.intercept_
         coefficients[column] = model.coef_[0]
 
+    # append regression statistics as additional rows
     reg_freq_heatmap_df = freq_heatmap_df.copy()
     reg_freq_heatmap_df.loc['intercept'] = intercepts
     reg_freq_heatmap_df.loc['coefficient'] = coefficients
@@ -4183,33 +4667,48 @@ def add_lin_reg_rows(freq_heatmap_df: pd.DataFrame) -> pd.DataFrame:
 
 def generate_motifs(motif_length: int):
     '''
+        Generate all possible RNA motifs of a given length.
+        :param motif_length: length of the motifs to generate
 
+        :return: sorted list of all possible motifs
     '''
+    # define RNA alphabet used for motif generation
     nucleotides = ['A', 'C', 'G', 'U']
+
+    # generate all possible motif combinations of the requested length
     motifs = [''.join(p) for p in it.product(nucleotides, repeat=motif_length)]
     
     return sorted(motifs)
 
 def add_site_motifs(df: pd.DataFrame, motif_length: int):
     '''
+        Extract motif windows around deletion junction sites and add them to the dataframe.
+        :param df: dataframe containing full sequence and deletion coordinates
+        :param motif_length: length of each extracted motif
 
+        :return: tuple of modified dataframe and number of skipped rows
     '''
+    # store extracted motifs for the four junction-related positions
     site1_motifs = []
     site2_motifs = []
     site3_motifs = []
     site4_motifs = []
 
+    # track valid rows and skipped rows
     valid_indices = []
     skipped_count = 0
 
+    # iterate over all DelVG entries and extract motif windows
     for idx, row in df.iterrows():
         seq = row['full_seq']
         start = row['start']
         end = row['end']
 
+        # convert coordinates to local indexing convention used below
         start0 = start
         end0 = end - 1
 
+        # skip rows where any motif window would exceed sequence boundaries
         if (start0 - motif_length < 0 or 
             start0 + motif_length > len(seq) or 
             end0 - motif_length < 0 or 
@@ -4217,19 +4716,23 @@ def add_site_motifs(df: pd.DataFrame, motif_length: int):
             skipped_count += 1
             continue
 
+        # extract motifs before and at both deletion boundaries
         site1_motif = seq[start0 - motif_length:start0]
         site2_motif = seq[start0:start0 + motif_length]
         site3_motif = seq[end0 - motif_length:end0]
         site4_motif = seq[end0:end0 + motif_length]
 
+        # store motifs and keep corresponding row index
         site1_motifs.append(site1_motif)
         site2_motifs.append(site2_motif)
         site3_motifs.append(site3_motif)
         site4_motifs.append(site4_motif)
         valid_indices.append(idx)
 
+    # keep only rows for which all motif windows were valid
     df = df.loc[valid_indices].copy().reset_index(drop=True)
 
+    # add extracted motif columns to the filtered dataframe
     df['site1_motif'] = site1_motifs
     df['site2_motif'] = site2_motifs
     df['site3_motif'] = site3_motifs
@@ -4239,21 +4742,32 @@ def add_site_motifs(df: pd.DataFrame, motif_length: int):
 
 def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, segment: str):
     '''
+        Compute average motif frequencies in full-length reference sequences for a selected subset.
+        :param motif_length: length of motifs to evaluate
+        :param data: dataset selection level such as IAV or IBV
+        :param strain: selected strain or 'all'
+        :param segment: selected segment or 'all'
 
+        :return: dataframe with motif frequencies
     '''
+    # generate complete motif vocabulary for the requested length
     motifs = generate_motifs(motif_length)
 
+    # determine relevant strains from selected datasets
     dataset_names = get_dataset_names(cutoff=40, selection=data)
     strains = get_strains(dataset_names)
 
+    # case 1: exact strain and exact segment selected
     if segment != 'all' and strain != 'all':
         full_seq = get_sequence(strain, segment)
         motif_count_df = compute_seq_feature_count_df(full_seq, 'motif', motifs)
         motif_freq_df = compute_feature_freq_df(motif_count_df, 'motif')
         return motif_freq_df
     
+    # initialize combined frequency dataframe for averaging
     comb_df = pd.DataFrame()
 
+    # case 2: exact strain selected, average over all segments
     if strain != 'all':
         for segment in SEGMENTS:
             full_seq = get_sequence(strain, segment)
@@ -4264,9 +4778,11 @@ def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, se
             else:
                 comb_df['freq'] += motif_freq_df['freq']
 
+        # average frequencies across all segments
         comb_df['freq'] = comb_df['freq'] / len(SEGMENTS) 
         return comb_df
     
+    # case 3: exact segment selected, average over all relevant strains
     if segment != 'all':
         for strain in strains:
             full_seq = get_sequence(strain, segment)
@@ -4277,9 +4793,11 @@ def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, se
             else:
                 comb_df['freq'] += motif_freq_df['freq']
 
+        # average frequencies across all strains
         comb_df['freq'] = comb_df['freq'] / len(strains)
         return comb_df
     
+    # case 4: average across all relevant strains and all segments
     for strain in strains:
         for segment in SEGMENTS:
             full_seq = get_sequence(strain, segment)
@@ -4290,7 +4808,9 @@ def compute_full_seq_motif_freq_df(motif_length: int, data: str, strain: str, se
             else:
                 comb_df['freq'] += motif_freq_df['freq']
 
+    # average frequencies across all strain-segment combinations
     comb_df['freq'] = comb_df['freq'] / (len(strains) * len(SEGMENTS))
+    
     return comb_df
 
 def insert_pseudo_motif(
@@ -4304,29 +4824,45 @@ def insert_pseudo_motif(
     replace_all: bool = False
     ):
     '''
+        Insert a pseudo motif into selected sequence positions of DelVG full sequences.
+        :param df: dataframe containing full sequences and deletion coordinates
+        :param motif_length: length of motif to insert
+        :param pseudo_motif: motif inserted into selected candidates
+        :param motif_site: target motif site label or custom coordinate string
+        :param feature_name: feature used to select candidates for modification
+        :param feature_threshold: minimum feature value required for candidate selection
+        :param proportion: fraction of eligible candidates to modify
+        :param replace_all: if True, replace all non-selected candidates with random motifs at the same site
 
+        :return: tuple of modified dataframe and number of skipped rows
     '''
+    # validate motif insertion settings
     assert 0 <= proportion <= 1, 'proportion need to be between 0 and 1'
     assert len(pseudo_motif) == motif_length, 'pseudo_motif must have motif_length'
 
+    # create working copy and initialize bookkeeping
     df_mod = df.copy()
     skipped_count = 0
     rng = np.random.default_rng(SEED)
 
+    # identify candidates above threshold and select subset for modification
     candidates = df_mod[df_mod[feature_name] >= feature_threshold].copy()
     candidate_indices = candidates.index.tolist()
     n_modify = int(len(candidate_indices) * proportion)
     selected_indices = rng.choice(candidate_indices, size=n_modify, replace=False)
 
+    # optionally define remaining rows that should receive random motifs
     if replace_all:
         all_indices = df_mod.index.tolist()
         other_indices = [i for i in all_indices if i not in selected_indices]
     else:
         other_indices = []
 
+    # detect optional custom coordinate format "start_end"
     custom_coords = re.fullmatch(r'(\d+)_(\d+)', motif_site)
 
     def get_pos(row):
+        # determine motif insertion start position for a given row
         seq = row['full_seq']
         start0 = row['start']
         end0 = row['end'] - 1
@@ -4353,9 +4889,11 @@ def insert_pseudo_motif(
             return pos
 
     def generate_random_motif():
+        # generate a random RNA motif using fixed nucleotide probabilities
         return ''.join(rng.choice(['A', 'C', 'G', 'U'], size=motif_length,
                                   p=[0.35, 0.195, 0.23, 0.225]))
 
+    # insert pseudo motif into selected candidate sequences
     for idx in selected_indices:
         row = df_mod.loc[idx]
         seq = row['full_seq']
@@ -4366,6 +4904,7 @@ def insert_pseudo_motif(
         new_seq = seq[:pos] + pseudo_motif + seq[pos + motif_length:]
         df_mod.at[idx, 'full_seq'] = new_seq
 
+    # optionally replace the same motif window in remaining sequences with random motifs
     for idx in other_indices:
         row = df_mod.loc[idx]
         seq = row['full_seq']
