@@ -323,9 +323,9 @@ if __name__ == "__main__":
 
     ### general statistics ###
 
-    # run_strain_segment_statistics(dfs)
-    # print_df_sizes(dfnames, dfs)
+    run_strain_segment_statistics(dfs)
+    print_df_sizes(dfnames, dfs)
 
     ### feature percentage ###
 
-    # print_percentage_of_value(df, feature, value)
+    print_percentage_of_value(df, feature, value)

@@ -175,5 +175,7 @@ This work was conducted as part of a Bachelor’s thesis in Computer Science at 
 This project is intended for academic and research purposes.  
 Please contact the authors for usage beyond this scope.
 
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
+
 Additionally, selected sections of the code were adapted from the meta-study by Lohmann (available at: https://github.com/viraidip/DIP_meta-study). 
 These sections are explicitly highlighted within the code.

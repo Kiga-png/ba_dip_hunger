@@ -4244,7 +4244,7 @@ if __name__ == "__main__":
     ### distribution ###
 
     run_ngs_single_density_analysis(dfs, folder, data, strain, segment, intersects, show_quantiles, curvature)
-    # run_ngs_multi_density_analysis(dfs, selector, folder, data, strain, segment, intersects)
+    run_ngs_multi_density_analysis(dfs, selector, folder, data, strain, segment, intersects)
     run_advandced_intersect_plot(dfs, selector, data, strain, segment, intersects)
 
     ### features ###

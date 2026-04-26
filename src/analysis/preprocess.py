@@ -404,18 +404,18 @@ if __name__ == '__main__':
     ### make all base datasets first ###
 
     ### "pooled" or "unpooled" ###
-    # folder = 'pooled'
+    folder = 'pooled'
 
-    # dfnames = get_dataset_names(DATASET_CUTOFF)
+    dfnames = get_dataset_names(DATASET_CUTOFF)
 
     ### if folder 'pooled' use load_all, if 'unpooled' use load_all_unpooled ###
-    # dfs, _ = load_all(dfnames, False)
-    # dfs, _ = load_all_unpooled(dfnames, False)
+    dfs, _ = load_all(dfnames, False)
+    dfs, _ = load_all_unpooled(dfnames, False)
 
     ### select dataset index ###
-    # index = 2
-    # dfnames = [dfnames[index]]
-    # dfs = [dfs[index]]
+    index = 2
+    dfnames = [dfnames[index]]
+    dfs = [dfs[index]]
 
     ### DATA ###
 
@@ -437,16 +437,16 @@ if __name__ == '__main__':
 
     ### primary ###
 
-    # preprocess_primary_features(dfnames, dfs, folder)
+    preprocess_primary_features(dfnames, dfs, folder)
 
     ### secondary ###
 
-    # preprocess_secondary_features(dfnames, dfs, folder)
+    preprocess_secondary_features(dfnames, dfs, folder)
 
     ### motif ###
 
-    # preprocess_motif_features(dfnames, dfs, folder)
+    preprocess_motif_features(dfnames, dfs, folder)
 
     ### modify ###
 
-    # preprocess_modify_features(folder, subfolder)
+    preprocess_modify_features(folder, subfolder)
